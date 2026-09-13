@@ -186,9 +186,28 @@
   function fit() {
     network?.fit({ animation: { duration: 300, easingFunction: 'easeOutQuad' } });
   }
+
+  let maximized = $state(false);
+  function toggleMaximize() {
+    maximized = !maximized;
+    // The canvas panel's on-screen size just changed (small card <-> full viewport).
+    // vis-network sizes its internal drawing buffer from the container at the moment
+    // it measures it, so it needs an explicit resize + re-fit once the new size has
+    // actually been laid out - the same class of bug fixed for the initial render
+    // (see the position:absolute note on .canvas-viewport below).
+    requestAnimationFrame(() => {
+      network?.redraw();
+      network?.fit({ animation: false });
+    });
+  }
+  function onKeydown(event) {
+    if (event.key === 'Escape' && maximized) maximized = false;
+  }
 </script>
 
-<div class="canvas-shell">
+<svelte:window onkeydown={onKeydown} />
+
+<div class="canvas-shell" class:maximized>
   <div class="canvas-toolbar">
     <div class="canvas-key">
       {#if colorBy === 'mastery'}
@@ -208,8 +227,9 @@
       </button>
       <div class="zoom-controls">
         <button type="button" onclick={() => zoom(0.8)} aria-label="Zoom out">−</button>
-        <button type="button" onclick={fit} aria-label="Fit graph" title="Fit to screen">⤢</button>
+        <button type="button" onclick={fit} aria-label="Fit graph" title="Fit graph to view">⊙</button>
         <button type="button" onclick={() => zoom(1.25)} aria-label="Zoom in">+</button>
+        <button type="button" onclick={toggleMaximize} aria-label={maximized ? 'Restore' : 'Maximize'} title={maximized ? 'Restore (Esc)' : 'Maximize'}>{maximized ? '⤡' : '⤢'}</button>
       </div>
     </div>
   </div>
@@ -223,6 +243,7 @@
 
 <style>
   .canvas-shell { background: #0a0e14; display: flex; flex: 1; flex-direction: column; min-height: 520px; overflow: hidden; position: relative; }
+  .canvas-shell.maximized { border-radius: 0; bottom: 16px; left: 16px; position: fixed; right: 16px; top: 16px; z-index: 1000; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
   .canvas-toolbar { align-items: center; background: rgba(15,18,26,.9); border-bottom: 1px solid rgba(255,255,255,.08); display: flex; justify-content: space-between; padding: 10px 14px; position: relative; z-index: 2; }
   .canvas-key { color: #9ca3af; display: flex; font-size: 10px; gap: 14px; }
   .canvas-key span { align-items: center; display: flex; gap: 5px; }
