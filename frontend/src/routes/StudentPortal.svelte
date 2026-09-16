@@ -29,8 +29,8 @@
           && !/^HIST Canvas [0-9a-f]+/i.test(title);
       });
       enrolledCourses = nonInternalCourses.filter((course) => course.is_enrolled);
-      // A learner should never enroll into a course with no release-ready work.
-      availableCourses = nonInternalCourses.filter((course) => !course.is_enrolled && course.is_available);
+      // Courses with active assignments or curriculum modules are available for enrollment
+      availableCourses = nonInternalCourses.filter((course) => !course.is_enrolled && (course.is_available || (course.modules && course.modules.length > 0)));
     } catch (err) {
       console.error('Failed to fetch courses:', err);
     } finally {

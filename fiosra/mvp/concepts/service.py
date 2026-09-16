@@ -197,20 +197,22 @@ class ConceptGraphService:
         if source_id == target_id:
             raise ConceptGraphError("A concept cannot relate to itself.")
         if relation == "CONTAINS":
-            # Adding parent -> child is invalid when child already reaches parent.
-            traversal = "CONTAINS*1.."
-        elif relation == "PREREQUISITE_OF":
-            traversal = "PREREQUISITE_OF*1.."
+            query = """
+            MATCH (source:Concept {concept_id: $source_id, course_id: $course_id})
+            MATCH (target:Concept {concept_id: $target_id, course_id: $course_id})
+            OPTIONAL MATCH path = (target)-[:CONTAINS*1..]->(source)
+            RETURN source IS NOT NULL AS source_exists,
+                   target IS NOT NULL AS target_exists,
+                   count(path) > 0 AS creates_cycle
+            """
         else:
-            raise ConceptGraphError("Unsupported curriculum concept relation.")
-        query = f"""
-        MATCH (source:Concept {{concept_id: $source_id, course_id: $course_id}})
-        MATCH (target:Concept {{concept_id: $target_id, course_id: $course_id}})
-        OPTIONAL MATCH path = (target)-[:{traversal}]->(source)
-        RETURN source IS NOT NULL AS source_exists,
-               target IS NOT NULL AS target_exists,
-               count(path) > 0 AS creates_cycle
-        """
+            query = """
+            MATCH (source:Concept {concept_id: $source_id, course_id: $course_id})
+            MATCH (target:Concept {concept_id: $target_id, course_id: $course_id})
+            RETURN source IS NOT NULL AS source_exists,
+                   target IS NOT NULL AS target_exists,
+                   false AS creates_cycle
+            """
         async with self.client.get_session() as session:
             result = await session.run(
                 query,
@@ -220,8 +222,7 @@ class ConceptGraphService:
         if not row or not row["source_exists"] or not row["target_exists"]:
             raise ConceptGraphError("Both concepts must exist in the selected course.")
         if row["creates_cycle"]:
-            label = "hierarchy" if relation == "CONTAINS" else "prerequisite"
-            raise ConceptGraphError(f"This link would create a {label} cycle.")
+            raise ConceptGraphError("This link would create a hierarchy cycle.")
 
     async def _add_relation(
         self,
@@ -645,38 +646,146 @@ class ConceptGraphService:
         query = """
         MATCH (course:Course {course_id: $course_id})
         OPTIONAL MATCH (course)-[:HAS_CONCEPT]->(concept:Concept)
-        WITH course, collect(DISTINCT concept { .concept_id, .label, .definition, .concept_type, .level, .status }) AS concepts
-        OPTIONAL MATCH (source:Concept {course_id: $course_id})-[edge:CONTAINS|PREREQUISITE_OF]->(target:Concept {course_id: $course_id})
+        WITH course, collect(DISTINCT concept { 
+            .concept_id, .label, .definition, .concept_type, .level, .status, .bloom_level 
+        }) AS concepts
+        
+        OPTIONAL MATCH (source:Concept {course_id: $course_id})-[edge:CONTAINS|PREREQUISITE_OF|REQUIRES]->(target:Concept {course_id: $course_id})
         WITH course, concepts, collect(DISTINCT CASE WHEN edge IS NULL THEN NULL ELSE {
-            source: source.concept_id, target: target.concept_id, relation: type(edge)
+            source: coalesce(source.concept_id, source.kc_id), 
+            target: coalesce(target.concept_id, target.kc_id), 
+            relation: type(edge)
         } END) AS raw_edges
+        
         OPTIONAL MATCH (module:Module {course_id: $course_id})-[module_edge:INTRODUCES|DEVELOPS|ASSESSES]->(linked:Concept {course_id: $course_id})
         WITH course, concepts, raw_edges, collect(DISTINCT CASE WHEN module_edge IS NULL THEN NULL ELSE {
-            module_id: module.module_id, concept_id: linked.concept_id, role: toLower(type(module_edge))
+            module_id: module.module_id, 
+            concept_id: coalesce(linked.concept_id, linked.kc_id), 
+            role: toLower(type(module_edge))
         } END) AS raw_module_links
+        
         OPTIONAL MATCH (chunk:SourceChunk {course_id: $course_id})-[source_edge:EVIDENCES]->(evidenced)
-        WITH concepts, raw_edges, raw_module_links, collect(DISTINCT CASE WHEN source_edge IS NULL THEN NULL ELSE {
+        WITH course, concepts, raw_edges, raw_module_links, collect(DISTINCT CASE WHEN source_edge IS NULL THEN NULL ELSE {
             chunk_id: chunk.chunk_id, concept_id: coalesce(evidenced.concept_id, evidenced.kc_id), method: source_edge.method
         } END) AS raw_source_links
-        RETURN concepts, raw_edges, raw_module_links, raw_source_links
+        
+        // Misconceptions & Socratic Probes Pedagogical Expansion
+        OPTIONAL MATCH (k:KnowledgeComponent {course_id: $course_id})-[:ASSOCIATED_WITH]->(misc:Misconception)
+        WITH course, concepts, raw_edges, raw_module_links, raw_source_links,
+             collect(DISTINCT CASE WHEN misc IS NULL THEN NULL ELSE misc {
+                 concept_id: misc.misconception_id,
+                 label: misc.name,
+                 definition: misc.flawed_rule,
+                 concept_type: 'misconception',
+                 level: 'misconception',
+                 remediation_hint: misc.remediation_hint,
+                 status: 'approved',
+                 kc_id: k.kc_id
+             } END) AS misconception_nodes,
+             collect(DISTINCT CASE WHEN misc IS NULL THEN NULL ELSE {
+                 source: k.kc_id,
+                 target: misc.misconception_id,
+                 relation: 'ASSOCIATED_WITH'
+             } END) AS misconception_edges
+             
+        OPTIONAL MATCH (misc:Misconception {course_id: $course_id})-[:PROBED_BY]->(p:SocraticProbe)
+        WITH course, concepts, raw_edges, raw_module_links, raw_source_links, 
+             misconception_nodes, misconception_edges,
+             collect(DISTINCT CASE WHEN p IS NULL THEN NULL ELSE p {
+                 probe_id: p.probe_id,
+                 misconception_id: misc.misconception_id,
+                 rung: p.rung,
+                 probe_text: p.probe_text,
+                 rationale: p.rationale
+             } END) AS probes
+
+        RETURN concepts, raw_edges, raw_module_links, raw_source_links,
+               misconception_nodes, misconception_edges, probes
         """
         async with self.client.get_session() as session:
             result = await session.run(query, {"course_id": str(course_id)})
             row = await result.single()
         if not row:
-            return {"course_id": str(course_id), "nodes": [], "edges": [], "module_links": [], "source_links": [], "stats": {"concepts": 0, "edges": 0, "module_links": 0, "source_links": 0}}
+            return {
+                "course_id": str(course_id),
+                "nodes": [],
+                "edges": [],
+                "module_links": [],
+                "source_links": [],
+                "probes": [],
+                "stats": {"concepts": 0, "misconceptions": 0, "socratic_probes": 0, "edges": 0, "module_links": 0, "source_links": 0},
+            }
+
         nodes = [dict(item) for item in row["concepts"] if item and item.get("concept_id")]
-        edges = [dict(item) for item in row["raw_edges"] if item]
-        module_links = [dict(item) for item in row["raw_module_links"] if item]
-        source_links = [dict(item) for item in row["raw_source_links"] if item]
+        edges = [dict(item) for item in row["raw_edges"] if item and item.get("source")]
+        module_links = [dict(item) for item in row["raw_module_links"] if item and item.get("concept_id")]
+        source_links = [dict(item) for item in row["raw_source_links"] if item and item.get("concept_id")]
+
+        misconception_nodes = [dict(item) for item in row.get("misconception_nodes", []) if item and item.get("concept_id")]
+        misconception_edges = [dict(item) for item in row.get("misconception_edges", []) if item and item.get("source")]
+        probes = [dict(item) for item in row.get("probes", []) if item and item.get("probe_id")]
+
+        seen_node_ids = {n["concept_id"] for n in nodes}
+        for mn in misconception_nodes:
+            if mn["concept_id"] not in seen_node_ids:
+                nodes.append(mn)
+                seen_node_ids.add(mn["concept_id"])
+
+        seen_edges = {(e["source"], e["target"], e.get("relation")) for e in edges}
+        for me in misconception_edges:
+            edge_key = (me["source"], me["target"], me.get("relation"))
+            if edge_key not in seen_edges:
+                edges.append(me)
+                seen_edges.add(edge_key)
+
+        # Socratic Probes as first-class network nodes
+        for p in probes:
+            p_node = {
+                "concept_id": p["probe_id"],
+                "label": f"Rung {p.get('rung', 0)} Probe",
+                "definition": p.get("probe_text", ""),
+                "concept_type": "socratic_probe",
+                "level": "socratic_probe",
+                "rung": p.get("rung", 0),
+                "rationale": p.get("rationale"),
+                "misconception_id": p.get("misconception_id"),
+                "status": "approved",
+            }
+            if p_node["concept_id"] not in seen_node_ids:
+                nodes.append(p_node)
+                seen_node_ids.add(p_node["concept_id"])
+
+            if p.get("misconception_id"):
+                pe = {
+                    "source": p["misconception_id"],
+                    "target": p["probe_id"],
+                    "relation": "PROBED_BY",
+                }
+                edge_key = (pe["source"], pe["target"], pe["relation"])
+                if edge_key not in seen_edges:
+                    edges.append(pe)
+                    seen_edges.add(edge_key)
+
+        # Compute degree centrality for node radius scaling in Obsidian Graph
+        degree_map: dict[str, int] = {}
+        for e in edges:
+            s, t = e["source"], e["target"]
+            degree_map[s] = degree_map.get(s, 0) + 1
+            degree_map[t] = degree_map.get(t, 0) + 1
+        for n in nodes:
+            n["degree"] = degree_map.get(n["concept_id"], 1)
+
         return {
             "course_id": str(course_id),
             "nodes": nodes,
             "edges": edges,
             "module_links": module_links,
             "source_links": source_links,
+            "probes": probes,
             "stats": {
-                "concepts": len(nodes),
+                "concepts": len([n for n in nodes if n.get("concept_type") not in ("misconception", "socratic_probe", "module")]),
+                "misconceptions": len(misconception_nodes),
+                "socratic_probes": len(probes),
                 "edges": len(edges),
                 "module_links": len(module_links),
                 "source_links": len(source_links),

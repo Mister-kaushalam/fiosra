@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "fiosra_neo4j_password"
 
+
     # Live language-model provider. "deterministic" is deliberately the default so
     # the core teaching workflow works with no external service or secret.
     FIOSRA_LLM_PROVIDER: str = "deterministic"

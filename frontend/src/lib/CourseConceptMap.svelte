@@ -301,12 +301,80 @@
 
       <aside class="concept-inspector">
         {#if selectedConcept}
-          <div class="inspector-heading"><div><span class="eyebrow">Selected concept</span><h3>{selectedConcept.label}</h3></div><span class="level-pill">{selectedConcept.level.replaceAll('_', ' ')}</span></div>
-          <p class="definition">{selectedConcept.definition}</p>
-          <div class="detail-grid"><div><span>Type</span><strong>{selectedConcept.concept_type}</strong></div><div><span>Source evidence</span><strong>{graph.source_links.filter((link) => link.concept_id === selectedConceptId).length} chunks</strong></div></div>
-          <section class="relationship-card"><h4>Concept location</h4><p><strong>Parent:</strong> {selectedParents.length ? selectedParents.join(' · ') : 'Top-level course concept'}</p><p><strong>Lower-level concepts:</strong> {selectedChildren.length ? selectedChildren.join(' · ') : 'None linked yet'}</p><p><strong>Prerequisites:</strong> {selectedPrerequisites.length ? selectedPrerequisites.join(' · ') : 'None set'}</p></section>
-          <div class="inspector-actions"><button type="button" class="btn btn-secondary btn-xs" onclick={() => openRelation('contains')}>+ Lower-level concept</button><button type="button" class="btn btn-secondary btn-xs" onclick={() => openRelation('prerequisite')}>+ Prerequisite</button></div>
-          <section class="relationship-card"><h4>Module roles</h4>{#if selectedModuleLinks.length}{#each selectedModuleLinks as link}<p><span class="role-pill {link.role}">{link.role}</span> {link.moduleTitle}</p>{/each}{:else}<p class="muted">No module role set yet.</p>{/if}<div class="module-link-form"><select bind:value={moduleLink.module_id}><option value="">Connect to a module</option>{#each course?.modules || [] as module}<option value={module.module_id}>Unit {module.position}: {module.title}</option>{/each}</select><select bind:value={moduleLink.role}><option value="introduces">Introduces</option><option value="develops">Develops</option><option value="assesses">Assesses</option></select><button type="button" class="btn btn-secondary btn-xs" disabled={isSaving || !moduleLink.module_id} onclick={linkModule}>Link</button></div></section>
+          {#if selectedConcept.concept_type === 'misconception'}
+            <div class="inspector-heading">
+              <div>
+                <span class="eyebrow" style="color: #f59e0b;">⚠️ Pedagogical Cognitive Trap</span>
+                <h3>{selectedConcept.label}</h3>
+              </div>
+              <span class="level-pill" style="background: rgba(245,158,11,0.18); color: #fbbf24; border-color: rgba(245,158,11,0.4);">Misconception</span>
+            </div>
+            <p class="definition">{selectedConcept.definition}</p>
+            {#if selectedConcept.remediation_hint}
+              <div class="relationship-card" style="border-color: rgba(245,158,11,0.3); background: rgba(245,158,11,0.06);">
+                <h4 style="color: #fbbf24;">Remediation Socratic Guidance</h4>
+                <p>{selectedConcept.remediation_hint}</p>
+              </div>
+            {/if}
+            {#if selectedConcept.kc_id}
+              {@const targetKc = graph.nodes.find(n => n.concept_id === selectedConcept.kc_id)}
+              <section class="relationship-card">
+                <h4>Anchored Knowledge Component</h4>
+                {#if targetKc}
+                  <button type="button" class="btn btn-secondary btn-xs" style="text-align: left; width: 100%; margin-top: 4px;" onclick={() => selectedConceptId = targetKc.concept_id}>
+                    🎯 {targetKc.label}
+                  </button>
+                {:else}
+                  <p class="muted">KC ID: {selectedConcept.kc_id}</p>
+                {/if}
+              </section>
+            {/if}
+          {:else if selectedConcept.concept_type === 'socratic_probe'}
+            <div class="inspector-heading">
+              <div>
+                <span class="eyebrow" style="color: #c084fc;">✦ Socratic Diagnostic Probe</span>
+                <h3>Rung {selectedConcept.rung ?? 0} Probe</h3>
+              </div>
+              <span class="level-pill" style="background: rgba(192,132,252,0.18); color: #d8b4fe; border-color: rgba(192,132,252,0.4);">Diagnostic Probe</span>
+            </div>
+            <div class="relationship-card" style="border-color: rgba(192,132,252,0.3); background: rgba(192,132,252,0.06);">
+              <h4 style="color: #d8b4fe;">Diagnostic Inquiry</h4>
+              <p style="font-style: italic; font-size: 13px; line-height: 1.5;">"{selectedConcept.definition}"</p>
+            </div>
+            {#if selectedConcept.rationale}
+              <div class="relationship-card">
+                <h4>Pedagogical Rationale</h4>
+                <p>{selectedConcept.rationale}</p>
+              </div>
+            {/if}
+            {#if selectedConcept.misconception_id}
+              {@const targetMisc = graph.nodes.find(n => n.concept_id === selectedConcept.misconception_id)}
+              <section class="relationship-card">
+                <h4>Probed Cognitive Trap</h4>
+                {#if targetMisc}
+                  <button type="button" class="btn btn-secondary btn-xs" style="text-align: left; width: 100%; margin-top: 4px;" onclick={() => selectedConceptId = targetMisc.concept_id}>
+                    ⚠️ {targetMisc.label}
+                  </button>
+                {/if}
+              </section>
+            {/if}
+          {:else if selectedConcept.concept_type === 'module'}
+            <div class="inspector-heading">
+              <div>
+                <span class="eyebrow" style="color: #10b981;">📚 Curriculum Module Unit</span>
+                <h3>{selectedConcept.label}</h3>
+              </div>
+              <span class="level-pill" style="background: rgba(16,185,129,0.18); color: #6ee7b7; border-color: rgba(16,185,129,0.4);">Course Module</span>
+            </div>
+            <p class="definition">{selectedConcept.definition}</p>
+          {:else}
+            <div class="inspector-heading"><div><span class="eyebrow">Selected concept</span><h3>{selectedConcept.label}</h3></div><span class="level-pill">{selectedConcept.level?.replaceAll('_', ' ') || 'Concept'}</span></div>
+            <p class="definition">{selectedConcept.definition}</p>
+            <div class="detail-grid"><div><span>Type</span><strong>{selectedConcept.concept_type}</strong></div><div><span>Source evidence</span><strong>{graph.source_links.filter((link) => link.concept_id === selectedConceptId).length} chunks</strong></div></div>
+            <section class="relationship-card"><h4>Concept location</h4><p><strong>Parent:</strong> {selectedParents.length ? selectedParents.join(' · ') : 'Top-level course concept'}</p><p><strong>Lower-level concepts:</strong> {selectedChildren.length ? selectedChildren.join(' · ') : 'None linked yet'}</p><p><strong>Prerequisites:</strong> {selectedPrerequisites.length ? selectedPrerequisites.join(' · ') : 'None set'}</p></section>
+            <div class="inspector-actions"><button type="button" class="btn btn-secondary btn-xs" onclick={() => openRelation('contains')}>+ Lower-level concept</button><button type="button" class="btn btn-secondary btn-xs" onclick={() => openRelation('prerequisite')}>+ Prerequisite</button></div>
+            <section class="relationship-card"><h4>Module roles</h4>{#if selectedModuleLinks.length}{#each selectedModuleLinks as link}<p><span class="role-pill {link.role}">{link.role}</span> {link.moduleTitle}</p>{/each}{:else}<p class="muted">No module role set yet.</p>{/if}<div class="module-link-form"><select bind:value={moduleLink.module_id}><option value="">Connect to a module</option>{#each course?.modules || [] as module}<option value={module.module_id}>Unit {module.position}: {module.title}</option>{/each}</select><select bind:value={moduleLink.role}><option value="introduces">Introduces</option><option value="develops">Develops</option><option value="assesses">Assesses</option></select><button type="button" class="btn btn-secondary btn-xs" disabled={isSaving || !moduleLink.module_id} onclick={linkModule}>Link</button></div></section>
+          {/if}
         {:else}
           <div class="empty-inspector"><strong>Select a concept</strong><p>Inspect its hierarchy, source links, and role across the course modules.</p></div>
         {/if}

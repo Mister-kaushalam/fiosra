@@ -144,7 +144,7 @@ class CourseService:
             # availability. It can disagree with the student-safe projection.
             course_data["active_assignment"] = active_assignment
             course_data["is_enrolled"] = str(course.course_id) in enrolled_course_ids
-            course_data["is_available"] = active_assignment is not None
+            course_data["is_available"] = active_assignment is not None or bool(course.modules and len(course.modules) > 0)
             catalog.append(course_data)
         return catalog
 

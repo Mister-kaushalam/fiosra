@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from typing import Annotated
 from uuid import UUID
@@ -19,10 +20,150 @@ from fiosra.mvp.courses.schemas import (
     SyllabusIngestRequest,
 )
 from fiosra.mvp.courses.service import course_service
+from fiosra.mvp.graph_service import graph_service
+from fiosra.mvp.neo4j_client import neo4j_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/courses", tags=["Courses & Modules Grounding"])
+
+
+async def _extract_and_seed_pedagogical_graph(
+    course_id: UUID,
+    module_id: UUID,
+    course_title: str,
+    module_title: str,
+    domain: str,
+    text_content: str,
+) -> dict[str, int]:
+    """Asynchronously extracts KnowledgeComponents, Misconceptions, and SocraticProbes and seeds Neo4j."""
+    try:
+        from fiosra.mvp.courses.pedagogical_extractor import pedagogical_extractor
+        return await pedagogical_extractor.extract_and_seed(
+            course_id=course_id,
+            module_id=module_id,
+            course_title=course_title,
+            module_title=module_title,
+            domain=domain,
+            text_content=text_content,
+        )
+    except Exception as e:
+        logger.warning(f"Pedagogical knowledge extraction warning: {e}")
+        return {}
+
+
+@router.post("/ingest-pdf", response_model=CourseResponse, status_code=status.HTTP_201_CREATED)
+async def ingest_pdf_to_course(
+    course_title: Annotated[str, Form(description="Course Title")],
+    domain: Annotated[str, Form(description="Course Domain")] = "History",
+    created_by: Annotated[str, Form(description="Educator ID")] = "educator",
+    module_title: Annotated[str | None, Form(description="Optional Module Title")] = None,
+    file: Annotated[UploadFile | None, File(description="Uploaded PDF File")] = None,
+    file_path: Annotated[str | None, Form(description="Server PDF File Path")] = None,
+) -> CourseResponse:
+    """
+    Dynamically ingests a PDF curriculum document into the Fiosra LMS:
+    - Finds or creates the Course in PostgreSQL and Neo4j.
+    - Finds or creates the Module in PostgreSQL and Neo4j.
+    - Extracts text, parses semantic chunks, and computes pgvector embeddings.
+    - Ingests episodes into Graphiti with group_id=course_id.
+    - Links Graphiti entities and relationships to the Course and Module in Neo4j.
+    """
+    from pathlib import Path
+
+    # 1. Acquire raw document bytes
+    filename = "document.pdf"
+    raw_bytes = None
+    if file:
+        raw_bytes = await file.read()
+        filename = file.filename or "uploaded.pdf"
+    elif file_path:
+        p = Path(file_path)
+        if not p.is_absolute():
+            p = Path(__file__).resolve().parent.parent.parent.parent / file_path
+        if not p.exists():
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"File not found: {file_path}")
+        raw_bytes = p.read_bytes()
+        filename = p.name
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Either an uploaded file or file_path must be provided.",
+        )
+
+    # 2. Find or create Course
+    all_courses = await course_service.list_courses()
+    course = next((c for c in all_courses if c.title.strip().lower() == course_title.strip().lower()), None)
+    if not course:
+        course = await course_service.create_course(
+            CourseCreate(
+                title=course_title.strip(),
+                domain=domain.strip(),
+                created_by=created_by.strip(),
+                syllabus_context=f"Curriculum materials derived from {filename}",
+            )
+        )
+
+    # 3. Find or create Module
+    mod_name = (module_title or f"Unit: {filename.replace('_', ' ').replace('.pdf', '')}").strip()
+    target_module = next((m for m in course.modules if m.title.strip().lower() == mod_name.lower()), None)
+    if not target_module:
+        target_module = await course_service.add_module(
+            course.course_id,
+            ModuleCreate(
+                title=mod_name,
+                description=f"Curriculum unit grounded on {filename}.",
+                learning_objectives=[f"Master foundational concepts in {mod_name}"],
+                position=len(course.modules) + 1,
+            ),
+        )
+
+    # 4. Extract and chunk text
+    is_pdf = filename.lower().endswith(".pdf") or raw_bytes.startswith(b"%PDF-")
+    extracted_text = syllabus_parser.extract_text(raw_bytes, is_pdf=is_pdf)
+    if not extracted_text:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No readable text extracted from document.")
+
+    # 5. Ingest into syllabus_chunks (pgvector) and sync Neo4j
+    refreshed_course = await course_service.get_course(course.course_id)
+    if refreshed_course:
+        course = refreshed_course
+    await concept_graph_service.sync_course_structure(course)
+    chunks = await syllabus_parser.ingest_syllabus(
+        course_id=course.course_id,
+        content=extracted_text,
+        title=filename.replace("_", " ").replace(".pdf", ""),
+        module_id=target_module.module_id,
+        domain=course.domain,
+        resource_type="pdf" if is_pdf else "document",
+    )
+    await concept_graph_service.ingest_resource(
+        course_id=str(course.course_id),
+        module_id=str(target_module.module_id),
+        title=filename,
+        resource_type="pdf" if is_pdf else "document",
+        source_url=None,
+        chunks=[chunk.model_dump(mode="json") for chunk in chunks],
+    )
+
+    # 6. Ingest into Pedagogical Knowledge Graph in background
+    full_text = "\n\n".join(chunk.content for chunk in chunks)
+    asyncio.create_task(
+        _extract_and_seed_pedagogical_graph(
+            course_id=course.course_id,
+            module_id=target_module.module_id,
+            course_title=course.title,
+            module_title=target_module.title,
+            domain=course.domain,
+            text_content=full_text,
+        )
+    )
+
+    # Return refreshed course with modules
+    refreshed = await course_service.get_course(course.course_id)
+    return refreshed or course
+
+
 
 
 
@@ -348,6 +489,17 @@ async def upload_module_resource_file(
             resource_type=resource_type,
             source_url=None,
             chunks=[chunk.model_dump(mode="json") for chunk in chunks],
+        )
+        full_text = "\n\n".join(chunk.content for chunk in chunks)
+        asyncio.create_task(
+            _extract_and_seed_pedagogical_graph(
+                course_id=course_id,
+                module_id=module_id,
+                course_title=course.title,
+                module_title=module.title,
+                domain=course.domain,
+                text_content=full_text,
+            )
         )
         return chunks
     except HTTPException:

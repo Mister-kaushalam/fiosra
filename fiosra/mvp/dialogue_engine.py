@@ -3,7 +3,7 @@ import re
 from typing import Any
 
 from fiosra.mvp.llm.orchestrator import llm_orchestrator
-from fiosra.mvp.seed_pipeline import search_nearest_misconceptions
+from fiosra.mvp.graph_service import graph_service
 
 logger = logging.getLogger(__name__)
 
@@ -88,6 +88,7 @@ class SocraticDialogueEngine:
         target_kcs: list[str] | None = None,
         is_course_grounded: bool = False,
         active_section_context: str | None = None,
+        student_id: str | None = None,
     ) -> dict[str, Any]:
         """
         Generates a Socratic response while strictly maintaining Answer Isolation.
@@ -103,16 +104,20 @@ class SocraticDialogueEngine:
 
         penalty_score = active_rung * 0.25
 
-        # 3. Diagnose Potential Misconceptions via pgvector similarity search
+        # 3. Diagnose Potential Misconceptions via Neo4j Pedagogical Graph search
         matched_misconception = None
-        # A public assignment ladder is already an educator-curated, bounded context.
-        # Do not let a broad domain embedding override it with an unrelated taxonomy trap.
-        traps = (
-            []
-            if hint_ladder and is_course_grounded
-            else await search_nearest_misconceptions(student_input, limit=1, domain=domain)
-        )
-        if traps and traps[0]["similarity"] > 0.01:
+        matching_probe = None
+        traps = []
+        if not (hint_ladder and is_course_grounded):
+            try:
+                target_kc_filter = target_kcs[0] if target_kcs else "*"
+                traps = await graph_service.search_misconceptions(query=student_input, kc_id=target_kc_filter, limit=1)
+                if not traps and target_kc_filter != "*":
+                    traps = await graph_service.search_misconceptions(query=student_input, kc_id="*", limit=1)
+            except Exception as e:
+                logger.error(f"Failed to search misconceptions via pedagogical graph: {e}")
+                
+        if traps:
             matched_misconception = traps[0]
         if (
             matched_misconception
@@ -126,15 +131,18 @@ class SocraticDialogueEngine:
 
         # 4. Generate Socratic Dialogue output based on hint rung and diagnosis
         if matched_misconception:
-            hints = matched_misconception.get("remediation_hint", "").split("\n")
-            rung_hint = None
-            for h in hints:
-                if f"[Rung {active_rung}]" in h:
-                    rung_hint = h.replace(f"[Rung {active_rung}]: ", "").strip()
-                    break
+            probes = matched_misconception.get("probes") or []
+            matching_probe = next((p for p in probes if p.get("rung") == active_rung), None) or (probes[0] if probes else None)
+            rung_hint = matching_probe.get("probe_text") if matching_probe else None
 
-            if not rung_hint and hints:
-                rung_hint = hints[0].replace("[Rung 0]: ", "").strip()
+            if not rung_hint:
+                hints = matched_misconception.get("remediation_hint", "").split("\n")
+                for h in hints:
+                    if f"[Rung {active_rung}]" in h:
+                        rung_hint = h.replace(f"[Rung {active_rung}]: ", "").strip()
+                        break
+                if not rung_hint and hints:
+                    rung_hint = hints[0].replace("[Rung 0]: ", "").strip()
 
             strategy = f"Address diagnosed misconception: '{matched_misconception['name']}' at Rung {active_rung}."
             tutor_thoughts = {
@@ -187,6 +195,25 @@ class SocraticDialogueEngine:
             }
             response_text = assignment_hint or resp
 
+        # Pedagogical Knowledge Graph: Fetch student's active cognitive traps & mastered components
+        historical_context = ""
+        if student_id:
+            try:
+                ped_state = await graph_service.get_student_pedagogical_state(str(student_id))
+                active_misconceptions = ped_state.get("active_misconceptions", [])
+                mastered_kcs = ped_state.get("mastered_kcs", [])
+                parts = []
+                if active_misconceptions:
+                    misc_desc = ", ".join([f"{m.get('name')}: {m.get('flawed_rule', '')}" for m in active_misconceptions if m.get('name')])
+                    if misc_desc:
+                        parts.append(f"Student has known cognitive traps: {misc_desc}")
+                if mastered_kcs:
+                    parts.append(f"Student has mastered concepts: {', '.join(mastered_kcs)}")
+                if parts:
+                    historical_context = " | ".join(parts)
+            except Exception as e:
+                logger.warning(f"Pedagogical state retrieval failed: {e}")
+
         generation = await llm_orchestrator.enhance(
             purpose="socratic_hint_rephrase",
             system_prompt=(
@@ -194,7 +221,8 @@ class SocraticDialogueEngine:
                 "mark, with no preface, answer, explanation, list, or quotation. Rewrite only the supplied bounded "
                 "hint. Preserve its instructional intent and stay within the public assignment context. Never provide "
                 "an answer, thesis, solution, grading judgment, rubric, or reference material. Do not introduce people, "
-                "events, evidence, or concepts absent from the input."
+                "events, evidence, or concepts absent from the input.\n\n"
+                f"Student's past learning context:\n{historical_context}"
             ),
             user_prompt=(
                 f"Public assignment context:\n{question_prompt}\n\n"
@@ -216,6 +244,8 @@ class SocraticDialogueEngine:
             "hint_rung": active_rung,
             "penalty_score": penalty_score,
             "matched_misconception_id": matched_misconception["misconception_id"] if matched_misconception else None,
+            "matched_probe_id": matching_probe.get("probe_id") if matching_probe else None,
+            "matched_kc_id": matched_misconception.get("kc_id") if matched_misconception else None,
             "generation_metadata": generation.metadata.as_dict(),
         }
 

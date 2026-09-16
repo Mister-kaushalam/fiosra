@@ -10,6 +10,7 @@ from uuid import UUID
 from sqlalchemy import text
 
 from fiosra.mvp.database import AsyncSessionLocal
+from fiosra.mvp.graph_service import graph_service
 
 logger = logging.getLogger(__name__)
 
@@ -131,6 +132,40 @@ class EventStore:
             )
             event_id = result.scalar()
             await session.commit()
+            
+        # Pedagogical Knowledge Graph telemetry in Neo4j
+        try:
+            if event_type == "student_prompt_submitted" and question_id:
+                await graph_service.record_student_attempt(
+                    student_id=str(student_id),
+                    question_id=str(question_id),
+                    session_id=str(session_id),
+                )
+            elif event_type in ("hint_delivered", "hint_served", "socratic_probe_offered"):
+                probe_id = payload.get("probe_id") or f"probe_rung_{payload.get('hint_rung', payload.get('rung', 0))}"
+                await graph_service.record_probe_delivery(
+                    session_id=str(session_id),
+                    probe_id=probe_id,
+                    student_id=str(student_id),
+                )
+            elif event_type == "misconception_flagged":
+                misc_id = payload.get("misconception_id") or payload.get("code")
+                if misc_id:
+                    await graph_service.record_student_belief(
+                        student_id=str(student_id),
+                        misconception_id=str(misc_id),
+                    )
+            elif event_type in ("kc_mastered", "concept_mastered"):
+                kc_id = payload.get("kc_id") or payload.get("concept_id")
+                if kc_id:
+                    await graph_service.record_student_mastery(
+                        student_id=str(student_id),
+                        kc_id=str(kc_id),
+                        cleared_misconception_id=payload.get("cleared_misconception_id"),
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to record event in pedagogical graph: {e}")
+            
         return int(event_id)
 
     async def get_current_hint_rung(self, session_id: UUID | str) -> int:

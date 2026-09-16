@@ -113,6 +113,7 @@ async def handle_dialogue_turn(
         target_kcs=active_target_kcs,
         is_course_grounded=is_course_grounded,
         active_section_context=active_section_context,
+        student_id=request.student_id,
     )
 
     if result["is_adversarial"]:
@@ -129,6 +130,7 @@ async def handle_dialogue_turn(
         "rung": result["hint_rung"],
         "penalty_score": result["penalty_score"],
         "matched_misconception_id": result.get("matched_misconception_id"),
+        "probe_id": result.get("matched_probe_id"),
         "generation_metadata": result.get("generation_metadata"),
     }
     await event_store.log_event(
@@ -147,7 +149,7 @@ async def handle_dialogue_turn(
             event_type="misconception_flagged",
             payload={
                 "code": result["matched_misconception_id"],
-                "kc_id": "unmapped",
+                "kc_id": result.get("matched_kc_id") or "unmapped",
                 "hint_rung": result["hint_rung"],
             },
             assignment_id=request.assignment_id or session_info.get("assignment_id"),

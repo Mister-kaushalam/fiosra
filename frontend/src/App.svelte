@@ -14,6 +14,7 @@
   import StudentSources from './routes/StudentSources.svelte';
   import StudentTimeline from './routes/StudentTimeline.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
+  import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
 
   let assistantOpen = $state(false);
 
@@ -21,6 +22,7 @@
     '/': Modules,
     '/modules': Modules,
     '/courses': Courses,
+    '/knowledge-graph': KnowledgeGraph,
     '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
