@@ -168,11 +168,20 @@
     if (!ctx) return;
 
     const dpr = window.devicePixelRatio || 1;
-    const width = canvasRef.width / dpr;
-    const height = canvasRef.height / dpr;
+    // Physical pixel dimensions
+    const pw = canvasRef.width;
+    const ph = canvasRef.height;
+    // Logical (CSS) dimensions
+    const width = pw / dpr;
+    const height = ph / dpr;
+
+    // Reset transform to identity before clearing so we always wipe the whole canvas
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, pw, ph);
 
     ctx.save();
-    ctx.clearRect(0, 0, width, height);
+    // Re-apply DPR scaling for crisp rendering
+    ctx.scale(dpr, dpr);
 
     // 1. Cosmic background & subtle radial vignette
     const bgGrad = ctx.createRadialGradient(width / 2, height / 2, 50, width / 2, height / 2, Math.max(width, height) * 0.7);
@@ -182,14 +191,15 @@
     ctx.fillStyle = bgGrad;
     ctx.fillRect(0, 0, width, height);
 
-    // Subtle cosmic grid points
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-    const gridSize = 42;
-    const offsetX = panX % gridSize;
-    const offsetY = panY % gridSize;
-    for (let x = offsetX; x < width; x += gridSize) {
-      for (let y = offsetY; y < height; y += gridSize) {
-        ctx.fillRect(x, y, 1.2, 1.2);
+    // Subtle cosmic grid dots — drawn in screen-space accounting for pan+scale
+    // so they stay fixed in world-space and don't streak during pan/zoom
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.035)';
+    const gridSize = 42 * scale;
+    const gridOffX = ((panX % gridSize) + gridSize) % gridSize;
+    const gridOffY = ((panY % gridSize) + gridSize) % gridSize;
+    for (let gx = gridOffX; gx < width; gx += gridSize) {
+      for (let gy = gridOffY; gy < height; gy += gridSize) {
+        ctx.fillRect(gx, gy, 1.2, 1.2);
       }
     }
 
@@ -345,23 +355,33 @@
         ctx.stroke();
       }
 
-      // Node Label
-      const showLabel = isSelected || isHovered || matchesSearch || scale > 0.85 || node.radius > 12;
+      // Node Label — only show when zoomed in enough, selected, hovered,
+      // search-matched, or for large hub nodes. This prevents label clutter
+      // at low zoom levels.
+      const degreeThreshold = node.raw.degree >= 4;
+      const showLabel = isSelected || isHovered || matchesSearch
+        || (scale > 1.1 && degreeThreshold)
+        || (scale > 1.6);
       if (showLabel) {
-        ctx.font = `${node.radius > 12 ? '600 11px' : '500 10px'} -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+        const fontSize = Math.max(9, Math.min(12, 10 / scale + 1));
+        ctx.font = `${node.radius > 12 ? '600' : '500'} ${fontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
         const text = node.raw.label || node.id;
-        const textWidth = ctx.measureText(text).width;
+        // Truncate long labels
+        const maxChars = Math.floor(28 / Math.max(0.5, scale));
+        const displayText = text.length > maxChars ? text.slice(0, maxChars) + '…' : text;
+        const textWidth = ctx.measureText(displayText).width;
         const textY = node.y + node.radius + 13;
 
         // Label background badge
-        ctx.fillStyle = 'rgba(10, 14, 23, 0.82)';
+        ctx.fillStyle = 'rgba(6, 8, 13, 0.88)';
         ctx.beginPath();
         ctx.roundRect(node.x - textWidth / 2 - 5, textY - 10, textWidth + 10, 15, 4);
         ctx.fill();
 
-        ctx.fillStyle = isSelected ? '#ffffff' : (isHovered ? '#38bdf8' : '#e2e8f0');
+        ctx.fillStyle = isSelected ? '#ffffff' : (isHovered ? '#38bdf8' : '#cbd5e1');
         ctx.textAlign = 'center';
-        ctx.fillText(text, node.x, textY + 1);
+        ctx.textBaseline = 'alphabetic';
+        ctx.fillText(displayText, node.x, textY + 1);
       }
 
       ctx.restore();
@@ -454,10 +474,41 @@
   }
 
   function recenterGraph() {
-    if (!containerRef) return;
-    scale = 1.0;
-    panX = (containerRef.clientWidth - 900) / 2;
-    panY = (containerRef.clientHeight - 650) / 2;
+    if (!containerRef || simNodes.length === 0) {
+      scale = 1.0;
+      panX = 0;
+      panY = 0;
+      return;
+    }
+    const W = containerRef.clientWidth;
+    const H = containerRef.clientHeight;
+
+    // Compute bounding box of all simulation nodes
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const n of simNodes) {
+      if (n.x == null || n.y == null) continue;
+      const r = n.radius + 24; // margin
+      minX = Math.min(minX, n.x - r);
+      maxX = Math.max(maxX, n.x + r);
+      minY = Math.min(minY, n.y - r);
+      maxY = Math.max(maxY, n.y + r);
+    }
+
+    if (!isFinite(minX)) {
+      scale = 1.0;
+      panX = 0;
+      panY = 0;
+      if (simulation) simulation.alpha(0.5).restart();
+      return;
+    }
+
+    const bw = maxX - minX;
+    const bh = maxY - minY;
+    const newScale = Math.max(0.25, Math.min(2.0, Math.min(W / bw, H / bh) * 0.88));
+    scale = newScale;
+    panX = (W - bw * newScale) / 2 - minX * newScale;
+    panY = (H - bh * newScale) / 2 - minY * newScale;
+
     if (simulation) {
       simulation.alpha(0.5).restart();
     }
