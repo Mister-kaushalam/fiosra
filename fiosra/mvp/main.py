@@ -1,12 +1,14 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
+from fiosra.mvp.api_errors import LearnerAPIError, learner_error_response
 from fiosra.mvp.assignment_designer.router import router as assignment_router
 from fiosra.mvp.authoring.router import router as authoring_router
 from fiosra.mvp.concepts.router import router as concept_graph_router
@@ -59,6 +61,56 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await conn.execute(_text(
             "CREATE INDEX IF NOT EXISTS idx_socratic_probes_concept ON socratic_probes (concept_id);"
         ))
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS student_session_submissions (
+                session_id UUID PRIMARY KEY REFERENCES student_sessions(session_id) ON DELETE CASCADE,
+                document_id UUID NOT NULL REFERENCES learning_documents(document_id) ON DELETE RESTRICT,
+                document_revision INTEGER NOT NULL CHECK (document_revision >= 0),
+                idempotency_key VARCHAR(160) NOT NULL,
+                submitted_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                UNIQUE (session_id, idempotency_key)
+            );
+            """
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_student_session_submissions_document "
+            "ON student_session_submissions (document_id, document_revision);"
+        ))
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS learning_document_source_references (
+                reference_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                document_id UUID NOT NULL REFERENCES learning_documents(document_id) ON DELETE CASCADE,
+                source_id VARCHAR(160) NOT NULL,
+                source_title VARCHAR(360) NOT NULL,
+                excerpt TEXT NOT NULL DEFAULT '',
+                citation TEXT,
+                source_url TEXT,
+                locator JSONB NOT NULL DEFAULT '{}'::jsonb,
+                attached_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                UNIQUE (document_id, source_id)
+            );
+            """
+        ))
+        await conn.execute(_text(
+            """
+            CREATE TABLE IF NOT EXISTS learning_document_source_claim_links (
+                reference_id UUID NOT NULL REFERENCES learning_document_source_references(reference_id) ON DELETE CASCADE,
+                block_id UUID NOT NULL REFERENCES learning_document_blocks(block_id) ON DELETE CASCADE,
+                linked_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                PRIMARY KEY (reference_id, block_id)
+            );
+            """
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_document_source_references_document "
+            "ON learning_document_source_references (document_id, attached_at ASC);"
+        ))
+        await conn.execute(_text(
+            "CREATE INDEX IF NOT EXISTS idx_document_source_claim_links_block "
+            "ON learning_document_source_claim_links (block_id);"
+        ))
     yield
     # Shutdown: gracefully close Neo4j connection pool
     await neo4j_client.close()
@@ -70,6 +122,22 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+
+@app.middleware("http")
+async def attach_correlation_id(request: Request, call_next):
+    """Make learner-visible failures traceable without exposing internal details."""
+    correlation_id = request.headers.get("X-Correlation-ID") or f"req_{uuid4().hex}"
+    request.state.correlation_id = correlation_id
+    response = await call_next(request)
+    response.headers["X-Correlation-ID"] = correlation_id
+    return response
+
+
+@app.exception_handler(LearnerAPIError)
+async def handle_learner_api_error(request: Request, error: LearnerAPIError):
+    """Serialize known student workflow failures into one public contract."""
+    return learner_error_response(request, error)
 
 # Enable CORS only for configured local frontend development origins.
 cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]

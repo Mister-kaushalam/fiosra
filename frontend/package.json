@@ -16,6 +16,7 @@
   "dependencies": {
     "@tiptap/core": "^3.31.3",
     "@tiptap/starter-kit": "^3.31.3",
+    "d3-force": "^3.0.0",
     "svelte-spa-router": "^5.1.1"
   }
 }

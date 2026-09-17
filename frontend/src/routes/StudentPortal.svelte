@@ -17,41 +17,20 @@
   async function loadCourses() {
     isLoading = true;
     try {
-      // Fetch enrolled courses
-      const enrolledRes = await fetch(`/courses/enrolled?student_id=${encodeURIComponent(studentId)}`);
-      const enrolled = enrolledRes.ok ? await enrolledRes.json() : [];
-      enrolledCourses = Array.isArray(enrolled) ? enrolled : [];
-
-      // Fetch all courses, filter out the enrolled ones
-      const allRes = await fetch('/courses');
-      if (allRes.ok) {
-        const data = await allRes.json();
-        const allList = Array.isArray(data) ? data : data.courses || [];
-
-        // Filter out test artifacts
-        const cleanList = allList.filter((c) => {
-          const title = c.title || '';
-          const creator = c.created_by || '';
-          if (creator.includes('test_') || creator.includes('canvas_test')) return false;
-          if (title.startsWith('test_') || /^HIST Canvas [0-9a-f]+/i.test(title)) return false;
-          return true;
-        });
-
-        // Deduplicate by normalized title
-        const seen = new Set();
-        const unique = [];
-        for (const c of cleanList.length > 0 ? cleanList : allList) {
-          const key = (c.title || '').trim().toLowerCase();
-          if (key && !seen.has(key)) {
-            seen.add(key);
-            unique.push(c);
-          }
-        }
-
-        // Remove enrolled courses from the available list
-        const enrolledIds = new Set(enrolledCourses.map((c) => c.course_id));
-        availableCourses = unique.filter((c) => !enrolledIds.has(c.course_id));
-      }
+      const catalogRes = await fetch(`/courses/student-catalog?student_id=${encodeURIComponent(studentId)}`);
+      if (!catalogRes.ok) throw new Error('Course availability could not be restored.');
+      const catalog = await catalogRes.json();
+      const nonInternalCourses = catalog.filter((course) => {
+        const title = course.title || '';
+        const creator = course.created_by || '';
+        return !creator.includes('test_')
+          && !creator.includes('canvas_test')
+          && !title.startsWith('test_')
+          && !/^HIST Canvas [0-9a-f]+/i.test(title);
+      });
+      enrolledCourses = nonInternalCourses.filter((course) => course.is_enrolled);
+      // Courses with active assignments or curriculum modules are available for enrollment
+      availableCourses = nonInternalCourses.filter((course) => !course.is_enrolled && (course.is_available || (course.modules && course.modules.length > 0)));
     } catch (err) {
       console.error('Failed to fetch courses:', err);
     } finally {
@@ -100,6 +79,7 @@
   }
 
   function getFirstAssignment(course) {
+    if (course.active_assignment) return course.active_assignment;
     if (course.modules) {
       for (const mod of course.modules) {
         if (mod.assignments && mod.assignments.length > 0) {

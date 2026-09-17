@@ -382,8 +382,11 @@ async def test_sentence_inquire_reports_when_a_live_model_is_unavailable(monkeyp
         )
         assert response.status_code == 503
         data = response.json()
-        assert "unavailable" in data["detail"].lower()
-        assert "draft has not changed" in data["detail"].lower()
+        assert data["detail"]["code"] == "MODEL_UNAVAILABLE"
+        assert data["detail"]["retryable"] is True
+        assert "unavailable" in data["detail"]["message"].lower()
+        assert "draft has not changed" in data["detail"]["message"].lower()
+        assert data["detail"]["correlation_id"]
 
 
 @pytest.mark.asyncio
@@ -414,8 +417,10 @@ async def test_dialectical_turn_socratic_oracle(monkeypatch):
         )
         assert response_incomplete.status_code == 503
         data1 = response_incomplete.json()
-        assert "unavailable" in data1["detail"].lower()
-        assert "draft has not changed" in data1["detail"].lower()
+        assert data1["detail"]["code"] == "MODEL_UNAVAILABLE"
+        assert data1["detail"]["retryable"] is True
+        assert "unavailable" in data1["detail"]["message"].lower()
+        assert "draft has not changed" in data1["detail"]["message"].lower()
 
 
 @pytest.mark.asyncio
@@ -452,7 +457,10 @@ async def test_continuation_requires_a_live_answer_blind_planning_question(monke
             },
         )
         assert response.status_code == 503
-        assert "valid follow-up after retrying" in response.json()["detail"].lower()
+        detail = response.json()["detail"]
+        assert detail["code"] == "MODEL_UNAVAILABLE"
+        assert "unavailable" in detail["message"].lower()
+        assert "draft has not changed" in detail["message"].lower()
 
 
 @pytest.mark.asyncio

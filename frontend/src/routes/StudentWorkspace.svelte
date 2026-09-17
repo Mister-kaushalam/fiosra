@@ -8,6 +8,7 @@
     sessionAccessTokenStorageKey,
     sessionStorageKey,
   } from '../lib/session.js';
+  import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
 
   let courseId = $state('');
   let assignmentId = $state('');
@@ -40,6 +41,17 @@
   let liveBlocks = $state([]);
   let oraclePressure = $state('socratic'); // 'socratic' | 'adversarial' | 'brainstorm' | 'structural' | 'hint' | 'assumptions'
   let isDrawerOpen = $state(false);
+  let isSubmitting = $state(false);
+  let submissionNotice = $state('');
+  let submissionError = $state(null);
+  let submittedRevision = $state(null);
+  let submittedAt = $state('');
+  let pendingSubmissionKey = $state('');
+  let selectedSourceId = $state('');
+  let sourceActionNotice = $state('');
+  let sourceActionError = $state(null);
+  let sourceLookupResults = $state({});
+  let sourceActionBusy = $state(false);
 
   function toggleSocraticDrawer() {
     if (activeWorkspaceTab !== 'canvas') {
@@ -64,10 +76,32 @@
     }));
   });
 
+  function canonicalBlockAnalysis(block) {
+    const text = (block.plaintext || '').trim();
+    if (block.block_type === 'heading') return { ...block, text, canonical_type: 'heading', has_premature: false };
+    const suppliedType = block.semantic_type || block.content?.attrs?.semanticType;
+    const validTypes = new Set(['claim', 'evidence', 'reasoning', 'assumption', 'counter', 'conclusion']);
+    let canonicalType = validTypes.has(suppliedType) ? suppliedType : '';
+    if (!canonicalType) {
+      const likelyEvidence = /\b(?:the|this) (?:source|report|text|record|excavation|material)\s+(?:describes|states|shows|records|notes|documents)\b/i.test(text);
+      const likelyReasoning = /\b(?:because|therefore|thus|consequently|which means|this suggests|as a result|leads? to)\b/i.test(text);
+      const likelyAssumption = /\b(?:assumes?|taken for granted|must have|obviously)\b/i.test(text);
+      canonicalType = likelyAssumption ? 'assumption'
+        : likelyReasoning ? 'reasoning'
+          : likelyEvidence ? 'evidence'
+            : 'claim';
+    }
+    const hasPremature = /(?:therefore|thus|hence|in conclusion|consequently)\b/i.test(text)
+      && !/\b(?:source|evidence|data|table|figure|report)\b/i.test(text);
+    return { ...block, text, canonical_type: canonicalType, has_premature: hasPremature };
+  }
+
+  let canonicalBlocks = $derived.by(() => allDocumentBlocks.map(canonicalBlockAnalysis));
+
   let graphMetrics = $derived.by(() => {
     let c = 0, e = 0, w = 0, a = 0, p = 0;
-    for (const b of allDocumentBlocks) {
-      const sem = b.semantic_type;
+    for (const b of canonicalBlocks) {
+      const sem = b.canonical_type;
       if (sem === 'claim') c++;
       else if (sem === 'evidence') e++;
       else if (sem === 'reasoning') w++;
@@ -84,7 +118,7 @@
       blocks: [],
     };
 
-    for (const b of allDocumentBlocks) {
+    for (const b of canonicalBlocks) {
       if (b.block_type === 'heading') {
         if (currentSec.blocks.length > 0) {
           sections.push(currentSec);
@@ -94,11 +128,10 @@
           blocks: [],
         };
       } else {
-        const text = b.plaintext ? b.plaintext.trim() : '';
+        const text = b.text;
         if (text.length > 3) {
-          const sem = b.semantic_type || 'claim';
+          const sem = b.canonical_type;
           const hasProbe = probes.some((pr) => pr.block_id === b.block_id && pr.status !== 'superseded');
-          const hasPremature = /(?:therefore|thus|hence|in conclusion|consequently)\b/i.test(text) && !/(?:source|evidence|data|table|figure)\b/i.test(text);
           const icon = sem === 'evidence' ? '📜' : sem === 'reasoning' ? '⚡' : sem === 'assumption' ? '⚠️' : sem === 'counter' ? '🔄' : sem === 'conclusion' ? '🏁' : '🎯';
           const label = sem.charAt(0).toUpperCase() + sem.slice(1);
           currentSec.blocks.push({
@@ -108,7 +141,7 @@
             icon,
             label,
             hasProbe,
-            hasPremature,
+            hasPremature: b.has_premature,
           });
         }
       }
@@ -122,6 +155,39 @@
   let currentProbe = $derived(activeProbe());
   let published = $derived(assignment?.published || null);
   let publicSources = $derived(published?.source_pack || []);
+  let activeSourceReference = $derived.by(() => {
+    const references = learningDocument?.source_references || [];
+    return references.find((reference) => reference.source_id === selectedSourceId)
+      || references.at(-1)
+      || null;
+  });
+  let readinessItems = $derived.by(() => {
+    const allText = canonicalBlocks.map((block) => block.text).join(' ');
+    const linkedClaims = new Set(
+      (learningDocument?.source_references || []).flatMap((reference) => reference.linked_block_ids || [])
+    );
+    const hasLinkedEvidence = linkedClaims.size > 0 || graphMetrics.evidence > 0;
+    const hasClaim = graphMetrics.claims > 0 || graphMetrics.warrants > 0;
+    const hasReasoning = graphMetrics.warrants > 0 || /\b(?:because|this suggests|therefore|however|although|but)\b/i.test(allText);
+    const hasQualification = /\b(?:may|might|could|however|although|limit(?:ation)?|uncertain|does not establish)\b/i.test(allText);
+    return (published?.public_rubric || []).map((criterion) => {
+      const descriptor = `${criterion.title || ''} ${criterion.description || ''}`.toLowerCase();
+      const asksForEvidence = /evidence|source|material|citation|ground/.test(descriptor);
+      const asksForReasoning = /reason|explain|warrant|analysis|interpret/.test(descriptor);
+      const asksForQualification = /alternative|revision|limit|uncertain|qualification/.test(descriptor);
+      const met = asksForEvidence ? hasLinkedEvidence : asksForQualification ? hasQualification
+        : asksForReasoning ? hasReasoning : hasClaim;
+      const nextStep = asksForEvidence ? 'Link an assigned passage beside the claim it helps you test.'
+        : asksForQualification ? 'Name a limitation, alternative, or uncertainty in your interpretation.'
+          : asksForReasoning ? 'Explain how your evidence supports, complicates, or limits the claim.'
+            : 'Draft a clear, bounded claim that responds to the task.';
+      return { criterion, met, nextStep };
+    });
+  });
+  let readinessSummary = $derived.by(() => {
+    const met = readinessItems.filter((item) => item.met).length;
+    return { met, total: readinessItems.length };
+  });
 
   function sessionHeaders() {
     return {
@@ -139,6 +205,9 @@
     if (!response.ok) throw new Error(await responseError(response, 'Your long-form document could not be restored.'));
     learningDocument = await response.json();
     sessionStatus = learningDocument.status;
+    if (!selectedSourceId && learningDocument.source_references?.length) {
+      selectedSourceId = learningDocument.source_references.at(-1).source_id;
+    }
   }
 
   async function loadProbes() {
@@ -158,6 +227,14 @@
       if (response.ok) {
         const data = await response.json();
         sessionEvents = data.events || [];
+        if (data.session?.status === 'submitted') {
+          sessionStatus = 'submitted';
+          submittedRevision = data.session.submitted_document_revision ?? submittedRevision;
+          submittedAt = data.session.submitted_at || submittedAt;
+          submissionNotice = submittedAt
+            ? `Submitted ${new Date(submittedAt).toLocaleString()}.`
+            : 'Submitted for educator review.';
+        }
       }
     } catch (err) {
       console.warn('Loading session events for sidebar trace:', err);
@@ -246,10 +323,12 @@
       });
       if (existing.ok) {
         const session = (await existing.json()).session;
-        if (session.status === 'active' && session.assignment_id === assignmentId) {
+        if (['active', 'submitted'].includes(session.status) && session.assignment_id === assignmentId) {
           sessionId = persistedSessionId;
           sessionAccessToken = persistedAccessToken;
           sessionStatus = session.status;
+          submittedRevision = session.submitted_document_revision ?? null;
+          submittedAt = session.submitted_at || '';
         } else {
           localStorage.removeItem(key);
         }
@@ -288,7 +367,12 @@
       headers: sessionHeaders(),
       body: JSON.stringify(patch),
     });
-    if (!response.ok) throw new Error(await responseError(response, 'This document could not be saved.'));
+    if (!response.ok) {
+      const details = await responseErrorDetails(response, 'This document could not be saved.');
+      const saveError = new Error(learnerErrorSummary(details, { draftPreserved: true }));
+      saveError.fiosraError = details;
+      throw saveError;
+    }
     learningDocument = await response.json();
     return learningDocument;
   }
@@ -346,6 +430,148 @@
       probeNotice = err.message || 'Writing support is unavailable right now.';
     } finally {
       isSupportBusy = false;
+    }
+  }
+
+  function sourceReferenceForBlock(blockId) {
+    return (learningDocument?.source_references || []).filter((reference) =>
+      reference.linked_block_ids?.includes(blockId)
+    );
+  }
+
+  function openAssignedSource(source) {
+    if (!source?.source_url) {
+      sourceActionNotice = 'This assigned source has no external link. Use the excerpt and citation supplied in the evidence pack.';
+      sourceActionError = null;
+      return;
+    }
+    window.open(source.source_url, '_blank', 'noopener,noreferrer');
+  }
+
+  async function writeWithSource(source) {
+    if (!sessionId || !source || sessionStatus !== 'active') return;
+    sourceActionBusy = true;
+    sourceActionError = null;
+    sourceActionNotice = '';
+    try {
+      const response = await fetch(`/learning-documents/sessions/${sessionId}/source-references`, {
+        method: 'POST',
+        headers: sessionHeaders(),
+        body: JSON.stringify({ source_id: source.source_id }),
+      });
+      if (!response.ok) {
+        sourceActionError = await responseErrorDetails(response, 'This source could not be added to your writing context.');
+        sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+        return;
+      }
+      learningDocument = await response.json();
+      selectedSourceId = source.source_id;
+      activeWorkspaceTab = 'canvas';
+      sourceActionNotice = `Writing with ${source.title}. This reference does not change your draft.`;
+    } catch (err) {
+      sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
+      sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+    } finally {
+      sourceActionBusy = false;
+    }
+  }
+
+  async function linkSourceToBlock(source, blockId) {
+    if (!sessionId || !source || !blockId || sessionStatus !== 'active') return;
+    sourceActionBusy = true;
+    sourceActionError = null;
+    try {
+      const response = await fetch(
+        `/learning-documents/sessions/${sessionId}/source-references/${encodeURIComponent(source.source_id)}/links`,
+        {
+          method: 'POST',
+          headers: sessionHeaders(),
+          body: JSON.stringify({ block_id: blockId }),
+        },
+      );
+      if (!response.ok) {
+        sourceActionError = await responseErrorDetails(response, 'This source could not be linked to the claim.');
+        sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+        return;
+      }
+      learningDocument = await response.json();
+      selectedSourceId = source.source_id;
+      sourceActionNotice = `${source.title} is linked beside this claim for your review.`;
+      sourceLookupResults = { ...sourceLookupResults, [blockId]: null };
+    } catch (err) {
+      sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
+      sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+    } finally {
+      sourceActionBusy = false;
+    }
+  }
+
+  async function useLocatedEvidenceForClaim(source, blockId) {
+    if (!sessionId || !source || !blockId || sessionStatus !== 'active') return;
+    sourceActionBusy = true;
+    sourceActionError = null;
+    try {
+      const alreadySelected = (learningDocument?.source_references || [])
+        .some((reference) => reference.source_id === source.source_id);
+      if (!alreadySelected) {
+        const addResponse = await fetch(`/learning-documents/sessions/${sessionId}/source-references`, {
+          method: 'POST',
+          headers: sessionHeaders(),
+          body: JSON.stringify({ source_id: source.source_id }),
+        });
+        if (!addResponse.ok) {
+          sourceActionError = await responseErrorDetails(addResponse, 'This source could not be selected.');
+          sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+          return;
+        }
+        learningDocument = await addResponse.json();
+      }
+      const linkResponse = await fetch(
+        `/learning-documents/sessions/${sessionId}/source-references/${encodeURIComponent(source.source_id)}/links`,
+        {
+          method: 'POST',
+          headers: sessionHeaders(),
+          body: JSON.stringify({ block_id: blockId }),
+        },
+      );
+      if (!linkResponse.ok) {
+        sourceActionError = await responseErrorDetails(linkResponse, 'This source could not be linked to the claim.');
+        sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+        return;
+      }
+      learningDocument = await linkResponse.json();
+      selectedSourceId = source.source_id;
+      sourceActionNotice = `${source.title} is linked beside this claim for your review.`;
+      sourceLookupResults = { ...sourceLookupResults, [blockId]: null };
+    } catch (err) {
+      sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
+      sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+    } finally {
+      sourceActionBusy = false;
+    }
+  }
+
+  async function findAssignedEvidence(blockId, claimText) {
+    if (!sessionId || !blockId || !claimText) return;
+    sourceActionBusy = true;
+    sourceActionError = null;
+    try {
+      const response = await fetch(`/learning-documents/sessions/${sessionId}/assigned-evidence`, {
+        method: 'POST',
+        headers: sessionHeaders(),
+        body: JSON.stringify({ block_id: blockId, claim_text: claimText }),
+      });
+      if (!response.ok) {
+        sourceActionError = await responseErrorDetails(response, 'Assigned evidence could not be located right now.');
+        sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+        return;
+      }
+      sourceLookupResults = { ...sourceLookupResults, [blockId]: await response.json() };
+    } catch (err) {
+      sourceActionError = { code: 'NETWORK_UNAVAILABLE', retryable: true };
+      sourceActionNotice = learnerErrorSummary(sourceActionError, { draftPreserved: true });
+    } finally {
+      sourceActionBusy = false;
     }
   }
 
@@ -453,18 +679,52 @@
   }
 
   async function submitSession() {
-    if (!sessionId || sessionStatus !== 'active') return;
-    if (!confirm('Are you ready to submit your verified reasoning milestone for educator evaluation?')) return;
+    if (!sessionId || sessionStatus !== 'active' || isSubmitting) return;
+    const documentRevision = learningDocument?.document_revision;
+    if (typeof documentRevision !== 'number') {
+      submissionError = {
+        code: 'SUBMISSION_BLOCKED',
+        message: 'Your document must finish loading before it can be submitted.',
+        retryable: false,
+      };
+      return;
+    }
+    if (!pendingSubmissionKey) pendingSubmissionKey = crypto.randomUUID();
+    isSubmitting = true;
+    submissionError = null;
+    submissionNotice = 'Submitting your saved revision…';
     try {
       const res = await fetch(`/events/session/${sessionId}/submit`, {
         method: 'POST',
-        headers: sessionHeaders(),
+        headers: {
+          ...sessionHeaders(),
+          'Idempotency-Key': pendingSubmissionKey,
+        },
+        body: JSON.stringify({ document_revision: documentRevision }),
       });
-      if (res.ok) {
-        sessionStatus = 'submitted';
+      if (!res.ok) {
+        submissionError = await responseErrorDetails(res, 'Your milestone could not be submitted.');
+        submissionNotice = learnerErrorSummary(submissionError, { draftPreserved: true });
+        return;
       }
+      const submitted = await res.json();
+      sessionStatus = 'submitted';
+      submittedRevision = submitted.document_revision;
+      submittedAt = submitted.submitted_at;
+      submissionNotice = submitted.idempotent_replay
+        ? `This revision was already submitted ${new Date(submitted.submitted_at).toLocaleString()}.`
+        : `Submitted ${new Date(submitted.submitted_at).toLocaleString()}.`;
+      pendingSubmissionKey = '';
+      await loadSessionEvents();
     } catch (e) {
-      console.error('Submit error:', e);
+      submissionError = {
+        code: 'NETWORK_UNAVAILABLE',
+        message: 'The submission service is temporarily unavailable.',
+        retryable: true,
+      };
+      submissionNotice = learnerErrorSummary(submissionError, { draftPreserved: true });
+    } finally {
+      isSubmitting = false;
     }
   }
 
@@ -666,13 +926,17 @@
                         <div class="relevance-guidance-box">
                           <strong>Why assigned:</strong> {source.relevance_guidance}
                         </div>
-                        <button 
-                          type="button" 
+                        {#if source.citation}
+                          <p class="source-citation">{source.citation}</p>
+                        {/if}
+                        <button
+                          type="button"
                           class="btn-cite-to-canvas"
-                          onclick={() => { activeWorkspaceTab = 'canvas'; }}
-                          title="Switch to Reasoning Canvas"
+                          onclick={() => writeWithSource(source)}
+                          disabled={sourceActionBusy || sessionStatus !== 'active'}
+                          title="Select this source as writing context"
                         >
-                          Write with Source ✍️
+                          {activeSourceReference?.source_id === source.source_id ? 'Writing with this source' : 'Write with Source ✍️'}
                         </button>
                       </div>
                     </article>
@@ -750,6 +1014,28 @@
       <div class="canvas-tab-wrapper" class:tab-hidden={activeWorkspaceTab !== 'canvas'}>
         <main class="canvas-main-area">
           {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+          {#if sourceActionNotice}
+            <p class:source-action-error={Boolean(sourceActionError)} class="source-action-notice" role="status">
+              {sourceActionNotice}
+              {#if sourceActionError?.correlationId}
+                <span>Support ID: {sourceActionError.correlationId}</span>
+              {/if}
+            </p>
+          {/if}
+          {#if activeSourceReference}
+            <aside class="writing-source-context" aria-label="Active assigned source context">
+              <div class="writing-source-copy">
+                <span>Writing with source</span>
+                <strong>{activeSourceReference.title}</strong>
+                <p>{activeSourceReference.excerpt}</p>
+                {#if activeSourceReference.citation}<small>{activeSourceReference.citation}</small>{/if}
+              </div>
+              <div class="writing-source-actions">
+                <button type="button" onclick={() => openAssignedSource(activeSourceReference)}>Open source</button>
+                <button type="button" onclick={() => activeWorkspaceTab = 'materials'}>Change</button>
+              </div>
+            </aside>
+          {/if}
           {#if probeNotice}
             <div class="probe-alert-bar">
               💡 {probeNotice}
@@ -855,6 +1141,15 @@
                                 {/if}
                               </div>
                               <p class="claim-excerpt">"{item.text || 'Untitled block'}"</p>
+                              {#if sourceReferenceForBlock(item.block_id).length}
+                                <div class="claim-source-links" aria-label="Sources linked by the learner">
+                                  {#each sourceReferenceForBlock(item.block_id) as reference}
+                                    <button type="button" onclick={() => openAssignedSource(reference)}>
+                                      ↗ {reference.title}
+                                    </button>
+                                  {/each}
+                                </div>
+                              {/if}
                               <div class="claim-node-actions">
                                 <button 
                                   type="button" 
@@ -878,7 +1173,42 @@
                                 >
                                   ◌ Examine ⚡
                                 </button>
+                                {#if sessionStatus === 'active'}
+                                  <button
+                                    type="button"
+                                    class="node-source-btn"
+                                    onclick={() => findAssignedEvidence(item.block_id, item.text)}
+                                    disabled={sourceActionBusy}
+                                    title="Find relevant passages from assigned materials"
+                                  >
+                                    Find assigned evidence
+                                  </button>
+                                {/if}
                               </div>
+                              {#if sourceLookupResults[item.block_id]}
+                                <div class="assigned-evidence-results" role="status">
+                                  <p>{sourceLookupResults[item.block_id].message}</p>
+                                  {#each sourceLookupResults[item.block_id].candidates as candidate}
+                                    <article>
+                                      <strong>{candidate.title}</strong>
+                                      <p>{candidate.excerpt}</p>
+                                      {#if candidate.matched_terms?.length}
+                                        <small>Matched terms: {candidate.matched_terms.join(', ')}</small>
+                                      {/if}
+                                      <div>
+                                        <button type="button" onclick={() => openAssignedSource(candidate)}>Open source</button>
+                                        <button
+                                          type="button"
+                                          onclick={() => useLocatedEvidenceForClaim(candidate, item.block_id)}
+                                          disabled={sourceActionBusy}
+                                        >
+                                          Link beside this claim
+                                        </button>
+                                      </div>
+                                    </article>
+                                  {/each}
+                                </div>
+                              {/if}
                             </div>
                           {:else}
                             <p class="empty-leaf-note">No claims drafted in this section yet.</p>
@@ -900,6 +1230,28 @@
                 </header>
 
                 <div class="trace-dossier-body">
+                  <section class="readiness-self-review" aria-label="Rubric-linked self-review">
+                    <div class="readiness-header">
+                      <div>
+                        <span class="card-eyebrow">Before you submit</span>
+                        <h4>Rubric-linked self-review</h4>
+                      </div>
+                      <span>{readinessSummary.met}/{readinessSummary.total} signals present</span>
+                    </div>
+                    <p>This is not a grade. It only shows which public rubric signals are visible in the current saved draft.</p>
+                    <ul>
+                      {#each readinessItems as item}
+                        <li class:met={item.met}>
+                          <span>{item.met ? '✓' : '○'}</span>
+                          <div>
+                            <strong>{item.criterion.title}</strong>
+                            {#if !item.met}<small>{item.nextStep}</small>{/if}
+                          </div>
+                        </li>
+                      {/each}
+                    </ul>
+                  </section>
+
                   <!-- Milestone Submission Action Tile -->
                   <div class="milestone-submission-banner">
                     <div class="submission-meta">
@@ -910,18 +1262,32 @@
                       <p>Once you are satisfied that your claims are grounded with warrants and evidence, submit this session for educator evaluation.</p>
                     </div>
                     {#if sessionStatus === 'submitted'}
-                      <div class="submission-complete-pill">
-                        <span>Milestone safely submitted to instructor. Your reasoning audit trace is preserved.</span>
+                      <div class="submission-complete-pill" role="status">
+                        <span>
+                          Milestone submitted for educator review
+                          {#if submittedRevision !== null} at revision {submittedRevision}{/if}
+                          {#if submittedAt} on {new Date(submittedAt).toLocaleString()}{/if}.
+                        </span>
                       </div>
                     {:else}
-                      <button 
-                        type="button" 
-                        class="btn-submit-milestone" 
-                        onclick={submitSession}
-                        disabled={graphMetrics.claims === 0}
-                      >
-                        Submit Milestone for Evaluation 🚀
-                      </button>
+                      <div class="submission-action-stack">
+                        {#if submissionNotice}
+                          <p class:submission-error={Boolean(submissionError)} class="submission-status-note" role="status">
+                            {submissionNotice}
+                            {#if submissionError?.correlationId}
+                              <span class="submission-correlation">Support ID: {submissionError.correlationId}</span>
+                            {/if}
+                          </p>
+                        {/if}
+                        <button
+                          type="button"
+                          class="btn-submit-milestone"
+                          onclick={submitSession}
+                          disabled={isSubmitting || sessionStatus !== 'active'}
+                        >
+                          {isSubmitting ? 'Submitting saved revision…' : submissionError?.retryable ? 'Retry Submission' : 'Submit Milestone for Evaluation'}
+                        </button>
+                      </div>
                     {/if}
                   </div>
 
@@ -1336,6 +1702,86 @@
     background: rgba(139, 92, 246, 0.25);
   }
 
+  .source-action-notice {
+    margin: 12px 24px 0;
+    color: var(--color-slate-light);
+    font-size: 12px;
+  }
+
+  .source-action-notice.source-action-error {
+    color: #fbbf24;
+  }
+
+  .source-action-notice span {
+    display: block;
+    margin-top: 2px;
+    color: var(--color-slate-muted);
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+  }
+
+  .writing-source-context {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    margin: 12px 24px 0;
+    padding: 11px 14px;
+    background: rgba(59, 130, 246, 0.09);
+    border: 1px solid rgba(59, 130, 246, 0.28);
+    border-radius: 8px;
+  }
+
+  .writing-source-copy > span {
+    display: block;
+    color: #93c5fd;
+    font-size: 9px;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .writing-source-copy strong {
+    display: block;
+    margin-top: 2px;
+    color: var(--color-heading);
+    font-size: 12px;
+  }
+
+  .writing-source-copy p {
+    margin: 4px 0 0;
+    color: var(--color-slate-light);
+    font-size: 11px;
+    line-height: 1.4;
+  }
+
+  .writing-source-copy small {
+    display: block;
+    margin-top: 4px;
+    color: var(--color-slate-muted);
+    font-size: 10px;
+  }
+
+  .writing-source-actions {
+    display: flex;
+    gap: 10px;
+    flex: 0 0 auto;
+  }
+
+  .writing-source-actions button,
+  .claim-source-links button,
+  .assigned-evidence-results button {
+    border: 0;
+    background: transparent;
+    color: #93c5fd;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 0;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   /* ============================================================ */
   /* TAB 1: MATERIALS & ASSIGNMENT VIEWPORT                       */
   /* ============================================================ */
@@ -1543,6 +1989,13 @@
 
   .relevance-guidance-box strong {
     color: #93c5fd;
+  }
+
+  .source-citation {
+    margin: 0;
+    color: var(--color-slate-muted);
+    font-size: 10px;
+    line-height: 1.4;
   }
 
   .btn-cite-to-canvas {
@@ -1801,6 +2254,78 @@
     padding-right: 6px;
   }
 
+  .readiness-self-review {
+    padding: 15px;
+    background: rgba(59, 130, 246, 0.06);
+    border: 1px solid rgba(59, 130, 246, 0.22);
+    border-radius: 10px;
+  }
+
+  .readiness-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .readiness-header h4 {
+    margin: 3px 0 0;
+    color: var(--color-heading);
+    font-size: 14px;
+  }
+
+  .readiness-header > span {
+    color: #93c5fd;
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .readiness-self-review > p {
+    margin: 7px 0 10px;
+    color: var(--color-slate-muted);
+    font-size: 10.5px;
+    line-height: 1.4;
+  }
+
+  .readiness-self-review ul {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .readiness-self-review li {
+    display: flex;
+    align-items: flex-start;
+    gap: 7px;
+    color: var(--color-slate-light);
+    font-size: 11px;
+  }
+
+  .readiness-self-review li > span {
+    color: #fbbf24;
+    font-weight: 800;
+  }
+
+  .readiness-self-review li.met > span {
+    color: #6ee7b7;
+  }
+
+  .readiness-self-review li strong,
+  .readiness-self-review li small {
+    display: block;
+  }
+
+  .readiness-self-review li small {
+    margin-top: 2px;
+    color: var(--color-slate-muted);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+
   .milestone-submission-banner {
     background: linear-gradient(135deg, rgba(30, 27, 75, 0.7), rgba(17, 24, 39, 0.85));
     border: 1px solid rgba(139, 92, 246, 0.4);
@@ -1849,6 +2374,32 @@
     border-radius: 6px;
     font-size: 12px;
     font-weight: 600;
+  }
+
+  .submission-action-stack {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .submission-status-note {
+    margin: 0;
+    color: var(--color-slate-light);
+    font-size: 12px;
+    line-height: 1.4;
+  }
+
+  .submission-status-note.submission-error {
+    color: #fbbf24;
+  }
+
+  .submission-correlation {
+    display: block;
+    margin-top: 3px;
+    color: var(--color-slate-muted);
+    font-family: var(--font-mono);
+    font-size: 10px;
   }
 
   .btn-submit-milestone {
@@ -2482,13 +3033,19 @@
     color: var(--color-slate-light);
     font-style: italic;
   }
+  .claim-source-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 7px;
+    margin-top: 3px;
+  }
   .claim-node-actions {
     display: flex;
     align-items: center;
     gap: 6px;
     margin-top: 2px;
   }
-  .node-jump-btn, .node-probe-btn {
+  .node-jump-btn, .node-probe-btn, .node-source-btn {
     background: transparent;
     border: 1px solid var(--color-graphite-border);
     border-radius: var(--radius-xs);
@@ -2507,6 +3064,48 @@
     color: #c4b5fd;
     border-color: #8b5cf6;
     background: rgba(139, 92, 246, 0.15);
+  }
+  .node-source-btn:hover {
+    color: #6ee7b7;
+    border-color: #10b981;
+    background: rgba(16, 185, 129, 0.12);
+  }
+  .assigned-evidence-results {
+    margin-top: 8px;
+    border-top: 1px solid var(--color-graphite-border);
+    padding-top: 8px;
+  }
+  .assigned-evidence-results > p {
+    margin: 0 0 7px;
+    color: var(--color-slate-muted);
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .assigned-evidence-results article {
+    margin-top: 6px;
+    padding: 7px 8px;
+    background: rgba(16, 185, 129, 0.07);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    border-radius: 5px;
+  }
+  .assigned-evidence-results article strong {
+    color: #a7f3d0;
+    font-size: 10px;
+  }
+  .assigned-evidence-results article p {
+    margin: 3px 0;
+    color: var(--color-slate-light);
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .assigned-evidence-results article small {
+    color: var(--color-slate-muted);
+    font-size: 9px;
+  }
+  .assigned-evidence-results article > div {
+    display: flex;
+    gap: 10px;
+    margin-top: 6px;
   }
   .empty-sec-leaf {
     font-size: 10px;

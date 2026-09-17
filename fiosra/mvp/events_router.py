@@ -5,8 +5,9 @@ from uuid import UUID
 from fastapi import APIRouter, Header, HTTPException, status
 from pydantic import BaseModel, Field
 
+from fiosra.mvp.api_errors import LearnerAPIError
 from fiosra.mvp.assignment_designer.generator import assignment_generator
-from fiosra.mvp.event_store import event_store
+from fiosra.mvp.event_store import SubmissionConflictError, event_store
 
 router = APIRouter(prefix="/events", tags=["Event Store"])
 SessionToken = Annotated[str | None, Header(alias="X-Fiosra-Session-Token")]
@@ -44,19 +45,36 @@ class LogEventResponse(BaseModel):
 class SubmitSessionResponse(BaseModel):
     session_id: str
     status: str
+    document_revision: int
+    submitted_at: str
+    idempotent_replay: bool = False
     message: str
+
+
+class SubmitSessionRequest(BaseModel):
+    """The exact server-saved document revision the learner intends to submit."""
+
+    document_revision: int | None = Field(default=None, ge=0)
+
+
+IdempotencyKey = Annotated[str | None, Header(alias="Idempotency-Key")]
 
 
 async def get_authorized_session(session_id: UUID, session_token: str | None) -> dict[str, Any]:
     """Resolve an active browser-held session capability without exposing its stored digest."""
     if not await event_store.has_session_access(session_id, session_token):
-        raise HTTPException(
+        raise LearnerAPIError(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="This browser is not authorized to access the requested reasoning session.",
+            code="SESSION_AUTHORIZATION",
+            message="This session needs reconnecting before it can be accessed.",
         )
     session_info = await event_store.get_session_details(session_id)
     if not session_info:
-        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+        raise LearnerAPIError(
+            status_code=status.HTTP_404_NOT_FOUND,
+            code="SESSION_NOT_FOUND",
+            message="This reasoning session is no longer available.",
+        )
     return session_info
 
 
@@ -119,27 +137,60 @@ async def log_session_event(
 @router.post("/session/{session_id}/submit", response_model=SubmitSessionResponse)
 async def submit_session_for_review(
     session_id: UUID,
+    request: SubmitSessionRequest | None = None,
     session_token: SessionToken = None,
-) -> dict[str, str]:
+    idempotency_key: IdempotencyKey = None,
+) -> dict[str, Any]:
     """Send a student reasoning trace to the educator review queue without granting grade authority."""
     session_info = await get_authorized_session(session_id, session_token)
     if session_info["status"] == "completed":
-        raise HTTPException(status_code=409, detail="This session has already been finalized by an educator.")
-    if session_info["status"] != "submitted":
-        submitted = await event_store.submit_session(session_id)
-        if not submitted:
-            raise HTTPException(status_code=409, detail="The session could not be submitted.")
+        raise LearnerAPIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="SUBMISSION_BLOCKED",
+            message="This session has already been finalized by an educator.",
+        )
+    target_revision = request.document_revision if request else None
+    if target_revision is None:
+        target_revision = await event_store.get_document_revision(session_id)
+    if target_revision is None:
+        raise LearnerAPIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="SUBMISSION_BLOCKED",
+            message="Save your document before submitting it for educator review.",
+        )
+    safe_idempotency_key = idempotency_key or f"legacy-session-{session_id}"
+    try:
+        submitted = await event_store.submit_session(
+            session_id,
+            document_revision=target_revision,
+            idempotency_key=safe_idempotency_key,
+        )
+    except SubmissionConflictError as error:
+        raise LearnerAPIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="SUBMISSION_BLOCKED",
+            message=str(error),
+        ) from error
+
+    if submitted["created"]:
         await event_store.log_event(
             session_id=session_id,
             student_id=session_info["student_id"],
             question_id=session_info.get("current_question_id", "q1"),
             event_type="student_submitted_for_review",
-            payload={"submission_status": "submitted"},
+            payload={
+                "submission_status": "submitted",
+                "document_revision": submitted["document_revision"],
+                "submitted_at": submitted["submitted_at"].isoformat(),
+            },
             assignment_id=session_info.get("assignment_id"),
         )
     return {
         "session_id": str(session_id),
         "status": "submitted",
+        "document_revision": submitted["document_revision"],
+        "submitted_at": submitted["submitted_at"].isoformat(),
+        "idempotent_replay": not submitted["created"],
         "message": "Reasoning trace submitted for educator review.",
     }
 

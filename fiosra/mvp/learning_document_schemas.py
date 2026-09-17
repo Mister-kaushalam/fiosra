@@ -29,6 +29,49 @@ class DocumentBlockResponse(DocumentBlockInput):
     plaintext: str
 
 
+class DocumentSourceReference(BaseModel):
+    """Learner-selected published source context; never a claim of proof."""
+
+    reference_id: UUID
+    source_id: str
+    title: str
+    excerpt: str
+    citation: str | None = None
+    source_url: str | None = None
+    locator: dict[str, Any] = Field(default_factory=dict)
+    attached_at: datetime
+    linked_block_ids: list[UUID] = Field(default_factory=list)
+
+
+class AddDocumentSourceReferenceRequest(BaseModel):
+    source_id: str = Field(min_length=1, max_length=160)
+
+
+class LinkDocumentSourceReferenceRequest(BaseModel):
+    block_id: UUID
+
+
+class AssignedEvidenceLocatorRequest(BaseModel):
+    block_id: UUID
+    claim_text: str = Field(min_length=4, max_length=12_000)
+
+
+class AssignedEvidenceCandidate(BaseModel):
+    source_id: str
+    title: str
+    excerpt: str
+    citation: str | None = None
+    source_url: str | None = None
+    locator: dict[str, Any] = Field(default_factory=dict)
+    matched_terms: list[str] = Field(default_factory=list)
+
+
+class AssignedEvidenceLocatorResponse(BaseModel):
+    block_id: UUID
+    message: str
+    candidates: list[AssignedEvidenceCandidate] = Field(default_factory=list)
+
+
 class LearningDocumentState(BaseModel):
     """Authorized, student-visible state of one session-bound long-form document."""
 
@@ -40,6 +83,7 @@ class LearningDocumentState(BaseModel):
     schema_version: int = 1
     document_revision: int = Field(ge=0)
     blocks: list[DocumentBlockResponse]
+    source_references: list[DocumentSourceReference] = Field(default_factory=list)
 
 
 class SyncLearningDocumentRequest(BaseModel):

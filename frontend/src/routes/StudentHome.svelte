@@ -49,45 +49,18 @@
     studentId = getStudentId();
 
     try {
-      const coursesRes = await fetch('/courses');
-      if (coursesRes.ok) {
-        const list = await coursesRes.json();
-        const courses = Array.isArray(list) ? list : list.courses || [];
-        if (courseId) {
-          currentCourse = courses.find((c) => c.course_id === courseId || c.id === courseId) || null;
-        }
-        if (!currentCourse && courses.length > 0) {
-          // default to first course with published assignment
-          for (const c of courses) {
-            const cid = c.course_id || c.id;
-            const aRes = await fetch(`/assignments?course_id=${encodeURIComponent(cid)}&status=published`);
-            if (aRes.ok) {
-              const aList = await aRes.json();
-              if (aList.length > 0) {
-                currentCourse = c;
-                courseId = cid;
-                activeAssignment = aList[0];
-                break;
-              }
-            }
-          }
-          if (!currentCourse) {
-            currentCourse = courses[0];
-            courseId = courses[0].course_id || courses[0].id || '';
-          }
-        }
-      }
-
-      // Check enrollment status
-      await checkEnrollment();
-
-      if (courseId && !activeAssignment) {
-        const assignRes = await fetch(`/assignments?course_id=${encodeURIComponent(courseId)}&status=published`);
-        if (assignRes.ok) {
-          const assignList = await assignRes.json();
-          const pub = assignList.filter((a) => a.status === 'published');
-          activeAssignment = pub[0] || null;
-        }
+      const catalogRes = await fetch(`/courses/student-catalog?student_id=${encodeURIComponent(studentId)}`);
+      if (!catalogRes.ok) throw new Error('Course availability could not be restored.');
+      const catalog = await catalogRes.json();
+      currentCourse = courseId
+        ? catalog.find((course) => course.course_id === courseId || course.id === courseId) || null
+        : catalog.find((course) => course.is_enrolled && course.is_available) || catalog[0] || null;
+      if (currentCourse) {
+        courseId = currentCourse.course_id || currentCourse.id || '';
+        isEnrolled = Boolean(currentCourse.is_enrolled);
+        activeAssignment = currentCourse.active_assignment || null;
+      } else {
+        isEnrolled = false;
       }
     } catch (err) {
       console.error('Failed to load course details for student home:', err);
@@ -143,7 +116,7 @@
               <span class="badge badge-warning" style="width: fit-content;">In Progress • Active Milestone</span>
               <h2 class="focus-assignment-title">{activeAssignment.title}</h2>
               <p class="focus-desc">
-                {activeAssignment.prompt || 'Synthesize evidence and evaluate reasoning using assigned primary sources and rubric criteria.'}
+                {activeAssignment.published?.task?.prompt || activeAssignment.prompt || 'Synthesize evidence and evaluate reasoning using assigned primary sources and rubric criteria.'}
               </p>
             </div>
             <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
@@ -174,7 +147,7 @@
 
             <div class="focus-stat-item">
               <span class="focus-stat-label">Rubric Entailment</span>
-              <span class="focus-stat-value">{activeAssignment.rubric_criteria?.length || 3} Criteria Tracked</span>
+              <span class="focus-stat-value">{activeAssignment.published?.public_rubric?.length || activeAssignment.rubric_criteria?.length || 3} Criteria Tracked</span>
             </div>
 
             <div class="divider"></div>

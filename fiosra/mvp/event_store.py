@@ -10,8 +10,13 @@ from uuid import UUID
 from sqlalchemy import text
 
 from fiosra.mvp.database import AsyncSessionLocal
+from fiosra.mvp.graph_service import graph_service
 
 logger = logging.getLogger(__name__)
+
+
+class SubmissionConflictError(RuntimeError):
+    """Raised when a session cannot be submitted for the requested revision."""
 
 
 class EventStore:
@@ -127,6 +132,40 @@ class EventStore:
             )
             event_id = result.scalar()
             await session.commit()
+            
+        # Pedagogical Knowledge Graph telemetry in Neo4j
+        try:
+            if event_type == "student_prompt_submitted" and question_id:
+                await graph_service.record_student_attempt(
+                    student_id=str(student_id),
+                    question_id=str(question_id),
+                    session_id=str(session_id),
+                )
+            elif event_type in ("hint_delivered", "hint_served", "socratic_probe_offered"):
+                probe_id = payload.get("probe_id") or f"probe_rung_{payload.get('hint_rung', payload.get('rung', 0))}"
+                await graph_service.record_probe_delivery(
+                    session_id=str(session_id),
+                    probe_id=probe_id,
+                    student_id=str(student_id),
+                )
+            elif event_type == "misconception_flagged":
+                misc_id = payload.get("misconception_id") or payload.get("code")
+                if misc_id:
+                    await graph_service.record_student_belief(
+                        student_id=str(student_id),
+                        misconception_id=str(misc_id),
+                    )
+            elif event_type in ("kc_mastered", "concept_mastered"):
+                kc_id = payload.get("kc_id") or payload.get("concept_id")
+                if kc_id:
+                    await graph_service.record_student_mastery(
+                        student_id=str(student_id),
+                        kc_id=str(kc_id),
+                        cleared_misconception_id=payload.get("cleared_misconception_id"),
+                    )
+        except Exception as e:
+            logger.warning(f"Failed to record event in pedagogical graph: {e}")
+            
         return int(event_id)
 
     async def get_current_hint_rung(self, session_id: UUID | str) -> int:
@@ -173,9 +212,13 @@ class EventStore:
 
     async def get_session_details(self, session_id: UUID | str) -> dict[str, Any] | None:
         query_sql = text("""
-            SELECT session_id, student_id, assignment_id, current_question_id, status,
-                   started_at, last_activity_at, completed_at
-            FROM student_sessions WHERE session_id = :session_id;
+            SELECT s.session_id, s.student_id, s.assignment_id, s.current_question_id, s.status,
+                   s.started_at, s.last_activity_at, s.completed_at,
+                   submission.document_revision AS submitted_document_revision,
+                   submission.submitted_at
+            FROM student_sessions s
+            LEFT JOIN student_session_submissions submission ON submission.session_id = s.session_id
+            WHERE s.session_id = :session_id;
         """)
         async with AsyncSessionLocal() as session:
             result = await session.execute(query_sql, {"session_id": str(session_id)})
@@ -186,7 +229,7 @@ class EventStore:
         session_data["session_id"] = str(session_data["session_id"])
         if session_data["assignment_id"]:
             session_data["assignment_id"] = str(session_data["assignment_id"])
-        for key in ("started_at", "last_activity_at", "completed_at"):
+        for key in ("started_at", "last_activity_at", "completed_at", "submitted_at"):
             if isinstance(session_data[key], datetime):
                 session_data[key] = session_data[key].isoformat()
         return session_data
@@ -195,19 +238,94 @@ class EventStore:
         """Compatibility alias for session detail lookup."""
         return await self.get_session_details(session_id)
 
-    async def submit_session(self, session_id: UUID | str) -> dict[str, Any] | None:
-        """Mark active work ready for educator review without allowing student grading."""
+    async def get_document_revision(self, session_id: UUID | str) -> int | None:
+        """Return the latest saved revision for compatibility callers without a request body."""
+        query_sql = text("""
+            SELECT document_revision
+            FROM learning_documents
+            WHERE session_id = :session_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(query_sql, {"session_id": str(session_id)})
+            revision = result.scalar()
+        return int(revision) if revision is not None else None
+
+    async def submit_session(
+        self,
+        session_id: UUID | str,
+        document_revision: int,
+        idempotency_key: str,
+    ) -> dict[str, Any]:
+        """Submit one exact document revision and return the same result on safe retry."""
+        document_sql = text("""
+            SELECT document_id, document_revision
+            FROM learning_documents
+            WHERE session_id = :session_id
+            FOR UPDATE;
+        """)
+        existing_submission_sql = text("""
+            SELECT session_id, document_id, document_revision, idempotency_key, submitted_at
+            FROM student_session_submissions
+            WHERE session_id = :session_id
+            FOR UPDATE;
+        """)
         update_sql = text("""
             UPDATE student_sessions
             SET status = 'submitted', last_activity_at = NOW()
             WHERE session_id = :session_id AND status = 'active'
             RETURNING session_id, student_id, assignment_id, current_question_id, status;
         """)
+        insert_submission_sql = text("""
+            INSERT INTO student_session_submissions (
+                session_id, document_id, document_revision, idempotency_key
+            ) VALUES (
+                :session_id, :document_id, :document_revision, :idempotency_key
+            ) RETURNING submitted_at;
+        """)
         async with AsyncSessionLocal() as session:
+            existing_result = await session.execute(existing_submission_sql, {"session_id": str(session_id)})
+            existing = existing_result.mappings().first()
+            if existing:
+                await session.commit()
+                return {
+                    "session_id": str(existing["session_id"]),
+                    "document_id": str(existing["document_id"]),
+                    "document_revision": int(existing["document_revision"]),
+                    "submitted_at": existing["submitted_at"],
+                    "created": False,
+                }
+
+            document_result = await session.execute(document_sql, {"session_id": str(session_id)})
+            document = document_result.mappings().first()
+            if not document:
+                raise SubmissionConflictError("A document must be saved before it can be submitted.")
+            if int(document["document_revision"]) != int(document_revision):
+                raise SubmissionConflictError(
+                    "The document changed before submission. Save the latest revision and try again."
+                )
+
             result = await session.execute(update_sql, {"session_id": str(session_id)})
             row = result.mappings().first()
+            if not row:
+                raise SubmissionConflictError("This session is no longer available for submission.")
+            submission_result = await session.execute(
+                insert_submission_sql,
+                {
+                    "session_id": str(session_id),
+                    "document_id": str(document["document_id"]),
+                    "document_revision": int(document_revision),
+                    "idempotency_key": idempotency_key,
+                },
+            )
+            submitted_at = submission_result.scalar_one()
             await session.commit()
-        return dict(row) if row else None
+        return {
+            "session_id": str(row["session_id"]),
+            "document_id": str(document["document_id"]),
+            "document_revision": int(document_revision),
+            "submitted_at": submitted_at,
+            "created": True,
+        }
 
     async def complete_session(self, session_id: UUID | str) -> None:
         update_sql = text("""

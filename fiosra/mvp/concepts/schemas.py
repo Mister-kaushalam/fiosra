@@ -75,6 +75,7 @@ class ConceptGraphResponse(BaseModel):
     edges: list[dict] = Field(default_factory=list)
     module_links: list[dict] = Field(default_factory=list)
     source_links: list[dict] = Field(default_factory=list)
+    probes: list[dict] = Field(default_factory=list)
     stats: dict[str, int] = Field(default_factory=dict)
 
 

@@ -1,6 +1,7 @@
 """Server-authoritative persistence for long-form student learning documents."""
 
 import json
+import re
 import uuid
 from collections.abc import Iterable
 from typing import Any, ClassVar
@@ -9,11 +10,14 @@ from uuid import UUID
 from sqlalchemy import text
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
-from fiosra.mvp.assignment_designer.schemas import PublicQuestionSpec
+from fiosra.mvp.assignment_designer.schemas import PublicQuestionSpec, PublicSource
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.event_store import event_store
 from fiosra.mvp.learning_document_schemas import (
+    AssignedEvidenceCandidate,
+    AssignedEvidenceLocatorResponse,
     DocumentBlockResponse,
+    DocumentSourceReference,
     LearningDocumentState,
     SyncLearningDocumentRequest,
     SyncLearningDocumentResponse,
@@ -252,6 +256,24 @@ class LearningDocumentService:
             plaintext=row["plaintext"],
         )
 
+    @staticmethod
+    def _source_reference_response(row: Any) -> DocumentSourceReference:
+        locator = row["locator"]
+        if isinstance(locator, str):
+            locator = json.loads(locator)
+        linked_block_ids = row["linked_block_ids"] or []
+        return DocumentSourceReference(
+            reference_id=row["reference_id"],
+            source_id=row["source_id"],
+            title=row["source_title"],
+            excerpt=row["excerpt"],
+            citation=row["citation"],
+            source_url=row["source_url"],
+            locator=locator or {},
+            attached_at=row["attached_at"],
+            linked_block_ids=linked_block_ids,
+        )
+
     async def _state_for_document(
         self,
         document_id: UUID | str,
@@ -268,6 +290,21 @@ class LearningDocumentService:
             WHERE document_id = CAST(:document_id AS UUID)
             ORDER BY position ASC;
         """)
+        source_references_sql = text("""
+            SELECT reference_row.reference_id, reference_row.source_id, reference_row.source_title,
+                   reference_row.excerpt, reference_row.citation, reference_row.source_url,
+                   reference_row.locator, reference_row.attached_at,
+                   COALESCE(
+                       array_agg(claim_link.block_id) FILTER (WHERE claim_link.block_id IS NOT NULL),
+                       ARRAY[]::UUID[]
+                   ) AS linked_block_ids
+            FROM learning_document_source_references reference_row
+            LEFT JOIN learning_document_source_claim_links claim_link
+                ON claim_link.reference_id = reference_row.reference_id
+            WHERE reference_row.document_id = CAST(:document_id AS UUID)
+            GROUP BY reference_row.reference_id
+            ORDER BY reference_row.attached_at ASC;
+        """)
         async with AsyncSessionLocal() as session:
             document_result = await session.execute(document_sql, {"document_id": str(document_id)})
             document = document_result.mappings().first()
@@ -275,6 +312,10 @@ class LearningDocumentService:
                 raise LearningDocumentValidationError("The requested learning document no longer exists.")
             blocks_result = await session.execute(blocks_sql, {"document_id": str(document_id)})
             blocks = [self._block_response(row) for row in blocks_result.mappings().all()]
+            references_result = await session.execute(source_references_sql, {"document_id": str(document_id)})
+            source_references = [
+                self._source_reference_response(row) for row in references_result.mappings().all()
+            ]
         return LearningDocumentState(
             document_id=document["document_id"],
             session_id=document["session_id"],
@@ -284,6 +325,7 @@ class LearningDocumentService:
             schema_version=document["schema_version"],
             document_revision=document["document_revision"],
             blocks=blocks,
+            source_references=source_references,
         )
 
     @classmethod
@@ -346,6 +388,170 @@ class LearningDocumentService:
         document_id = await self._ensure_document(session_info, assignment)
         state = await self._state_for_document(document_id, session_info)
         return await self._remove_untouched_legacy_template(state, session_info)
+
+    @staticmethod
+    def _published_source(assignment: PublicQuestionSpec, source_id: str) -> PublicSource:
+        source = next(
+            (item for item in assignment.published.source_pack if item.source_id == source_id),
+            None,
+        )
+        if not source:
+            raise LearningDocumentValidationError("That source is not in this assignment's evidence pack.")
+        return source
+
+    async def add_source_reference(
+        self,
+        session_id: UUID | str,
+        access_token: str | None,
+        source_id: str,
+    ) -> LearningDocumentState:
+        """Persist a learner-selected source card without writing any student prose."""
+        session_info, assignment = await self._get_authorized_context(session_id, access_token)
+        if session_info["status"] != "active":
+            raise LearningDocumentConflictError("Submitted or completed sessions cannot add source references.")
+        source = self._published_source(assignment, source_id)
+        document_id = await self._ensure_document(session_info, assignment)
+        insert_sql = text("""
+            INSERT INTO learning_document_source_references (
+                document_id, source_id, source_title, excerpt, citation, source_url, locator
+            ) VALUES (
+                CAST(:document_id AS UUID), :source_id, :source_title, :excerpt, :citation,
+                :source_url, CAST(:locator AS JSONB)
+            )
+            ON CONFLICT (document_id, source_id) DO NOTHING;
+        """)
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                insert_sql,
+                {
+                    "document_id": str(document_id),
+                    "source_id": source.source_id,
+                    "source_title": source.title,
+                    "excerpt": source.excerpt,
+                    "citation": source.citation,
+                    "source_url": source.source_url,
+                    "locator": json.dumps({"source_id": source.source_id}),
+                },
+            )
+            await session.commit()
+        await event_store.log_event(
+            session_id=session_info["session_id"],
+            student_id=session_info["student_id"],
+            assignment_id=session_info["assignment_id"],
+            question_id=session_info["current_question_id"],
+            event_type="document_source_reference_added",
+            payload={"source_id": source.source_id},
+        )
+        return await self._state_for_document(document_id, session_info)
+
+    async def link_source_reference(
+        self,
+        session_id: UUID | str,
+        access_token: str | None,
+        source_id: str,
+        block_id: UUID | str,
+    ) -> LearningDocumentState:
+        """Record that the learner wants to examine a source beside one draft block."""
+        session_info, assignment = await self._get_authorized_context(session_id, access_token)
+        if session_info["status"] != "active":
+            raise LearningDocumentConflictError("Submitted or completed sessions cannot change source links.")
+        self._published_source(assignment, source_id)
+        document_id = await self._ensure_document(session_info, assignment)
+        reference_sql = text("""
+            SELECT reference_id
+            FROM learning_document_source_references
+            WHERE document_id = CAST(:document_id AS UUID) AND source_id = :source_id;
+        """)
+        block_sql = text("""
+            SELECT block_id
+            FROM learning_document_blocks
+            WHERE document_id = CAST(:document_id AS UUID) AND block_id = CAST(:block_id AS UUID);
+        """)
+        insert_sql = text("""
+            INSERT INTO learning_document_source_claim_links (reference_id, block_id)
+            VALUES (CAST(:reference_id AS UUID), CAST(:block_id AS UUID))
+            ON CONFLICT DO NOTHING;
+        """)
+        async with AsyncSessionLocal() as session:
+            reference_id = await session.scalar(
+                reference_sql, {"document_id": str(document_id), "source_id": source_id}
+            )
+            if not reference_id:
+                raise LearningDocumentValidationError("Select this assigned source before linking it to a claim.")
+            found_block_id = await session.scalar(
+                block_sql, {"document_id": str(document_id), "block_id": str(block_id)}
+            )
+            if not found_block_id:
+                raise LearningDocumentValidationError("That claim is not part of this document.")
+            await session.execute(insert_sql, {"reference_id": str(reference_id), "block_id": str(block_id)})
+            await session.commit()
+        await event_store.log_event(
+            session_id=session_info["session_id"],
+            student_id=session_info["student_id"],
+            assignment_id=session_info["assignment_id"],
+            question_id=session_info["current_question_id"],
+            event_type="document_source_reference_linked",
+            payload={"source_id": source_id, "block_id": str(block_id)},
+        )
+        return await self._state_for_document(document_id, session_info)
+
+    async def locate_assigned_evidence(
+        self,
+        session_id: UUID | str,
+        access_token: str | None,
+        block_id: UUID | str,
+        claim_text: str,
+    ) -> AssignedEvidenceLocatorResponse:
+        """Rank only assigned source cards using transparent lexical overlap, never an LLM answer."""
+        session_info, assignment = await self._get_authorized_context(session_id, access_token)
+        document_id = await self._ensure_document(session_info, assignment)
+        block_sql = text("""
+            SELECT plaintext
+            FROM learning_document_blocks
+            WHERE document_id = CAST(:document_id AS UUID) AND block_id = CAST(:block_id AS UUID);
+        """)
+        async with AsyncSessionLocal() as session:
+            stored_text = await session.scalar(
+                block_sql, {"document_id": str(document_id), "block_id": str(block_id)}
+            )
+        if stored_text is None:
+            raise LearningDocumentValidationError("That claim is not part of this document.")
+
+        stop_words = {
+            "about", "after", "also", "because", "been", "being", "between", "could", "does", "from",
+            "have", "into", "more", "must", "not", "only", "organized", "report", "should", "that",
+            "the", "their", "there", "these", "they", "this", "through", "using", "what", "when",
+            "where", "which", "who", "with", "would",
+        }
+        claim_terms = {
+            term.lower() for term in re.findall(r"[A-Za-z][A-Za-z'-]{2,}", claim_text)
+            if term.lower() not in stop_words
+        }
+        candidates: list[tuple[int, PublicSource, list[str]]] = []
+        for source in assignment.published.source_pack:
+            source_terms = set(re.findall(r"[A-Za-z][A-Za-z'-]{2,}", f"{source.title} {source.excerpt}".lower()))
+            matching_terms = sorted(claim_terms & source_terms)
+            candidates.append((len(matching_terms), source, matching_terms))
+        candidates.sort(key=lambda item: (-item[0], item[1].title.casefold()))
+        return AssignedEvidenceLocatorResponse(
+            block_id=UUID(str(block_id)),
+            message=(
+                "These assigned passages may help you test or support your claim. "
+                "They do not establish the conclusion for you."
+            ),
+            candidates=[
+                AssignedEvidenceCandidate(
+                    source_id=source.source_id,
+                    title=source.title,
+                    excerpt=source.excerpt,
+                    citation=source.citation,
+                    source_url=source.source_url,
+                    locator={"source_id": source.source_id},
+                    matched_terms=matched_terms,
+                )
+                for _score, source, matched_terms in candidates[:5]
+            ],
+        )
 
     async def sync_document(
         self,

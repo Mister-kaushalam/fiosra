@@ -4,6 +4,12 @@
   import { Plugin } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
   import StarterKit from '@tiptap/starter-kit';
+  import { learnerErrorSummary, responseErrorDetails } from './api-error.js';
+  import {
+    clearDocumentRecovery,
+    loadDocumentRecovery,
+    saveDocumentRecovery,
+  } from './document-recovery.js';
 
   let {
     learningDocument = null,
@@ -52,6 +58,9 @@
   let isSaving = $state(false);
   let isDirty = $state(false);
   let saveError = $state('');
+  let saveErrorDetails = $state(null);
+  let recoverySnapshot = $state(null);
+  let lastConfirmedSaveAt = $state('');
   let wordCount = $state(0);
   let readingTimeMin = $derived(Math.max(1, Math.ceil(wordCount / 200)));
   let saveTimer;
@@ -785,6 +794,63 @@
     }
   }
 
+  async function loadRecoverySnapshot(state) {
+    if (!state?.document_id || !sessionId) return;
+    try {
+      const snapshot = await loadDocumentRecovery(sessionId, state.document_id);
+      if (snapshot?.blocks?.length) {
+        recoverySnapshot = snapshot;
+      }
+    } catch (error) {
+      console.warn('Local document recovery could not be loaded:', error);
+    }
+  }
+
+  async function preserveLocalRecovery(blocks) {
+    if (!learningDocument?.document_id || !sessionId) return;
+    try {
+      recoverySnapshot = await saveDocumentRecovery({
+        sessionId,
+        documentId: learningDocument.document_id,
+        baseRevision,
+        blocks,
+      });
+    } catch (error) {
+      console.warn('Local document recovery could not be stored:', error);
+    }
+  }
+
+  async function removeLocalRecovery() {
+    if (!learningDocument?.document_id || !sessionId) return;
+    try {
+      await clearDocumentRecovery(sessionId, learningDocument.document_id);
+      recoverySnapshot = null;
+    } catch (error) {
+      console.warn('Local document recovery could not be cleared:', error);
+    }
+  }
+
+  function restoreLocalRecovery() {
+    if (!recoverySnapshot?.blocks?.length || !editor) return;
+    pagesMap = partitionStateBlocks(recoverySnapshot.blocks);
+    currentPageIndex = 1;
+    editor.commands.setContent(documentContentFromBlocks(pagesMap[1] || []), { emitUpdate: false });
+    updateEditorMetrics();
+    isDirty = true;
+    saveErrorDetails = {
+      code: 'NETWORK_UNAVAILABLE',
+      retryable: true,
+      correlationId: null,
+    };
+    saveError = 'Stored on this device — retry needed before your local changes are saved online.';
+  }
+
+  async function discardLocalRecovery() {
+    await removeLocalRecovery();
+    saveError = '';
+    saveErrorDetails = null;
+  }
+
   function initialiseEditor(state) {
     if (!editor || !state) return;
     loadedDocumentId = state.document_id;
@@ -795,6 +861,9 @@
     syncBaseline(state);
     isDirty = false;
     saveError = '';
+    saveErrorDetails = null;
+    lastConfirmedSaveAt = new Date().toISOString();
+    void loadRecoverySnapshot(state);
     scheduleLLMClassification();
   }
 
@@ -955,6 +1024,8 @@
     }));
     isSaving = true;
     saveError = '';
+    saveErrorDetails = null;
+    await preserveLocalRecovery(blocks);
     try {
       const synced = await onSync({
         base_revision: baseRevision,
@@ -964,10 +1035,17 @@
       if (!synced) return;
       syncBaseline(synced);
       isDirty = false;
+      lastConfirmedSaveAt = new Date().toISOString();
+      await removeLocalRecovery();
       onSynced(synced);
       scheduleConceptProbeOffer(synced);
     } catch (error) {
-      saveError = error?.message || 'This document could not be saved.';
+      saveErrorDetails = error?.fiosraError || {
+        code: 'NETWORK_UNAVAILABLE',
+        retryable: true,
+        correlationId: null,
+      };
+      saveError = error?.message || learnerErrorSummary(saveErrorDetails, { draftPreserved: true });
     } finally {
       isSaving = false;
     }
@@ -1069,25 +1147,35 @@
           onProbeResponse(activeSentence.text, text);
         }
       } else {
+        const details = await responseErrorDetails(response, 'Fiosra is temporarily unavailable. Your draft has not changed.');
         chatMessages = [
           ...chatMessages,
           {
             role: 'oracle',
-            content: 'Writing help is unavailable. Your draft has not changed; please try again shortly.',
+            content: learnerErrorSummary(details, { draftPreserved: true }),
             category: 'socratic',
-            interactive_actions: []
+            error: details,
+            interactive_actions: details.retryable
+              ? [{ action_type: 'retry_assistance', label: 'Retry', icon: '↻', payload: {} }]
+              : []
           }
         ];
       }
     } catch (err) {
       console.error('Error in dialectical turn:', err);
+      const details = {
+        code: 'NETWORK_UNAVAILABLE',
+        retryable: true,
+        correlationId: null,
+      };
       chatMessages = [
         ...chatMessages,
           {
             role: 'oracle',
-            content: 'Writing help is unavailable. Your draft has not changed; please try again shortly.',
-          category: 'socratic',
-          interactive_actions: []
+            content: learnerErrorSummary(details, { draftPreserved: true }),
+            category: 'socratic',
+            error: details,
+            interactive_actions: [{ action_type: 'retry_assistance', label: 'Retry', icon: '↻', payload: {} }]
         }
       ];
     } finally {
@@ -1100,10 +1188,24 @@
     }
   }
 
+  function retryLastStudentMessage() {
+    if (isOracleThinking) return;
+    const studentIndex = [...chatMessages]
+      .map((message, index) => ({ message, index }))
+      .reverse()
+      .find(({ message }) => message.role === 'student')?.index;
+    if (studentIndex === undefined) return;
+    const previous = chatMessages[studentIndex];
+    chatMessages = chatMessages.slice(0, studentIndex);
+    void sendStudentMessage(previous.content);
+  }
+
   function handleInteractiveAction(action) {
     if (!action || action.applied) return;
     const actionType = action.action_type || action.action;
-    if (actionType === 'apply_canvas_action' && action.payload?.helper_action) {
+    if (actionType === 'retry_assistance') {
+      retryLastStudentMessage();
+    } else if (actionType === 'apply_canvas_action' && action.payload?.helper_action) {
       applyHelperCanvasAction(action.payload.helper_action);
     } else if (actionType === 'open_sources' || actionType === 'cite_source') {
       onOpenSources();
@@ -1692,19 +1794,41 @@
 
           <div class="v-divider"></div>
 
-          <span class="save-status-text">
+          <div class="save-status-text" aria-live="polite">
             {#if saveError}
-              ⚠️ Error saving
+              <span class="save-status-message">⚠️ {saveError}</span>
+              {#if saveErrorDetails?.retryable}
+                <button type="button" class="save-status-action" onclick={syncNow} disabled={isSaving}>Retry save</button>
+              {/if}
+              {#if saveErrorDetails?.correlationId}
+                <small class="save-status-correlation">Support ID: {saveErrorDetails.correlationId}</small>
+              {/if}
             {:else if isSaving}
-              Saving…
+              <span>Saving…</span>
             {:else if isDirty}
-              Autosaving…
+              <span>Autosaving…</span>
             {:else}
-              ✓ Saved
+              <span>✓ Saved{lastConfirmedSaveAt ? ' just now' : ''}</span>
             {/if}
-          </span>
+          </div>
         </div>
       </header>
+
+      {#if recoverySnapshot && !isDirty}
+        <aside class="document-recovery-banner" role="status">
+          <div>
+            <strong>Unsaved local draft found</strong>
+            <p>
+              A copy from {new Date(recoverySnapshot.savedAt).toLocaleString()} is stored on this device.
+              Restore it only if it is the version you want to save.
+            </p>
+          </div>
+          <div class="document-recovery-actions">
+            <button type="button" class="recovery-restore-btn" onclick={restoreLocalRecovery}>Restore local draft</button>
+            <button type="button" class="recovery-discard-btn" onclick={discardLocalRecovery}>Discard copy</button>
+          </div>
+        </aside>
+      {/if}
 
       <!-- Clean, Distraction-Free Notion-Style Page (Expansive A4 / Letter Canvas) -->
       <div class="document-page" class:epistemic-active={isEpistemicLens}>
@@ -1869,6 +1993,9 @@
                 <span class="bubble-author">{msg.role === 'oracle' ? 'Fiosra' : 'You'}</span>
               </div>
               <p class="bubble-text">{msg.content}</p>
+              {#if msg.error?.correlationId}
+                <small class="assistant-error-correlation">Support ID: {msg.error.correlationId}</small>
+              {/if}
 
               {#if msg.role === 'oracle' && msg === chatMessages[0] && activeSentence.proactive_probe_id}
                 <button type="button" class="defer-probe-link" onclick={deferActiveProbe}>Continue drafting for now</button>
@@ -2291,6 +2418,79 @@
   .save-status-text {
     font-size: 11px;
     color: var(--color-slate-muted, #646a78);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    text-align: right;
+    max-width: 390px;
+  }
+
+  .save-status-message {
+    color: #b45309;
+  }
+
+  .save-status-action,
+  .recovery-restore-btn,
+  .recovery-discard-btn {
+    border: 0;
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  .save-status-action,
+  .recovery-restore-btn {
+    color: #1d4ed8;
+    font-weight: 700;
+  }
+
+  .save-status-action:disabled {
+    cursor: wait;
+    opacity: 0.65;
+  }
+
+  .save-status-correlation {
+    color: var(--color-slate-muted, #646a78);
+    font-family: var(--font-mono, monospace);
+  }
+
+  .document-recovery-banner {
+    width: min(var(--canvas-width, 820px), 100%);
+    margin: 0 auto 12px;
+    border: 1px solid #f0c36d;
+    background: #fffbeb;
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: #78350f;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .document-recovery-banner strong {
+    font-size: 12px;
+  }
+
+  .document-recovery-banner p {
+    margin: 3px 0 0;
+    font-size: 11px;
+    line-height: 1.35;
+  }
+
+  .document-recovery-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 12px;
+    font-size: 11px;
+  }
+
+  .recovery-discard-btn {
+    color: #78350f;
   }
 
   /* Pristine Document Page (Strict A4 Aspect Ratio 210/297 with Dynamic Zoom) */
@@ -3204,6 +3404,14 @@
   .bubble-text {
     margin: 0;
     white-space: pre-wrap;
+  }
+
+  .assistant-error-correlation {
+    display: block;
+    margin-top: 6px;
+    color: var(--color-slate-muted, #64748b);
+    font-family: var(--font-mono, monospace);
+    font-size: 10px;
   }
 
   .interactive-actions-bar {

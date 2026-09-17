@@ -3,8 +3,9 @@
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Header, HTTPException, status
+from fastapi import APIRouter, Header, status
 
+from fiosra.mvp.api_errors import LearnerAPIError
 from fiosra.mvp.socratic_probe_schemas import (
     DialecticalTurnRequest,
     DialecticalTurnResponse,
@@ -19,9 +20,9 @@ from fiosra.mvp.socratic_probe_schemas import (
     SubmitProbeResponseRequest,
 )
 from fiosra.mvp.socratic_probe_service import (
+    SocraticModelUnavailableError,
     SocraticProbeAccessError,
     SocraticProbeConflictError,
-    SocraticModelUnavailableError,
     SocraticProbeValidationError,
     socratic_probe_service,
 )
@@ -32,13 +33,37 @@ SessionToken = Annotated[str | None, Header(alias="X-Fiosra-Session-Token")]
 
 def _raise_probe_error(error: Exception) -> None:
     if isinstance(error, SocraticProbeAccessError):
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(error)) from error
+        raise LearnerAPIError(
+            status_code=status.HTTP_403_FORBIDDEN,
+            code="SESSION_AUTHORIZATION",
+            message="This session needs reconnecting before Fiosra can continue.",
+        ) from error
     if isinstance(error, SocraticProbeConflictError):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        if "submitted or completed" in str(error).lower():
+            raise LearnerAPIError(
+                status_code=status.HTTP_409_CONFLICT,
+                code="SESSION_NOT_ACTIVE",
+                message="This milestone has already been submitted and can no longer receive new writing assistance.",
+            ) from error
+        raise LearnerAPIError(
+            status_code=status.HTTP_409_CONFLICT,
+            code="DOCUMENT_CONFLICT",
+            message="Your document changed before this question could be updated. Continue writing and try again.",
+        ) from error
     if isinstance(error, SocraticProbeValidationError):
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(error)) from error
+        raise LearnerAPIError(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="VALIDATION_ERROR",
+            message=str(error),
+        ) from error
     if isinstance(error, SocraticModelUnavailableError):
-        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        raise LearnerAPIError(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            code="MODEL_UNAVAILABLE",
+            message="Fiosra is temporarily unavailable. Your draft has not changed.",
+            retryable=True,
+            retry_after_seconds=10,
+        ) from error
     raise error
 
 

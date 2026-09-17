@@ -14,7 +14,7 @@ class EvidenceDossierSynthesizer:
     - Stage 2 (f_score): Evaluates evidence against rubric criteria and generates the executive review dossier.
     """
 
-    def synthesize_dossier(
+    async def synthesize_dossier(
         self,
         session_info: dict[str, Any],
         events: list[dict[str, Any]],
@@ -45,9 +45,6 @@ class EvidenceDossierSynthesizer:
                 },
             ]
 
-        # ------------------------------------------------------------------
-        # Stage 1: Factual Trace Extraction (f_trace)
-        # ------------------------------------------------------------------
         by_question: dict[str, list[dict[str, Any]]] = {}
         for ev in events:
             q_id = ev.get("question_id", "q1")

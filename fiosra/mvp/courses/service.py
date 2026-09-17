@@ -116,6 +116,39 @@ class CourseService:
             return courses
 
     @classmethod
+    async def list_student_catalog(cls, student_id: str) -> list[dict[str, Any]]:
+        """Project a single student-safe course catalog with one canonical published milestone."""
+        # Imported lazily to avoid coupling the general course domain to authoring
+        # during application startup.
+        from fiosra.mvp.assignment_designer.generator import assignment_generator
+
+        courses = await cls.list_courses()
+        enrolled_course_ids = {
+            str(course.course_id) for course in await cls.list_enrolled_courses(student_id)
+        }
+        catalog: list[dict[str, Any]] = []
+        for course in courses:
+            public_assignments = await assignment_generator.list_public_assignments(
+                course_id=course.course_id,
+                status="published",
+            )
+            active_assignment = public_assignments[0].model_dump(mode="json") if public_assignments else None
+            if active_assignment:
+                public_contract = active_assignment.get("published") or {}
+                active_assignment["title"] = active_assignment.get("title") or public_contract.get("title", "Assignment")
+                active_assignment["prompt"] = active_assignment.get("prompt") or (
+                    public_contract.get("task") or {}
+                ).get("prompt", "")
+            course_data = course.model_dump(mode="json")
+            # Do not use the legacy nested assignment summary to determine
+            # availability. It can disagree with the student-safe projection.
+            course_data["active_assignment"] = active_assignment
+            course_data["is_enrolled"] = str(course.course_id) in enrolled_course_ids
+            course_data["is_available"] = active_assignment is not None or bool(course.modules and len(course.modules) > 0)
+            catalog.append(course_data)
+        return catalog
+
+    @classmethod
     async def get_course(cls, course_id: UUID | str) -> CourseResponse | None:
         """
         Fetches a course by ID with all sequential modules and active assignments.
@@ -457,6 +490,46 @@ class CourseService:
             total_enrolled=len(students),
             students=students,
         )
+
+    @classmethod
+    async def delete_course(cls, course_id: UUID | str) -> bool:
+        """
+        Completely deletes a course workspace and all associated records:
+        1. PostgreSQL: deletes assignments for course modules, then deletes course record
+           (which cascades to modules, syllabus_chunks, enrollments).
+        2. Neo4j: detaches and deletes all nodes linked by course_id.
+        """
+        from fiosra.mvp.neo4j_client import neo4j_client
+
+        c_id = str(course_id)
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("""
+                    DELETE FROM assignments 
+                    WHERE module_id IN (SELECT module_id FROM modules WHERE course_id = CAST(:course_id AS UUID))
+                """),
+                {"course_id": c_id},
+            )
+            result = await session.execute(
+                text("DELETE FROM courses WHERE course_id = CAST(:course_id AS UUID)"),
+                {"course_id": c_id},
+            )
+            await session.commit()
+            deleted = result.rowcount > 0
+
+        try:
+            async with neo4j_client.get_session() as graph_session:
+                await graph_session.run(
+                    """
+                    MATCH (n {course_id: $course_id})
+                    DETACH DELETE n
+                    """,
+                    {"course_id": c_id},
+                )
+        except Exception as e:
+            logger.warning("Neo4j cleanup during course deletion warning: %s", e)
+
+        return deleted
 
 
 course_service = CourseService()

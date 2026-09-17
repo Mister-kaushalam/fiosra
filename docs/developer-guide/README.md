@@ -16,6 +16,7 @@ This developer guide is organized into six modular chapters covering the entire 
 | [**Chapter 4**](./04-api-reference.md) | **Comprehensive API Reference** | Complete REST endpoint specifications, request/response schemas, path/query parameters, status codes, and JSON payloads. |
 | [**Chapter 5**](./05-development-workflows.md) | **Developer Workflows & Operations** | Prerequisites, local development environment, Docker Compose stack, test execution (`pytest`), Vite production build, database migrations, and debugging. |
 | [**Chapter 6**](./06-learning-canvas-and-assistance.md) | **Long-Form Documents & Socratic Evidence** | Tiptap/ProseMirror writer-first documents, protected block persistence, proactive paragraph questions, evaluator-visible evidence, session capabilities, and the safeguarded assistance roadmap. |
+| [**Taxonomy Reference**](../taxonomy/README.md) | **Unified Curriculum & Pedagogical Taxonomy** | Full 4-tier pedagogical ontology, High-to-Low concepts (`course_theme` $\to$ `strand` $\to$ `topic` $\to$ `atomic_concept`), Bloom levels, Socratic inquiry rungs, source grounding, and Cypher schemas. |
 
 ---
 
