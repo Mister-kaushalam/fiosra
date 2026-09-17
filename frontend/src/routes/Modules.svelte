@@ -110,7 +110,11 @@
     } catch (err) { alert('Failed to delete assignment: ' + err.message); }
   }
 
-  onMount(() => { loadCourseWorkspace(); });
+  onMount(() => {
+    loadCourseWorkspace();
+    window.addEventListener('hashchange', loadCourseWorkspace);
+    return () => window.removeEventListener('hashchange', loadCourseWorkspace);
+  });
 </script>
 
 <main class="modules-main">
@@ -144,9 +148,9 @@
       <button type="button" class="view-tab-btn {activeTab === 'autoscore' ? 'active' : ''}" onclick={() => (activeTab = 'autoscore')}>
         <span>⚡</span> AutoSCORE Review
       </button>
-      <button type="button" class="view-tab-btn {activeTab === 'concepts' ? 'active' : ''}" onclick={() => (activeTab = 'concepts')}>
-        <span>◌</span> Curriculum Concept Graph
-      </button>
+      <a href="#/knowledge-graph?course_id={currentCourseId}" class="view-tab-btn" title="Open Full-Screen Curriculum Concept Graph">
+        <span>◌</span> Curriculum Concept Graph ↗
+      </a>
     </div>
 
     {#if activeTab === 'modules'}

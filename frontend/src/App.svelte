@@ -23,6 +23,8 @@
     '/modules': Modules,
     '/courses': Courses,
     '/knowledge-graph': KnowledgeGraph,
+    '/concept-graph': KnowledgeGraph,
+    '/graph': KnowledgeGraph,
     '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),

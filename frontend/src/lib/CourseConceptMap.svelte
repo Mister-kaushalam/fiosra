@@ -238,6 +238,7 @@
       <p>Model the ideas students must connect, distinguish, and support. Sources and assignments can then point to the same approved concept structure.</p>
     </div>
     <div class="header-actions">
+      <a href="#/knowledge-graph?course_id={courseId}" class="btn btn-secondary" title="Open Full-Screen Obsidian Graph">✦ Full-Screen Graph ↗</a>
       <button type="button" class="btn btn-secondary" onclick={loadGraph} disabled={isLoading}>Refresh</button>
       <button type="button" class="btn btn-secondary" onclick={generateProposal} disabled={isGeneratingProposal}> {isGeneratingProposal ? 'Mapping concepts…' : 'Regenerate proposal'} </button>
       <button type="button" class="btn btn-primary" onclick={openCreate}>+ Add concept</button>

@@ -24,10 +24,12 @@ class GraphService:
         cypher = """
         MATCH (m:Misconception)
         WHERE ($kc_id = '*' OR m.kc_id = $kc_id)
+          AND coalesce(m.status, 'approved') = 'approved'
           AND ($query = '' OR toLower(m.name) CONTAINS toLower($query) 
                OR toLower(m.flawed_rule) CONTAINS toLower($query)
                OR toLower(coalesce(m.remediation_hint, '')) CONTAINS toLower($query))
         OPTIONAL MATCH (m)-[:PROBED_BY]->(p:SocraticProbe)
+        WHERE coalesce(p.status, 'approved') = 'approved'
         RETURN m.misconception_id AS misconception_id,
                m.kc_id AS kc_id,
                m.name AS name,
@@ -114,7 +116,8 @@ class GraphService:
         Returns all prerequisite KC IDs (transitive dependencies) required before kc_id.
         """
         cypher = f"""
-        MATCH (target:KnowledgeComponent {{kc_id: $kc_id}})-[:REQUIRES*1..{depth}]->(prereq:KnowledgeComponent)
+        MATCH path=(target:KnowledgeComponent {{kc_id: $kc_id}})-[:REQUIRES*1..{depth}]->(prereq:KnowledgeComponent)
+        WHERE all(n IN nodes(path) WHERE coalesce(n.status, 'approved') = 'approved')
         RETURN DISTINCT prereq.kc_id AS prereq_id
         """
         async with self.client.get_session() as session:
@@ -135,6 +138,7 @@ class GraphService:
         cypher = """
         MATCH (k:KnowledgeComponent)
         WHERE NOT k.kc_id IN $mastered_kc_ids
+          AND coalesce(k.status, 'approved') = 'approved'
           AND ($domain IS NULL OR k.domain = $domain)
         OPTIONAL MATCH (k)-[:REQUIRES]->(p:KnowledgeComponent)
         WITH k, collect(p.kc_id) AS required_prereqs
@@ -143,6 +147,7 @@ class GraphService:
                k.label AS label,
                k.domain AS domain,
                k.bloom_level AS bloom_level,
+               k.course_id AS course_id,
                k.description AS description,
                k.estimated_difficulty AS estimated_difficulty,
                required_prereqs
@@ -175,12 +180,16 @@ class GraphService:
         """
         cypher = """
         MATCH (k:KnowledgeComponent {kc_id: $kc_id})
+        WHERE coalesce(k.status, 'approved') = 'approved'
         OPTIONAL MATCH (k)-[:REQUIRES]->(prereq:KnowledgeComponent)
+        WHERE coalesce(prereq.status, 'approved') = 'approved'
         OPTIONAL MATCH (dependent:KnowledgeComponent)-[:REQUIRES]->(k)
+        WHERE coalesce(dependent.status, 'approved') = 'approved'
         RETURN k.kc_id AS kc_id,
                k.label AS label,
                k.domain AS domain,
                k.bloom_level AS bloom_level,
+               k.course_id AS course_id,
                k.description AS description,
                k.estimated_difficulty AS estimated_difficulty,
                collect(DISTINCT prereq.kc_id) AS direct_prerequisites,
@@ -199,10 +208,12 @@ class GraphService:
         """
         cypher = """
         MATCH (k:KnowledgeComponent)
-        WHERE ($domain IS NULL OR k.domain = $domain)
+        WHERE ($domain IS NULL OR toLower(k.domain) = toLower($domain))
+        AND coalesce(k.status, 'approved') <> 'superseded'
         RETURN k.kc_id AS kc_id,
                k.label AS label,
                k.domain AS domain,
+               k.course_id AS course_id,
                k.description AS description
         ORDER BY k.kc_id ASC
         """

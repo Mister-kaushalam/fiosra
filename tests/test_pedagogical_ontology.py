@@ -1,10 +1,10 @@
-import pytest
 from uuid import uuid4
 
-from fiosra.mvp.graph_service import graph_service
-from fiosra.mvp.courses.pedagogical_extractor import pedagogical_extractor
+import pytest
+
 from fiosra.mvp.concepts.service import concept_graph_service
-from fiosra.mvp.dialogue_engine import dialogue_engine
+from fiosra.mvp.courses.pedagogical_extractor import pedagogical_extractor
+from fiosra.mvp.graph_service import graph_service
 
 
 @pytest.mark.asyncio
@@ -24,19 +24,14 @@ async def test_pedagogical_ontology_extraction_and_seeding():
     async with graph_service.client.get_session() as session:
         await session.run(cypher, {"course_id": course_id, "module_id": module_id})
 
-    # 2. Run pedagogical extractor with sample historical text
-    sample_text = """
-    The Treaty of Allahabad in 1765 marked the beginning of East India Company political rule in India.
-    Under Robert Clive, the Mughal Emperor Shah Alam II granted the Diwani rights of Bengal, Bihar, and Orissa
-    to the Company. This established the Dual System of government, causing economic disruption and draining wealth.
-    """
-    result = await pedagogical_extractor.extract_and_seed(
-        course_id=course_id,
-        course_title="Test Pedagogical Course",
-        module_id=module_id,
-        module_title="Test Module",
-        domain="History",
-        text_content=sample_text,
+    # Seed a complete grounded proposal without relying on a live model or fallback templates.
+    from tests.test_taxonomy_integrity import grounded_plan, source_text
+
+    result = await pedagogical_extractor.seed_pedagogical_graph(
+        course_id=course_id, course_title="Test Pedagogical Course",
+        module_id=module_id, module_title="Test Module", domain="History",
+        ontology_data=grounded_plan(),
+        source_chunks=[{'chunk_id': str(uuid4()), 'title': 'Test reading', 'content': source_text()}],
     )
 
     assert result["knowledge_components"] > 0

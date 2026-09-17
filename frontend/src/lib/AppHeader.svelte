@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import { push } from 'svelte-spa-router';
 
   let {
     courseTitle = 'Course Workspace',
@@ -11,6 +12,13 @@
 
   function handleHashChange() {
     currentHash = window.location.hash || '#/';
+  }
+
+  function navigateTo(path) {
+    const cleanPath = path.startsWith('#') ? path.slice(1) : (path.startsWith('/') ? path : '/' + path);
+    push(cleanPath).catch(() => {});
+    window.location.hash = '#' + cleanPath;
+    window.dispatchEvent(new Event('hashchange'));
   }
 
   function applyTheme(theme) {
@@ -81,7 +89,7 @@
       activeTab = 'review';
     } else if (path.startsWith('/diagnostics')) {
       activeTab = 'diagnostics';
-    } else if (path.startsWith('/graph')) {
+    } else if (path.startsWith('/graph') || path.startsWith('/knowledge-graph') || path.startsWith('/concept-graph')) {
       activeTab = 'graph';
     } else if (path.startsWith('/student')) {
       isStudentView = true;
@@ -123,7 +131,12 @@
 
 <header class="app-header">
   <div class="header-left">
-    <a href={parsed.logoHref} title={parsed.logoTitle} class="brand-logo">
+    <a
+      href={parsed.logoHref}
+      title={parsed.logoTitle}
+      class="brand-logo"
+      onclick={(e) => { e.preventDefault(); navigateTo(parsed.logoHref); }}
+    >
       FIOSRA
     </a>
 
@@ -141,6 +154,7 @@
           href={parsed.isStudentView ? `#/student/home${parsed.courseQuery}` : `#/modules${parsed.courseQuery}`}
           class="course-context-pill"
           title="Active Course: {activeCourseLabel}"
+          onclick={(e) => { e.preventDefault(); navigateTo(parsed.isStudentView ? `#/student/home${parsed.courseQuery}` : `#/modules${parsed.courseQuery}`); }}
         >
           {activeCourseLabel}
         </a>
@@ -154,12 +168,14 @@
           <a
             href="#/student/portal"
             class="nav-pill {parsed.activeTab === 'student-portal' ? 'active' : ''}"
+            onclick={(e) => { e.preventDefault(); navigateTo('/student/portal'); }}
           >
             📚 Courses & Enrollment
           </a>
           <a
             href="#/student/timeline"
             class="nav-pill {parsed.activeTab === 'student-timeline' ? 'active' : ''}"
+            onclick={(e) => { e.preventDefault(); navigateTo('/student/timeline'); }}
           >
             📈 Progression Timeline
           </a>
@@ -168,12 +184,14 @@
             href="#/student/portal"
             class="nav-pill nav-pill-back"
             title="Return to Course Catalog & Global Hub"
+            onclick={(e) => { e.preventDefault(); navigateTo('/student/portal'); }}
           >
             ← All Courses
           </a>
           <a
             href="#/student/home{parsed.courseQuery}"
             class="nav-pill {parsed.activeTab === 'student-home' ? 'active' : ''}"
+            onclick={(e) => { e.preventDefault(); navigateTo(`/student/home${parsed.courseQuery}`); }}
           >
             Course Map
           </a>
@@ -181,36 +199,61 @@
             <a
               href="#/student/sources{parsed.courseQuery}"
               class="nav-pill {parsed.activeTab === 'student-sources' ? 'active' : ''}"
+              onclick={(e) => { e.preventDefault(); navigateTo(`/student/sources${parsed.courseQuery}`); }}
             >
               Primary Sources
             </a>
             <a
               href="#/student{parsed.courseQuery}"
               class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
+              onclick={(e) => { e.preventDefault(); navigateTo(`/student${parsed.courseQuery}`); }}
             >
               Reasoning Canvas
             </a>
             <a
               href="#/student/trace{parsed.courseQuery}"
               class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
+              onclick={(e) => { e.preventDefault(); navigateTo(`/student/trace${parsed.courseQuery}`); }}
             >
               Evidence Trace
             </a>
           {/if}
         {/if}
       {:else}
-        <a
-          href="#/courses"
-          class="nav-pill {parsed.activeTab === 'courses' ? 'active' : ''}"
-        >
-          Portfolio
-        </a>
-        <a
-          href="#/modules{parsed.courseQuery}"
-          class="nav-pill {parsed.activeTab === 'modules' || parsed.activeTab === 'designer' || parsed.activeTab === 'review' || parsed.activeTab === 'diagnostics' || parsed.activeTab === 'graph' ? 'active' : ''}"
-        >
-          Curriculum
-        </a>
+        {#if parsed.isGlobalView || !parsed.courseId}
+          <a
+            href="#/courses"
+            class="nav-pill {parsed.activeTab === 'courses' ? 'active' : ''}"
+            onclick={(e) => { e.preventDefault(); navigateTo('/courses'); }}
+          >
+            Portfolio
+          </a>
+        {:else}
+          <a
+            href="#/courses"
+            class="nav-pill nav-pill-back"
+            title="Return to Course Portfolio"
+            onclick={(e) => { e.preventDefault(); navigateTo('/courses'); }}
+          >
+            ← Portfolio
+          </a>
+          <a
+            href="#/modules{parsed.courseQuery}"
+            class="nav-pill {parsed.activeTab === 'modules' || parsed.activeTab === 'designer' || parsed.activeTab === 'review' || parsed.activeTab === 'diagnostics' ? 'active' : ''}"
+            onclick={(e) => { e.preventDefault(); navigateTo(`/modules${parsed.courseQuery}`); }}
+          >
+            Curriculum
+          </a>
+          {#if parsed.activeTab === 'graph'}
+            <a
+              href="#/knowledge-graph{parsed.courseQuery}"
+              class="nav-pill active"
+              onclick={(e) => { e.preventDefault(); navigateTo(`/knowledge-graph${parsed.courseQuery}`); }}
+            >
+              Curriculum Concept Graph
+            </a>
+          {/if}
+        {/if}
       {/if}
     </nav>
 

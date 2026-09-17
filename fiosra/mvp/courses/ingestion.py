@@ -15,6 +15,7 @@ from neo4j.exceptions import Neo4jError
 from sqlalchemy import text
 
 from fiosra.mvp.courses.schemas import SyllabusChunkResponse
+from fiosra.mvp.courses.source_queries import CANONICAL_CHUNKS
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.graph_service import graph_service
 from fiosra.mvp.seed_pipeline import generate_deterministic_embedding
@@ -192,10 +193,21 @@ class SyllabusParser:
                     "content": p,
                 })
 
-        return sections
+        bounded = []
+        for section in sections:
+            body = section['content']
+            while len(body) > 1200:
+                boundary = body.rfind(' ', 0, 1201)
+                if boundary < 1:
+                    boundary = 1200
+                bounded.append({'title': section['title'], 'content': body[:boundary]})
+                body = body[boundary:].lstrip()
+            if body:
+                bounded.append({'title': section['title'], 'content': body})
+        return bounded
 
     @classmethod
-    async def match_kc_for_text(cls, chunk_text: str, domain: str | None = None) -> str | None:
+    async def match_kc_for_text(cls, chunk_text: str, domain: str | None = None, course_id: str | None = None) -> str | None:
         """
         Scans chunk text against available Neo4j Knowledge Components to link grounding context.
         """
@@ -205,16 +217,8 @@ class SyllabusParser:
             logger.warning(f"Could not fetch KCs from Neo4j for grounding: {e}")
             kcs = []
 
-        # Fallback if Neo4j returned empty
-        if not kcs:
-            kcs = [
-                {"kc_id": "KC_HIST_FRENCH_DEBT", "label": "French Crown Sovereign War Debt"},
-                {"kc_id": "KC_HIST_ANCIEN_REGIME", "label": "Ancien Regime Three Estates Social Structure"},
-                {"kc_id": "KC_HIST_ESTATES_GENERAL", "label": "Convocation of the 1789 Estates-General"},
-                {"kc_id": "KC_HIST_TENNIS_COURT", "label": "National Assembly and Tennis Court Oath"},
-                {"kc_id": "KC_HIST_BASTILLE", "label": "Storming of the Bastille and Popular Insurrection"},
-                {"kc_id": "KC_HIST_CALONNE", "label": "Assembly of Notables and Calonne Reform Failure"},
-            ]
+        # Never use unrelated curriculum seeds as an ingestion fallback.
+        kcs = [k for k in kcs if course_id is not None and (k.get('course_id') == str(course_id) or not k.get('course_id'))]
 
         text_lower = chunk_text.lower()
         best_kc = None
@@ -262,11 +266,29 @@ class SyllabusParser:
         """)
 
         async with AsyncSessionLocal() as session:
+            # Serialize identical resource uploads, including concurrent retries.
+            await session.execute(text('SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))'),
+                {'key': f'{course_id}|{module_id}|{title}|{resource_type}|{source_url}'})
             for item in raw_chunks:
+                existing = await session.execute(text("""
+                    SELECT chunk_id, course_id, module_id, title, content, kc_id,
+                           resource_type, source_url, created_at
+                    FROM syllabus_chunks
+                    WHERE course_id=:course_id AND module_id IS NOT DISTINCT FROM CAST(:module_id AS UUID)
+                      AND title=:title AND content=:content
+                      AND resource_type=:resource_type AND source_url IS NOT DISTINCT FROM :source_url
+                    ORDER BY created_at, chunk_id LIMIT 1
+                """), {'course_id': str(course_id), 'module_id': str(module_id) if module_id else None,
+                       'title': item['title'], 'content': item['content'],
+                       'resource_type': resource_type, 'source_url': source_url})
+                prior = existing.mappings().first()
+                if prior:
+                    persisted_chunks.append(SyllabusChunkResponse(**dict(prior), similarity=1.0))
+                    continue
                 chunk_id = uuid.uuid4()
                 c_title = item["title"]
                 c_text = item["content"]
-                kc_id = await cls.match_kc_for_text(c_text, domain=domain)
+                kc_id = await cls.match_kc_for_text(c_text, domain=domain, course_id=str(course_id))
                 embedding = generate_deterministic_embedding(c_text)
 
                 result = await session.execute(
@@ -319,10 +341,10 @@ class SyllabusParser:
         """
         query_vector = generate_deterministic_embedding(query)
 
-        query_sql = text("""
+        query_sql = text(f"""
             SELECT chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at,
                    1.0 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
-            FROM syllabus_chunks
+            FROM {CANONICAL_CHUNKS}
             WHERE course_id = :course_id
               AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
             ORDER BY embedding <=> CAST(:query_vec AS vector) ASC
@@ -366,9 +388,9 @@ class SyllabusParser:
         """
         Lists all ingested syllabus and primary source reading chunks for a course.
         """
-        query_sql = text("""
+        query_sql = text(f"""
             SELECT chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at
-            FROM syllabus_chunks
+            FROM {CANONICAL_CHUNKS}
             WHERE course_id = :course_id
               AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
             ORDER BY created_at ASC;

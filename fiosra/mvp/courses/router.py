@@ -20,12 +20,18 @@ from fiosra.mvp.courses.schemas import (
     SyllabusIngestRequest,
 )
 from fiosra.mvp.courses.service import course_service
-from fiosra.mvp.graph_service import graph_service
 from fiosra.mvp.neo4j_client import neo4j_client
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/courses", tags=["Courses & Modules Grounding"])
+_taxonomy_tasks: set[asyncio.Task] = set()
+
+
+def _schedule_taxonomy(coroutine) -> None:
+    task = asyncio.create_task(coroutine)
+    _taxonomy_tasks.add(task)
+    task.add_done_callback(_taxonomy_tasks.discard)
 
 
 async def _extract_and_seed_pedagogical_graph(
@@ -46,9 +52,20 @@ async def _extract_and_seed_pedagogical_graph(
             module_title=module_title,
             domain=domain,
             text_content=text_content,
+            replace=True,
         )
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - background jobs must record failure without losing uploads.
         logger.warning(f"Pedagogical knowledge extraction warning: {e}")
+        try:
+            async with neo4j_client.get_session() as session:
+                await session.run("""
+                    MATCH (m:Module {module_id:$module_id, course_id:$course_id})
+                    SET m.taxonomy_status='failed', m.taxonomy_error=$error,
+                        m.taxonomy_updated_at=datetime()
+                """, {'module_id': str(module_id), 'course_id': str(course_id),
+                       'error': 'Taxonomy extraction failed validation or provider availability. Retry regeneration.'})
+        except Exception:
+            logger.exception('Could not persist taxonomy extraction failure status')
         return {}
 
 
@@ -148,7 +165,7 @@ async def ingest_pdf_to_course(
 
     # 6. Ingest into Pedagogical Knowledge Graph in background
     full_text = "\n\n".join(chunk.content for chunk in chunks)
-    asyncio.create_task(
+    _schedule_taxonomy(
         _extract_and_seed_pedagogical_graph(
             course_id=course.course_id,
             module_id=target_module.module_id,
@@ -164,6 +181,31 @@ async def ingest_pdf_to_course(
     return refreshed or course
 
 
+@router.post(
+    "/{course_id}/modules/{module_id}/reseed-graph",
+    tags=["Courses & Modules Grounding"],
+    summary="Validate and replace the module taxonomy using the configured provider.",
+)
+async def reseed_module_graph(
+    course_id: UUID,
+    module_id: UUID,
+) -> dict:
+    """Validate a grounded replacement before atomically retiring the previous taxonomy."""
+    from fiosra.mvp.courses.pedagogical_extractor import pedagogical_extractor
+
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found.")
+    module = next((m for m in course.modules if m.module_id == module_id), None)
+    if not module:
+        raise HTTPException(status_code=404, detail="Module not found.")
+    try:
+        counts = await pedagogical_extractor.extract_and_seed(
+            course_id=course_id, module_id=module_id, course_title=course.title,
+            module_title=module.title, domain=course.domain, text_content='', replace=True)
+        return {'status': 'pending_review', 'module_id': str(module_id), **counts}
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 
@@ -242,6 +284,20 @@ async def get_course(course_id: UUID) -> CourseResponse:
             detail=f"Course with ID '{course_id}' not found.",
         )
     return course
+
+
+@router.delete("/{course_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_course(course_id: UUID) -> None:
+    """
+    Completely deletes a course from PostgreSQL and Neo4j, cascading across
+    all child modules, enrollments, syllabus chunks, and graph nodes.
+    """
+    deleted = await course_service.delete_course(course_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
 
 
 @router.post("/{course_id}/enroll", response_model=EnrollmentResponse, status_code=status.HTTP_201_CREATED)
@@ -420,7 +476,12 @@ async def add_module_resource(
             source_url=payload.source_url,
             chunks=[chunk.model_dump(mode="json") for chunk in chunks],
         )
+        _schedule_taxonomy(_extract_and_seed_pedagogical_graph(
+            course_id, module_id, course.title, module.title, course.domain,
+            '\n\n'.join(chunk.content for chunk in chunks)))
         return chunks
+    except HTTPException:
+        raise
     except Exception as e:
         logger.exception("Error ingesting module resource")
         raise HTTPException(
@@ -491,7 +552,7 @@ async def upload_module_resource_file(
             chunks=[chunk.model_dump(mode="json") for chunk in chunks],
         )
         full_text = "\n\n".join(chunk.content for chunk in chunks)
-        asyncio.create_task(
+        _schedule_taxonomy(
             _extract_and_seed_pedagogical_graph(
                 course_id=course_id,
                 module_id=module_id,

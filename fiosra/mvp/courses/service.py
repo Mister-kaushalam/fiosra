@@ -491,5 +491,45 @@ class CourseService:
             students=students,
         )
 
+    @classmethod
+    async def delete_course(cls, course_id: UUID | str) -> bool:
+        """
+        Completely deletes a course workspace and all associated records:
+        1. PostgreSQL: deletes assignments for course modules, then deletes course record
+           (which cascades to modules, syllabus_chunks, enrollments).
+        2. Neo4j: detaches and deletes all nodes linked by course_id.
+        """
+        from fiosra.mvp.neo4j_client import neo4j_client
+
+        c_id = str(course_id)
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                text("""
+                    DELETE FROM assignments 
+                    WHERE module_id IN (SELECT module_id FROM modules WHERE course_id = CAST(:course_id AS UUID))
+                """),
+                {"course_id": c_id},
+            )
+            result = await session.execute(
+                text("DELETE FROM courses WHERE course_id = CAST(:course_id AS UUID)"),
+                {"course_id": c_id},
+            )
+            await session.commit()
+            deleted = result.rowcount > 0
+
+        try:
+            async with neo4j_client.get_session() as graph_session:
+                await graph_session.run(
+                    """
+                    MATCH (n {course_id: $course_id})
+                    DETACH DELETE n
+                    """,
+                    {"course_id": c_id},
+                )
+        except Exception as e:
+            logger.warning("Neo4j cleanup during course deletion warning: %s", e)
+
+        return deleted
+
 
 course_service = CourseService()

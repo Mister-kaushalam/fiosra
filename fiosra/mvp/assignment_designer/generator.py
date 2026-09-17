@@ -29,6 +29,7 @@ from fiosra.mvp.assignment_designer.schemas import (
     SupportMenuItem,
 )
 from fiosra.mvp.assignment_designer.vault import answer_vault
+from fiosra.mvp.courses.source_queries import CANONICAL_CHUNKS
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.llm.orchestrator import llm_orchestrator
 
@@ -55,9 +56,9 @@ class AssignmentGenerator:
     ) -> list[GroundingSource]:
         if not course_id:
             return []
-        source_sql = text("""
+        source_sql = text(f"""
             SELECT chunk_id, title, kc_id, content, source_url
-            FROM syllabus_chunks
+            FROM {CANONICAL_CHUNKS}
             WHERE course_id = CAST(:course_id AS UUID)
               AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
             ORDER BY created_at ASC

@@ -283,6 +283,7 @@ class ConceptGraphService:
         resource_key = hashlib.sha256(material_seed.encode("utf-8")).hexdigest()
         concept_query = """
         MATCH (concept:Concept {course_id: $course_id})
+        WHERE coalesce(concept.status, 'approved') <> 'superseded'
         RETURN concept.concept_id AS concept_id, concept.label AS label
         """
         async with self.client.get_session() as session:
@@ -332,7 +333,7 @@ class ConceptGraphService:
                 OPTIONAL MATCH (target:Concept {concept_id: $kc_id, course_id: $course_id})
                 FOREACH (_ IN CASE WHEN target IS NULL THEN [] ELSE [1] END |
                     MERGE (chunk)-[e:EVIDENCES]->(target)
-                    SET e.method = 'ingestion_match', e.updated_at = datetime()
+                    SET e.method = CASE WHEN e.method='verified_source_excerpt' THEN e.method ELSE 'ingestion_match' END, e.updated_at = datetime()
                 )
                 """
                 await session.run(
@@ -361,7 +362,7 @@ class ConceptGraphService:
                     MATCH (chunk:SourceChunk {chunk_id: $chunk_id})
                     MATCH (concept:Concept {concept_id: $concept_id, course_id: $course_id})
                     MERGE (chunk)-[edge:EVIDENCES]->(concept)
-                    SET edge.method = 'lexical_concept_match',
+                    SET edge.method = CASE WHEN edge.method='verified_source_excerpt' THEN edge.method ELSE 'lexical_concept_match' END,
                         edge.confidence = $confidence,
                         edge.updated_at = datetime()
                     """
@@ -646,11 +647,13 @@ class ConceptGraphService:
         query = """
         MATCH (course:Course {course_id: $course_id})
         OPTIONAL MATCH (course)-[:HAS_CONCEPT]->(concept:Concept)
+        WHERE coalesce(concept.status, 'approved') <> 'superseded'
         WITH course, collect(DISTINCT concept { 
             .concept_id, .label, .definition, .concept_type, .level, .status, .bloom_level 
         }) AS concepts
         
         OPTIONAL MATCH (source:Concept {course_id: $course_id})-[edge:CONTAINS|PREREQUISITE_OF|REQUIRES]->(target:Concept {course_id: $course_id})
+        WHERE coalesce(source.status, 'approved') <> 'superseded' AND coalesce(target.status, 'approved') <> 'superseded'
         WITH course, concepts, collect(DISTINCT CASE WHEN edge IS NULL THEN NULL ELSE {
             source: coalesce(source.concept_id, source.kc_id), 
             target: coalesce(target.concept_id, target.kc_id), 
@@ -658,6 +661,7 @@ class ConceptGraphService:
         } END) AS raw_edges
         
         OPTIONAL MATCH (module:Module {course_id: $course_id})-[module_edge:INTRODUCES|DEVELOPS|ASSESSES]->(linked:Concept {course_id: $course_id})
+        WHERE coalesce(linked.status, 'approved') <> 'superseded'
         WITH course, concepts, raw_edges, collect(DISTINCT CASE WHEN module_edge IS NULL THEN NULL ELSE {
             module_id: module.module_id, 
             concept_id: coalesce(linked.concept_id, linked.kc_id), 
@@ -665,12 +669,14 @@ class ConceptGraphService:
         } END) AS raw_module_links
         
         OPTIONAL MATCH (chunk:SourceChunk {course_id: $course_id})-[source_edge:EVIDENCES]->(evidenced)
+        WHERE coalesce(evidenced.status, 'approved') <> 'superseded'
         WITH course, concepts, raw_edges, raw_module_links, collect(DISTINCT CASE WHEN source_edge IS NULL THEN NULL ELSE {
-            chunk_id: chunk.chunk_id, concept_id: coalesce(evidenced.concept_id, evidenced.kc_id), method: source_edge.method
+            chunk_id: chunk.chunk_id, concept_id: coalesce(evidenced.concept_id, evidenced.kc_id), method: source_edge.method, excerpt: source_edge.excerpt
         } END) AS raw_source_links
         
         // Misconceptions & Socratic Probes Pedagogical Expansion
         OPTIONAL MATCH (k:KnowledgeComponent {course_id: $course_id})-[:ASSOCIATED_WITH]->(misc:Misconception)
+        WHERE coalesce(k.status, 'approved') <> 'superseded' AND coalesce(misc.status, 'approved') <> 'superseded'
         WITH course, concepts, raw_edges, raw_module_links, raw_source_links,
              collect(DISTINCT CASE WHEN misc IS NULL THEN NULL ELSE misc {
                  concept_id: misc.misconception_id,
@@ -679,7 +685,7 @@ class ConceptGraphService:
                  concept_type: 'misconception',
                  level: 'misconception',
                  remediation_hint: misc.remediation_hint,
-                 status: 'approved',
+                 status: coalesce(misc.status, 'approved'),
                  kc_id: k.kc_id
              } END) AS misconception_nodes,
              collect(DISTINCT CASE WHEN misc IS NULL THEN NULL ELSE {
@@ -689,6 +695,7 @@ class ConceptGraphService:
              } END) AS misconception_edges
              
         OPTIONAL MATCH (misc:Misconception {course_id: $course_id})-[:PROBED_BY]->(p:SocraticProbe)
+        WHERE coalesce(misc.status, 'approved') <> 'superseded' AND coalesce(p.status, 'approved') <> 'superseded'
         WITH course, concepts, raw_edges, raw_module_links, raw_source_links, 
              misconception_nodes, misconception_edges,
              collect(DISTINCT CASE WHEN p IS NULL THEN NULL ELSE p {
@@ -696,7 +703,8 @@ class ConceptGraphService:
                  misconception_id: misc.misconception_id,
                  rung: p.rung,
                  probe_text: p.probe_text,
-                 rationale: p.rationale
+                 rationale: p.rationale,
+                 status: coalesce(p.status, 'approved')
              } END) AS probes
 
         RETURN concepts, raw_edges, raw_module_links, raw_source_links,
@@ -749,7 +757,7 @@ class ConceptGraphService:
                 "rung": p.get("rung", 0),
                 "rationale": p.get("rationale"),
                 "misconception_id": p.get("misconception_id"),
-                "status": "approved",
+                "status": p.get("status", "pending_review"),
             }
             if p_node["concept_id"] not in seen_node_ids:
                 nodes.append(p_node)
