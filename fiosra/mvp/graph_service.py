@@ -298,5 +298,39 @@ class GraphService:
                 return {"student_id": student_id, "mastered_kcs": [], "active_misconceptions": [], "attempted_questions": []}
             return dict(record)
 
+    async def get_prerequisite_chain(self, course_id: str = "", kc_id: str = "", depth: int = 3) -> list[dict[str, Any]]:
+        """Traverses prerequisite relationships up to depth to retrieve foundational concepts."""
+        cypher = f"""
+        MATCH (k:KnowledgeComponent {{kc_id: $kc_id}})
+        OPTIONAL MATCH path = (k)-[:REQUIRES*1..{min(max(depth, 1), 5)}]->(prereq:KnowledgeComponent)
+        WHERE coalesce(prereq.status, 'approved') <> 'superseded'
+        RETURN DISTINCT prereq.kc_id AS kc_id,
+                        prereq.label AS label,
+                        prereq.domain AS domain,
+                        prereq.bloom_level AS bloom_level,
+                        length(path) AS depth
+        ORDER BY depth ASC
+        """
+        async with self.client.get_session() as session:
+            result = await session.run(cypher, {"kc_id": kc_id})
+            records = await result.data()
+            return [dict(r) for r in records if r.get("kc_id")]
+
+    def get_graphiti(self) -> Any:
+        """Lazily initializes and returns the Graphiti temporal memory engine."""
+        if not hasattr(self, "_graphiti") or self._graphiti is None:
+            try:
+                from graphiti_core import Graphiti
+                from fiosra.mvp.config import settings
+                self._graphiti = Graphiti(
+                    uri=settings.NEO4J_URI,
+                    user=settings.NEO4J_USER,
+                    password=settings.NEO4J_PASSWORD,
+                )
+            except Exception as e:
+                logger.warning(f"Graphiti temporal engine could not be initialized: {e}")
+                self._graphiti = None
+        return self._graphiti
+
 
 graph_service = GraphService()

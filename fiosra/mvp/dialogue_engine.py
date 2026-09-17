@@ -104,6 +104,51 @@ class SocraticDialogueEngine:
 
         penalty_score = active_rung * 0.25
 
+        # 2b. Agentic LangGraph State Machine Execution
+        if not (hint_ladder and is_course_grounded):
+            try:
+                from fiosra.mvp.agents.graph import socratic_tutor_graph
+                agent_state = {
+                    "session_id": str(student_id or "anonymous_session"),
+                    "student_id": str(student_id or "anonymous_student"),
+                    "question_prompt": question_prompt,
+                    "student_input": student_input,
+                    "active_kc_id": target_kcs[0] if target_kcs else "*",
+                    "current_rung": current_rung,
+                    "hint_requested": hint_requested,
+                    "domain": domain,
+                }
+                graph_result = await socratic_tutor_graph.ainvoke(
+                    agent_state,
+                    config={"configurable": {"thread_id": str(student_id or "anonymous_session")}},
+                )
+                if graph_result.get("adversarial_flag"):
+                    return {
+                        "is_adversarial": True,
+                        "thoughts_of_tutorbot": graph_result.get("thoughts_of_tutorbot", {}),
+                        "response_text": graph_result.get("final_verified_response") or graph_result.get("draft_response"),
+                        "hint_rung": graph_result.get("current_rung", current_rung),
+                        "penalty_score": graph_result.get("penalty_score", 0.0),
+                    }
+                if graph_result.get("is_approved") and graph_result.get("final_verified_response"):
+                    diag_trap = graph_result.get("diagnosed_misconception")
+                    return {
+                        "is_adversarial": False,
+                        "thoughts_of_tutorbot": graph_result.get("thoughts_of_tutorbot", {}),
+                        "response_text": graph_result["final_verified_response"],
+                        "hint_rung": graph_result.get("current_rung", active_rung),
+                        "penalty_score": graph_result.get("penalty_score", penalty_score),
+                        "matched_misconception_id": diag_trap.get("misconception_id") if diag_trap else None,
+                        "matched_probe_id": None,
+                        "matched_kc_id": diag_trap.get("kc_id") if diag_trap else None,
+                        "generation_metadata": {
+                            "orchestrator": "LangGraph",
+                            "critic_approved": True,
+                        },
+                    }
+            except Exception as e:
+                logger.warning(f"LangGraph socratic_tutor_graph execution fallback: {e}")
+
         # 3. Diagnose Potential Misconceptions via Neo4j Pedagogical Graph search
         matched_misconception = None
         matching_probe = None
