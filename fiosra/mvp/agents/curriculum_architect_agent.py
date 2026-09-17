@@ -129,9 +129,9 @@ class CurriculumArchitectAgent:
                 "remediation_hint": f"Examine institutional background data in {kc_label}.",
             })
             probes.extend([
-                {"probe_id": f"PRB_{m1_id}_0", "misconception_id": m1_id, "rung": 0, "probe_text": f"What underlying premise are you using to explain {kc_label}?"},
-                {"probe_id": f"PRB_{m1_id}_1", "misconception_id": m1_id, "rung": 1, "probe_text": f"Which piece of source evidence reveals secondary contributing factors in {kc_label}?"},
-                {"probe_id": f"PRB_{m1_id}_2", "misconception_id": m1_id, "rung": 2, "probe_text": f"How can you reframe your claim about {kc_label} to account for both causes?"},
+                {"probe_id": f"PRB_{m1_id}_0", "kc_id": kc_id, "misconception_id": m1_id, "rung": 0, "probe_text": f"What underlying premise are you using to explain {kc_label}?", "rationale": "Metacognitive reflection on premise"},
+                {"probe_id": f"PRB_{m1_id}_1", "kc_id": kc_id, "misconception_id": m1_id, "rung": 1, "probe_text": f"Which piece of source evidence reveals secondary contributing factors in {kc_label}?", "rationale": "Conceptual evidence confrontation"},
+                {"probe_id": f"PRB_{m1_id}_2", "kc_id": kc_id, "misconception_id": m1_id, "rung": 2, "probe_text": f"How can you reframe your claim about {kc_label} to account for both causes?", "rationale": "Synthesis of multi-causal reasoning"},
             ])
 
             # Trap 2: Actor Agency / Anachronism
@@ -144,9 +144,9 @@ class CurriculumArchitectAgent:
                 "remediation_hint": f"Consider the legal and social constraints of the era for {kc_label}.",
             })
             probes.extend([
-                {"probe_id": f"PRB_{m2_id}_0", "misconception_id": m2_id, "rung": 0, "probe_text": f"What contemporary perspective might be influencing your view of {kc_label}?"},
-                {"probe_id": f"PRB_{m2_id}_1", "misconception_id": m2_id, "rung": 1, "probe_text": f"What legal statutes in the primary text constrained decision-making in {kc_label}?"},
-                {"probe_id": f"PRB_{m2_id}_2", "misconception_id": m2_id, "rung": 2, "probe_text": f"Synthesize how the historical context shaped choices in {kc_label}."},
+                {"probe_id": f"PRB_{m2_id}_0", "kc_id": kc_id, "misconception_id": m2_id, "rung": 0, "probe_text": f"What contemporary perspective might be influencing your view of {kc_label}?", "rationale": "Metacognitive reflection on anachronism"},
+                {"probe_id": f"PRB_{m2_id}_1", "kc_id": kc_id, "misconception_id": m2_id, "rung": 1, "probe_text": f"What legal statutes in the primary text constrained decision-making in {kc_label}?", "rationale": "Primary source legal confrontation"},
+                {"probe_id": f"PRB_{m2_id}_2", "kc_id": kc_id, "misconception_id": m2_id, "rung": 2, "probe_text": f"Synthesize how the historical context shaped choices in {kc_label}.", "rationale": "Synthesis of historical agency"},
             ])
 
         return {
