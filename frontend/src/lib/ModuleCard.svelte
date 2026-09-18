@@ -2,10 +2,12 @@
   let {
     module,
     index = 0,
+    documents = [],
     resources = [],
     courseId = '',
     onAddResource,
     onDeleteResource,
+    onDeleteDocument,
     onDeleteAssignment,
   } = $props();
 
@@ -14,7 +16,11 @@
   let designerUrl = $derived(
     `#/designer?course_id=${encodeURIComponent(courseId)}&module_id=${encodeURIComponent(module.module_id)}`
   );
+  let graphUrl = $derived(
+    `#/knowledge-graph?course_id=${encodeURIComponent(courseId)}&module_id=${encodeURIComponent(module.module_id)}`
+  );
   let hasObjectives = $derived(Boolean(module.learning_objectives?.length));
+  let totalMaterialsCount = $derived(documents.length > 0 ? documents.length : resources.length);
   let hasPublishedAssignment = $derived(
     Boolean(module.assignments?.some((assignment) => assignment.status === 'published'))
   );
@@ -33,6 +39,9 @@
       </div>
     </div>
     <div class="module-header-meta">
+      <a href={graphUrl} class="btn-module-graph" title="View & hydrate knowledge graph for this unit">
+        <span>⚡</span> Knowledge Graph
+      </a>
       <span class="module-badge-status">Unit {module.position}</span>
     </div>
   </div>
@@ -47,7 +56,7 @@
 
   <div class="readiness-bar" aria-label="Module setup readiness">
     <span class:complete={hasObjectives}>Objectives {hasObjectives ? 'mapped' : 'needed'}</span>
-    <span class:complete={resources.length > 0}>Sources {resources.length > 0 ? 'grounded' : 'needed'}</span>
+    <span class:complete={totalMaterialsCount > 0}>Sources {totalMaterialsCount > 0 ? 'grounded' : 'needed'}</span>
     <span class:complete={hasPublishedAssignment}>Student task {hasPublishedAssignment ? 'published' : 'not published'}</span>
   </div>
 
@@ -61,7 +70,7 @@
       onclick={() => (activeTab = 'materials')}
     >
       📚 Materials
-      <span class="badge badge-info">{resources.length}</span>
+      <span class="badge badge-info">{totalMaterialsCount}</span>
     </button>
     <button
       type="button"
@@ -82,14 +91,62 @@
       <div class="resources-header-left">
         <span style="font-size: 14px;">📚</span>
         <span class="resources-heading">GROUNDED READINGS &amp; PRIMARY SOURCES</span>
-        <span class="badge badge-info">{resources.length}</span>
+        <span class="badge badge-info">{totalMaterialsCount}</span>
       </div>
       <button type="button" class="btn btn-secondary btn-xs" onclick={() => onAddResource?.(module)}>
         + Ingest Material
       </button>
     </div>
 
-    {#if resources.length > 0}
+    {#if documents.length > 0}
+      <div class="resources-list">
+        {#each documents as doc (doc.document_id)}
+          <div class="resource-item">
+            <div class="resource-left">
+              <span class="resource-icon">
+                {doc.resource_type === 'pdf' ? '📕' : '📄'}
+              </span>
+              <div class="resource-details">
+                <div class="resource-title-row">
+                  <span class="resource-name">{doc.title || doc.filename}</span>
+                  <span class="resource-type-pill {doc.resource_type}">
+                    {doc.resource_type.toUpperCase()}
+                  </span>
+                  <span class="pgvector-pill">● {doc.chunks_count || 1} Grounded Sections</span>
+                  {#if doc.file_size}
+                    <span class="doc-filesize">({(doc.file_size / 1024).toFixed(1)} KB)</span>
+                  {/if}
+                  {#if doc.download_url}
+                    <a
+                      href={doc.download_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      class="doc-view-link"
+                      title="Open Authentic Source PDF in new tab"
+                    >
+                      Open Original PDF ↗
+                    </a>
+                  {/if}
+                </div>
+                <div class="resource-excerpt doc-submeta">
+                  File: <code>{doc.filename}</code> · Indexed for semantic retrieval and Socratic inquiry.
+                </div>
+              </div>
+            </div>
+            <div class="resource-actions">
+              <button
+                type="button"
+                class="btn-delete"
+                title="Remove this document and its grounded sections"
+                onclick={() => onDeleteDocument?.(doc.document_id, doc.title)}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else if resources.length > 0}
       <div class="resources-list">
         {#each resources as r (r.chunk_id)}
           <div class="resource-item">
@@ -106,8 +163,8 @@
                   <span class="pgvector-pill">● Grounded source</span>
                   <span class:unmapped={!r.kc_id} class="kc-pill">{r.kc_id ? `KC: ${r.kc_id}` : 'KC mapping pending'}</span>
                   {#if r.source_url}
-                    <a href={r.source_url} target="_blank" rel="noopener" class="resource-link">
-                      Open Link ↗
+                    <a href={r.source_url} target="_blank" rel="noopener noreferrer" class="doc-view-link">
+                      Open Source ↗
                     </a>
                   {/if}
                 </div>
@@ -133,7 +190,7 @@
       <div class="resources-empty">
         <span>No primary sources, PDFs, or external links attached to this module yet.</span>
         <button type="button" class="btn btn-secondary btn-xs" onclick={() => onAddResource?.(module)}>
-          + Ingest First Material
+          + Ingest Material
         </button>
       </div>
     {/if}
@@ -141,6 +198,17 @@
   {:else}
   <!-- Assignments List -->
   <div class="assignments-section">
+    <div class="assignments-header">
+      <div class="assignments-header-left">
+        <span style="font-size: 14px;">⚡</span>
+        <span class="assignments-heading">MODULE ASSIGNMENTS</span>
+        <span class="badge badge-info">{module.assignments?.length || 0}</span>
+      </div>
+      <a href={designerUrl} class="btn btn-secondary btn-xs" title="Create a new assignment for this module">
+        + New Assignment
+      </a>
+    </div>
+
     {#if module.assignments && module.assignments.length > 0}
       <div class="assignments-list">
         {#each module.assignments as a (a.assignment_id)}
@@ -155,17 +223,13 @@
               </div>
             </div>
             <div class="assignment-actions">
-              <a href={designerUrl} class="btn btn-secondary btn-xs">
-                Designer ➔
+              <a
+                href={`#/designer?course_id=${encodeURIComponent(courseId)}&module_id=${encodeURIComponent(module.module_id)}&assignment_id=${encodeURIComponent(a.assignment_id)}`}
+                class="btn btn-primary btn-xs"
+                title="Open and edit assignment in Studio"
+              >
+                Open in Studio ➔
               </a>
-              {#if a.status === 'published'}
-                <a
-                  href={`#/student?course_id=${encodeURIComponent(courseId)}&assignment_id=${encodeURIComponent(a.assignment_id)}`}
-                  class="btn btn-primary btn-xs"
-                >
-                  Student canvas →
-                </a>
-              {/if}
               <button
                 type="button"
                 class="btn-delete"
@@ -247,6 +311,29 @@
   .module-header-meta {
     display: flex;
     align-items: center;
+    gap: 10px;
+  }
+
+  .btn-module-graph {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    background: rgba(59, 130, 246, 0.12);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.35);
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .btn-module-graph:hover {
+    background: rgba(59, 130, 246, 0.25);
+    border-color: #60a5fa;
+    color: #ffffff;
+    box-shadow: 0 0 10px rgba(59, 130, 246, 0.3);
   }
 
   .module-badge-status {
@@ -472,6 +559,44 @@
     text-decoration: underline;
   }
 
+  .doc-filesize {
+    font-size: 11px;
+    color: var(--color-slate-muted);
+  }
+
+  .doc-view-link {
+    font-size: 11.5px;
+    font-weight: 600;
+    color: var(--color-horizon-bright);
+    background: rgba(56, 189, 248, 0.12);
+    border: 1px solid rgba(56, 189, 248, 0.35);
+    padding: 2px 8px;
+    border-radius: var(--radius-xs);
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .doc-view-link:hover {
+    background: rgba(56, 189, 248, 0.22);
+    border-color: var(--color-horizon-bright);
+    color: #fff;
+    text-decoration: none;
+  }
+
+  .doc-submeta {
+    font-size: 11.5px;
+    color: var(--color-slate-muted);
+  }
+
+  .doc-submeta code {
+    font-family: var(--font-mono);
+    color: var(--color-slate-light);
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+
   .resource-excerpt {
     font-size: 11.5px;
     color: var(--color-slate-light);
@@ -510,6 +635,26 @@
   /* Assignments Section */
   .assignments-section {
     padding: 12px 22px;
+  }
+
+  .assignments-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
+
+  .assignments-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .assignments-heading {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--color-slate-bright);
+    letter-spacing: 0.4px;
   }
 
   .assignments-list {

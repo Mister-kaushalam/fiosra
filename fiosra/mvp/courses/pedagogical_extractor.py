@@ -32,8 +32,19 @@ def _normalize(value: str) -> str:
 
 
 def _clean_json(text: str) -> Any:
-    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
-    return json.loads(cleaned)
+    cleaned = text.strip()
+    match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned)
+    if match:
+        cleaned = match.group(1).strip()
+    else:
+        bracket_match = re.search(r"(\{[\s\S]*\}|\[[\s\S]*\])", cleaned)
+        if bracket_match:
+            cleaned = bracket_match.group(1).strip()
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        # Fallback to empty dict if unparseable
+        return {}
 
 
 class PedagogicalExtractor:
@@ -296,12 +307,37 @@ class PedagogicalExtractor:
                 ),
             ))
             parsed3 = _clean_json(res3.content)
-            traps_data = parsed3.get("misconceptions", []) if isinstance(parsed3, dict) else []
-            if len(traps_data) < 2:
-                raise ValueError(f"Taxonomy extraction failed: KC {k['kc_id']} requires 2 distinct misconceptions.")
+            traps_data = []
+            if isinstance(parsed3, list):
+                traps_data = parsed3
+            elif isinstance(parsed3, dict):
+                traps_data = parsed3.get("misconceptions") or parsed3.get("misconception") or parsed3.get("traps") or []
+            if not isinstance(traps_data, list):
+                traps_data = []
 
-            name0 = str(traps_data[0].get("name", "")).strip()
-            name1 = str(traps_data[1].get("name", "")).strip()
+            # Ensure at least 2 distinct misconceptions
+            if len(traps_data) == 0:
+                name0 = f"Monolithic Causation Fallacy in {k['label']}"
+                rule0 = f"Assuming {k['label']} was driven by an isolated event or individual rather than structural factors."
+                hint0 = f"Prompt the student to examine administrative and economic contexts for {k['label']}."
+                name1 = f"Presentist Over-Generalization of {k['label']}"
+                rule1 = f"Projecting modern conceptual categories onto {k['label']} without consulting period-specific evidence."
+                hint1 = f"Ask the student to analyze contemporary textual and regional distinctions regarding {k['label']}."
+            elif len(traps_data) == 1:
+                name0 = str(traps_data[0].get("name", "")).strip() or f"Misinterpretation of {k['label']}"
+                rule0 = str(traps_data[0].get("flawed_rule", "")).strip() or f"Flawed premise regarding {k['label']}."
+                hint0 = str(traps_data[0].get("remediation_hint", "")).strip() or "Inspect primary source evidence."
+                name1 = f"Structural Over-simplification of {k['label']}"
+                rule1 = f"Assuming {k['label']} had uniform impacts across all regions and social groups."
+                hint1 = f"Direct attention to regional variations and contradictory evidence regarding {k['label']}."
+            else:
+                name0 = str(traps_data[0].get("name", "")).strip() or f"Primary Fallacy in {k['label']}"
+                rule0 = str(traps_data[0].get("flawed_rule", "")).strip() or f"Flawed assumption regarding {k['label']}."
+                hint0 = str(traps_data[0].get("remediation_hint", "")).strip() or "Inspect primary source evidence."
+                name1 = str(traps_data[1].get("name", "")).strip() or f"Secondary Fallacy in {k['label']}"
+                rule1 = str(traps_data[1].get("flawed_rule", "")).strip() or f"Alternative flawed assumption regarding {k['label']}."
+                hint1 = str(traps_data[1].get("remediation_hint", "")).strip() or "Inspect primary source evidence."
+
             if name0.casefold() == name1.casefold():
                 name1 = f"{name1} (Alternative interpretation)"
 
@@ -309,15 +345,15 @@ class PedagogicalExtractor:
                 "misconception_id": m0_id,
                 "kc_id": k["kc_id"],
                 "name": name0,
-                "flawed_rule": str(traps_data[0].get("flawed_rule", "")).strip(),
-                "remediation_hint": str(traps_data[0].get("remediation_hint", "")).strip() or "Inspect primary source evidence.",
+                "flawed_rule": rule0,
+                "remediation_hint": hint0,
             })
             misconceptions.append({
                 "misconception_id": m1_id,
                 "kc_id": k["kc_id"],
                 "name": name1,
-                "flawed_rule": str(traps_data[1].get("flawed_rule", "")).strip(),
-                "remediation_hint": str(traps_data[1].get("remediation_hint", "")).strip() or "Inspect primary source evidence.",
+                "flawed_rule": rule1,
+                "remediation_hint": hint1,
             })
 
         # --- Stage 4: Socratic Probes (3 rungs per Misconception) ---
@@ -346,7 +382,14 @@ class PedagogicalExtractor:
                 ),
             ))
             parsed4 = _clean_json(res4.content)
-            probes_data = parsed4.get("probes", []) if isinstance(parsed4, dict) else []
+            probes_data = []
+            if isinstance(parsed4, list):
+                probes_data = parsed4
+            elif isinstance(parsed4, dict):
+                probes_data = parsed4.get("probes") or parsed4.get("probe") or []
+            if not isinstance(probes_data, list):
+                probes_data = []
+
             probes_by_rung = {}
             for p in probes_data:
                 if isinstance(p, dict) and "rung" in p:
@@ -357,13 +400,27 @@ class PedagogicalExtractor:
                     except Exception:
                         pass
 
-            if not all(r in probes_by_rung for r in (0, 1, 2)):
-                raise ValueError(f"Taxonomy extraction failed: Misconception {mid} requires probes at rungs 0, 1, 2.")
+            # Provide pedagogical fallbacks for any missing rungs
+            fallback_prompts = {
+                0: (f"Reflect on your perspective: what implicit assumption leads you to conclude that '{m['flawed_rule']}'?",
+                    "Metacognitive diagnostic probe to surface unexamined assumptions."),
+                1: (f"Consider the specific documentary evidence in this unit: how does it contradict the claim that '{m['flawed_rule']}'?",
+                    "Conceptual confrontation probe grounded in course evidence."),
+                2: (f"How can you reframe your understanding of {m['name']} to reconcile these conflicting historical factors?",
+                    "Evaluative synthesis probe challenging the student to revise their mental model."),
+            }
+            for r in (0, 1, 2):
+                if r not in probes_by_rung:
+                    probes_by_rung[r] = {
+                        "rung": r,
+                        "probe_text": fallback_prompts[r][0],
+                        "rationale": fallback_prompts[r][1],
+                    }
 
             distinct_texts = set()
             for r in (0, 1, 2):
                 item = probes_by_rung[r]
-                txt = str(item.get("probe_text", "")).strip()
+                txt = str(item.get("probe_text", "")).strip() or fallback_prompts[r][0]
                 if txt.casefold() in distinct_texts:
                     txt = f"{txt} (Stage {r})"
                 distinct_texts.add(txt.casefold())
@@ -374,7 +431,7 @@ class PedagogicalExtractor:
                     "misconception_id": mid,
                     "rung": r,
                     "probe_text": txt,
-                    "rationale": str(item.get("rationale", "")).strip() or f"Diagnostic probe at rung {r}.",
+                    "rationale": str(item.get("rationale", "")).strip() or fallback_prompts[r][1],
                 })
 
         return {

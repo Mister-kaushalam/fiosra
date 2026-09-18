@@ -4,12 +4,14 @@ from typing import Annotated
 from uuid import UUID
 
 from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile, status
+from fastapi.responses import FileResponse
 
 from fiosra.mvp.concepts.service import concept_graph_service
 from fiosra.mvp.courses.ingestion import syllabus_parser
 from fiosra.mvp.courses.schemas import (
     CohortRosterResponse,
     CourseCreate,
+    CourseDocumentResponse,
     CourseResponse,
     EnrollmentResponse,
     EnrollRequest,
@@ -21,6 +23,7 @@ from fiosra.mvp.courses.schemas import (
 )
 from fiosra.mvp.courses.service import course_service
 from fiosra.mvp.neo4j_client import neo4j_client
+from fiosra.mvp.storage import document_storage
 
 logger = logging.getLogger(__name__)
 
@@ -141,6 +144,21 @@ async def ingest_pdf_to_course(
     if not extracted_text:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No readable text extracted from document.")
 
+    doc_title = filename.replace("_", " ").replace(".pdf", "")
+    resource_type = "pdf" if is_pdf else "document"
+    mime_type = "application/pdf" if is_pdf else "text/plain"
+
+    course_doc = await syllabus_parser.create_course_document(
+        course_id=course.course_id,
+        module_id=target_module.module_id,
+        title=doc_title,
+        filename=filename,
+        content=raw_bytes,
+        resource_type=resource_type,
+        mime_type=mime_type,
+        source_url=f"/courses/{course.course_id}/documents",
+    )
+
     # 5. Ingest into syllabus_chunks (pgvector) and sync Neo4j
     refreshed_course = await course_service.get_course(course.course_id)
     if refreshed_course:
@@ -149,17 +167,19 @@ async def ingest_pdf_to_course(
     chunks = await syllabus_parser.ingest_syllabus(
         course_id=course.course_id,
         content=extracted_text,
-        title=filename.replace("_", " ").replace(".pdf", ""),
+        title=doc_title,
         module_id=target_module.module_id,
         domain=course.domain,
-        resource_type="pdf" if is_pdf else "document",
+        resource_type=resource_type,
+        source_url=course_doc.download_url,
+        document_id=course_doc.document_id,
     )
     await concept_graph_service.ingest_resource(
         course_id=str(course.course_id),
         module_id=str(target_module.module_id),
         title=filename,
-        resource_type="pdf" if is_pdf else "document",
-        source_url=None,
+        resource_type=resource_type,
+        source_url=course_doc.download_url,
         chunks=[chunk.model_dump(mode="json") for chunk in chunks],
     )
 
@@ -532,6 +552,18 @@ async def upload_module_resource_file(
 
         doc_title = title or file.filename or "Uploaded Resource"
         resource_type = "pdf" if is_pdf else "document"
+        mime_type = file.content_type or ("application/pdf" if is_pdf else "text/plain")
+
+        course_doc = await syllabus_parser.create_course_document(
+            course_id=course_id,
+            module_id=module_id,
+            title=doc_title,
+            filename=file.filename or "document.pdf",
+            content=raw_bytes,
+            resource_type=resource_type,
+            mime_type=mime_type,
+            source_url=f"/courses/{course_id}/documents",
+        )
 
         await concept_graph_service.sync_course_structure(course)
         chunks = await syllabus_parser.ingest_syllabus(
@@ -541,14 +573,15 @@ async def upload_module_resource_file(
             module_id=module_id,
             domain=course.domain,
             resource_type=resource_type,
-            source_url=None,
+            source_url=course_doc.download_url,
+            document_id=course_doc.document_id,
         )
         await concept_graph_service.ingest_resource(
             course_id=str(course_id),
             module_id=str(module_id),
             title=doc_title,
             resource_type=resource_type,
-            source_url=None,
+            source_url=course_doc.download_url,
             chunks=[chunk.model_dump(mode="json") for chunk in chunks],
         )
         full_text = "\n\n".join(chunk.content for chunk in chunks)
@@ -656,3 +689,53 @@ async def get_cohort_roster(course_id: UUID) -> CohortRosterResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to generate cohort roster: {e!s}",
         ) from e
+
+
+@router.get("/{course_id}/documents", response_model=list[CourseDocumentResponse])
+async def list_course_documents(
+    course_id: UUID,
+    module_id: Annotated[UUID | None, Query()] = None,
+) -> list[CourseDocumentResponse]:
+    """Lists all grounded course documents with chunk counts and download links."""
+    course = await course_service.get_course(course_id)
+    if not course:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Course with ID '{course_id}' not found.",
+        )
+    return await syllabus_parser.list_documents(course_id=course_id, module_id=module_id)
+
+
+@router.get("/{course_id}/documents/{document_id}/file")
+async def get_course_document_file(course_id: UUID, document_id: UUID) -> FileResponse:
+    """Streams the real PDF/document binary with inline viewing headers."""
+    doc = await syllabus_parser.get_document(course_id, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in course '{course_id}'.",
+        )
+    file_path = document_storage.get_document_path(doc["file_path"])
+    if not file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="The document file was not found in storage.",
+        )
+    return FileResponse(
+        path=file_path,
+        media_type=doc.get("mime_type") or "application/pdf",
+        filename=doc.get("filename") or "document.pdf",
+        content_disposition_type="inline",
+    )
+
+
+@router.delete("/{course_id}/documents/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_course_document(course_id: UUID, document_id: UUID) -> None:
+    """Deletes the source document file and cascades deletion of all its chunks."""
+    deleted = await syllabus_parser.delete_document(course_id, document_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document '{document_id}' not found in course '{course_id}'.",
+        )
+

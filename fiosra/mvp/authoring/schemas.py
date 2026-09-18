@@ -1,8 +1,9 @@
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, Field
 
-from fiosra.mvp.assignment_designer.schemas import ScaffoldingPlan
+from fiosra.mvp.assignment_designer.schemas import PublicRubricCriterion, ScaffoldingPlan
 
 # ----------------------------------------------------------------------
 # Course Drafting Schemas
@@ -117,3 +118,22 @@ class PublishAssignmentDraftRequest(BaseModel):
     module_id: UUID = Field(..., description="Target module ID")
     draft: AssignmentDraftSpec = Field(..., description="Approved assignment draft")
     author_id: str = Field(default="prof_educator", description="Faculty ID")
+
+
+class RubricSynthesisRequest(BaseModel):
+    title: str = Field(..., description="Assignment title")
+    prompt: str = Field(..., description="Student inquiry prompt")
+    deliverable: str = Field(default="Analytical essay", description="Deliverable expected from students")
+    scope: str = Field(default="", description="Scope and chronology")
+    domain: str = Field(default="history", description="Discipline/domain")
+    course_id: UUID | None = Field(default=None, description="Course ID for grounding")
+    module_id: UUID | None = Field(default=None, description="Module ID for grounding")
+    module_objectives: list[str] = Field(default_factory=list, description="Target module learning objectives")
+    target_concepts: list[dict[str, Any]] = Field(default_factory=list, description="Selected Knowledge Components (kc_id, label)")
+    sources: list[dict[str, Any]] = Field(default_factory=list, description="Assigned sources")
+    learning_goals: list[str] = Field(default_factory=list, description="Learning goals")
+
+
+class RubricSynthesisResponse(BaseModel):
+    public_rubric: list[PublicRubricCriterion]
+    learning_goals: list[str] = Field(default_factory=list)

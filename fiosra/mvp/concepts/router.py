@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, status
 
 from fiosra.mvp.concepts.schemas import (
     ConceptCreate,
+    ConceptGraphHydrateRequest,
     ConceptGraphProposalApprovalRequest,
     ConceptGraphProposalRequest,
     ConceptGraphProposalResponse,
@@ -36,6 +37,24 @@ async def get_concept_graph(course_id: UUID) -> ConceptGraphResponse:
     """Return the approved course-scoped concept hierarchy and its evidence links."""
     await _course_or_404(course_id)
     return ConceptGraphResponse(**await concept_graph_service.get_course_graph(str(course_id)))
+
+
+@router.post("/hydrate", response_model=ConceptGraphResponse)
+async def hydrate_concept_graph(
+    course_id: UUID,
+    payload: ConceptGraphHydrateRequest | None = None,
+) -> ConceptGraphResponse:
+    """Directly hydrate or expand the course concept graph for a module or the whole course."""
+    course = await _course_or_404(course_id)
+    try:
+        graph = await concept_graph_service.hydrate_course_graph(
+            course,
+            module_id=payload.module_id if payload else None,
+            instruction=payload.instruction if payload else None,
+        )
+        return ConceptGraphResponse(**graph)
+    except ConceptGraphError as error:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
 
 
 @router.post("/proposals/generate", response_model=ConceptGraphProposalResponse)

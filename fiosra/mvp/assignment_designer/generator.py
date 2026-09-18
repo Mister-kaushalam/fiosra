@@ -56,12 +56,14 @@ class AssignmentGenerator:
     ) -> list[GroundingSource]:
         if not course_id:
             return []
-        source_sql = text(f"""
-            SELECT chunk_id, title, kc_id, content, source_url
-            FROM {CANONICAL_CHUNKS}
-            WHERE course_id = CAST(:course_id AS UUID)
-              AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
-            ORDER BY created_at ASC
+        source_sql = text("""
+            SELECT c.chunk_id, c.title, c.kc_id, c.content,
+                   COALESCE(c.source_url, CASE WHEN d.document_id IS NOT NULL THEN '/courses/' || CAST(c.course_id AS TEXT) || '/documents/' || CAST(d.document_id AS TEXT) || '/file' ELSE NULL END) AS source_url
+            FROM syllabus_chunks c
+            LEFT JOIN course_documents d ON c.document_id = d.document_id
+            WHERE c.course_id = CAST(:course_id AS UUID)
+              AND (CAST(:module_id AS UUID) IS NULL OR c.module_id = CAST(:module_id AS UUID))
+            ORDER BY c.created_at ASC
             LIMIT 5;
         """)
         async with AsyncSessionLocal() as session:
@@ -267,13 +269,14 @@ class AssignmentGenerator:
             if total_weight and index == len(rules) - 1:
                 normalized_weight = round(100.0 - allocated, 2)
             allocated += normalized_weight
-            criteria.append(
-                PublicRubricCriterion(
-                criterion_id=rule.get("criterion_id", f"criterion_{index + 1}"),
-                title=rule.get("label", f"Criterion {index + 1}"),
-                description=rule.get("description", "Demonstrates the stated assignment requirement."),
-                weight=normalized_weight,
-                levels=[
+            raw_levels = rule.get("levels")
+            if raw_levels and isinstance(raw_levels, list) and len(raw_levels) >= 3:
+                levels = [
+                    lvl if isinstance(lvl, RubricLevel) else RubricLevel.model_validate(lvl)
+                    for lvl in raw_levels
+                ]
+            else:
+                levels = [
                     RubricLevel(
                         level_id="developing",
                         label="Developing",
@@ -289,8 +292,17 @@ class AssignmentGenerator:
                         label="Strong",
                         description="Addresses this criterion precisely, using well-chosen material and a well-developed explanation.",
                     ),
-                ],
-                self_review_prompt=f"Where does your completed work show {rule.get('label', 'this criterion').lower()}?",
+                ]
+
+            criterion_title = rule.get("title") or rule.get("label") or f"Criterion {index + 1}"
+            criteria.append(
+                PublicRubricCriterion(
+                    criterion_id=rule.get("criterion_id", f"criterion_{index + 1}"),
+                    title=criterion_title,
+                    description=rule.get("description", "Demonstrates the stated assignment requirement."),
+                    weight=normalized_weight,
+                    levels=levels,
+                    self_review_prompt=rule.get("self_review_prompt") or f"Where does your completed work show {criterion_title.lower()}?",
                 )
             )
         return criteria

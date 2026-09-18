@@ -48,6 +48,8 @@
     },
   ];
 
+  let liveDocuments = $state([]);
+
   onMount(async () => {
     const params = routeParams();
     courseId = params.get('course_id') || '';
@@ -63,9 +65,17 @@
       }
 
       if (courseId) {
-        const cRes = await fetch(`/courses/${encodeURIComponent(courseId)}`);
-        if (cRes.ok) {
-          course = await cRes.json();
+        const [cRes, docRes] = await Promise.all([
+          fetch(`/courses/${encodeURIComponent(courseId)}`),
+          fetch(`/courses/${encodeURIComponent(courseId)}/documents`),
+        ]);
+        if (cRes.ok) course = await cRes.json();
+        if (docRes && docRes.ok) {
+          const docs = await docRes.json();
+          if (Array.isArray(docs) && docs.length > 0) {
+            liveDocuments = docs;
+            activeDocKey = docs[0].document_id;
+          }
         }
       }
     } catch (err) {
@@ -75,7 +85,26 @@
     }
   });
 
-  let activeDoc = $derived(corpusDocuments.find((d) => d.key === activeDocKey) || corpusDocuments[0]);
+  let allDisplayDocuments = $derived.by(() => {
+    if (liveDocuments && liveDocuments.length > 0) {
+      return liveDocuments.map((doc, idx) => ({
+        key: doc.document_id,
+        author: doc.title,
+        work: doc.filename,
+        date: `Grounded Source Document · ${(doc.file_size / 1024).toFixed(1)} KB`,
+        sha: doc.document_id.slice(0, 8),
+        kc: 'KC_COURSE_PRIMARY_EVIDENCE',
+        provenance: `Authentic grounded course reading material (${doc.chunks_count || 1} semantic sections mapped).`,
+        synopsis: `Official course reading document uploaded for this curriculum workspace.`,
+        passage: `Primary source material stored in authentic PDF format: ${doc.filename}.`,
+        pedagogicalPrompt: `Examine this primary source document and extract relevant warrants and claims.`,
+        downloadUrl: doc.download_url,
+      }));
+    }
+    return corpusDocuments;
+  });
+
+  let activeDoc = $derived(allDisplayDocuments.find((d) => d.key === activeDocKey) || allDisplayDocuments[0]);
 
   function clipExcerpt(doc) {
     const citation = `${doc.author}, ${doc.work} (${doc.date}): "${doc.passage}"`;
@@ -136,7 +165,7 @@
       <aside class="corpus-sidebar">
         <div class="sidebar-label">Course Source Repository</div>
         <div class="doc-list">
-          {#each corpusDocuments as doc (doc.key)}
+          {#each allDisplayDocuments as doc (doc.key)}
             <button
               class="doc-selector-btn"
               class:active={activeDocKey === doc.key}
@@ -170,6 +199,19 @@
               <span class="meta-dot">•</span>
               <span class="hash-tag">SHA-256: {activeDoc.sha}</span>
             </div>
+            {#if activeDoc.downloadUrl}
+              <div style="margin-top: 10px;">
+                <a
+                  href={activeDoc.downloadUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: var(--radius-xs); background: rgba(56, 189, 248, 0.15); color: var(--color-horizon-bright); border: 1px solid rgba(56, 189, 248, 0.4); text-decoration: none;"
+                  title="Open authentic source document in new browser tab"
+                >
+                  <span>📕</span> Open Authentic Source Document (PDF ↗)
+                </a>
+              </div>
+            {/if}
           </div>
 
           <button

@@ -187,3 +187,39 @@ async def test_assignment_draft_synthesis_revision_and_publish():
         assign_data = a_res.json()
         assert assign_data["assignment_id"] is not None
         assert assign_data["status"] == "published"
+
+        # 4. Test dedicated topic-grounded rubric synthesis endpoint
+        rubric_res = await ac.post(
+            "/authoring/assignments/synthesize-rubric",
+            json={
+                "title": "Inquiry: Regional Dynasties and Temple Architectural Legitimacy",
+                "prompt": "Analyze how Brihadisvara and Hampi temple architecture reflected changing religious and political power structures.",
+                "deliverable": "Source-grounded analytical essay (750–1000 words)",
+                "scope": "Medieval South India (9th to 16th centuries)",
+                "domain": "History",
+                "course_id": course_id,
+                "module_id": module_id,
+                "sources": [
+                    {"title": "History_of_India.pdf", "citation": "Chola Inscriptions & Temple Epigraphy"},
+                ],
+                "learning_goals": ["Explain the institutional mechanisms of royal temple patronage."],
+            },
+        )
+        assert rubric_res.status_code == 200
+        rubric_data = rubric_res.json()
+        assert "public_rubric" in rubric_data
+        criteria = rubric_data["public_rubric"]
+        assert len(criteria) == 3
+        # Weights must sum to 100
+        assert sum(c["weight"] for c in criteria) == 100.0
+        # Check that each criterion has 3 distinct levels
+        for crit in criteria:
+            assert len(crit["levels"]) == 3
+            level_ids = [lvl["level_id"] for lvl in crit["levels"]]
+            assert "developing" in level_ids
+            assert "secure" in level_ids
+            assert "strong" in level_ids
+            # Level descriptions must not be empty and must be topic-aware
+            for lvl in crit["levels"]:
+                assert len(lvl["description"]) > 10
+            assert crit["self_review_prompt"] is not None

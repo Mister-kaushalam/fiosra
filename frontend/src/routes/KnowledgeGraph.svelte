@@ -25,9 +25,20 @@
   let associatedMisconceptions = $derived(graph.edges.filter((edge) => edge.relation === 'ASSOCIATED_WITH' && edge.source === selectedConceptId).map((edge) => graph.nodes.find((node) => node.concept_id === edge.target)).filter(Boolean));
   let linkedProbes = $derived(graph.probes?.filter((probe) => probe.misconception_id === selectedConceptId) || []);
 
+  let selectedModuleId = $state('');
+  let isHydrating = $state(false);
+  let hydrationProgress = $state(0);
+  let hydrationStage = $state('');
+  let hydrationTimer = null;
+
   function hashCourseId() {
     const queryStart = window.location.hash.indexOf('?');
     return queryStart < 0 ? '' : new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('course_id') || '';
+  }
+
+  function hashModuleId() {
+    const queryStart = window.location.hash.indexOf('?');
+    return queryStart < 0 ? '' : new URLSearchParams(window.location.hash.slice(queryStart + 1)).get('module_id') || '';
   }
 
   async function loadCourseGraph(courseId = selectedCourseId) {
@@ -55,6 +66,56 @@
     }
   }
 
+  async function startHydration() {
+    if (!selectedCourseId || isHydrating) return;
+    isHydrating = true;
+    hydrationProgress = 12;
+    hydrationStage = 'Extracting module syllabus and primary source excerpts...';
+    error = '';
+
+    clearInterval(hydrationTimer);
+    let step = 0;
+    const stages = [
+      { pct: 32, msg: 'Analyzing primary source evidence and vocabulary...' },
+      { pct: 58, msg: 'Synthesizing pedagogical concept hierarchy & DAG...' },
+      { pct: 78, msg: 'Validating prerequisite relationships & cycle checks...' },
+      { pct: 92, msg: 'Committing to Neo4j and binding source evidence links...' },
+    ];
+    hydrationTimer = setInterval(() => {
+      if (step < stages.length) {
+        hydrationProgress = stages[step].pct;
+        hydrationStage = stages[step].msg;
+        step++;
+      }
+    }, 2000);
+
+    try {
+      const res = await fetch(`/courses/${selectedCourseId}/concept-graph/hydrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ module_id: selectedModuleId || null }),
+      });
+      if (!res.ok) throw new Error(await responseError(res, 'Failed to hydrate concept graph.'));
+
+      clearInterval(hydrationTimer);
+      hydrationProgress = 100;
+      hydrationStage = 'Graph hydrated! Rendering interactive canvas...';
+
+      const newGraph = await res.json();
+      setTimeout(() => {
+        graph = newGraph;
+        if (!selectedConceptId && newGraph.nodes.length) {
+          selectedConceptId = '';
+        }
+        isHydrating = false;
+      }, 500);
+    } catch (err) {
+      clearInterval(hydrationTimer);
+      error = err.message || 'Failed to hydrate concept graph.';
+      isHydrating = false;
+    }
+  }
+
   async function initialise() {
     loading = true;
     try {
@@ -62,6 +123,7 @@
       if (!response.ok) throw new Error(await responseError(response, 'Courses could not be loaded.'));
       courses = await response.json();
       selectedCourseId = hashCourseId() || courses[0]?.course_id || '';
+      selectedModuleId = hashModuleId() || '';
       if (selectedCourseId) await loadCourseGraph(selectedCourseId);
     } catch (err) {
       error = err.message || 'Courses could not be loaded.';
@@ -75,10 +137,26 @@
     }
   }
 
+  function handleHashChange() {
+    const newCourseId = hashCourseId();
+    const newModuleId = hashModuleId();
+    if (newModuleId && newModuleId !== selectedModuleId) {
+      selectedModuleId = newModuleId;
+    }
+    if (newCourseId && newCourseId !== selectedCourseId) {
+      selectedCourseId = newCourseId;
+      loadCourseGraph(selectedCourseId);
+    }
+  }
+
   onMount(() => {
     initialise();
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('hashchange', handleHashChange);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('hashchange', handleHashChange);
+    };
   });
 </script>
 
@@ -100,11 +178,37 @@
         </select>
       </label>
 
+      {#if course?.modules?.length}
+        <label class="module-picker" title="Select target module for concept synthesis">
+          <span class="picker-label">Unit:</span>
+          <select bind:value={selectedModuleId} disabled={isHydrating}>
+            <option value="">All Units (Course)</option>
+            {#each (course.modules || []).slice().sort((a, b) => a.position - b.position) as mod}
+              <option value={mod.module_id}>Unit {mod.position}: {mod.title}</option>
+            {/each}
+          </select>
+        </label>
+      {/if}
+
+      <button
+        type="button"
+        class="btn-hydrate"
+        onclick={startHydration}
+        disabled={isHydrating || !selectedCourseId}
+        title="Synthesize and map concept nodes from module curriculum and uploaded materials"
+      >
+        <span class="bolt-icon {isHydrating ? 'spinning' : ''}">⚡</span>
+        {isHydrating ? 'Hydrating…' : 'Hydrate Graph'}
+      </button>
+
       {#if course}
         <div class="header-stats">
           <span class="stat-tag">{graph.stats.concepts || graph.nodes.filter(n => n.concept_type !== 'misconception' && n.concept_type !== 'socratic_probe' && n.concept_type !== 'module').length} concepts</span>
           <span class="stat-tag trap">{graph.stats.misconceptions || graph.nodes.filter(n => n.concept_type === 'misconception').length} traps</span>
           <span class="stat-tag probe">{graph.stats.socratic_probes || (graph.probes?.length || 0)} probes</span>
+          {#if graph.stats.source_links}
+            <span class="stat-tag evidence">{graph.stats.source_links} sources</span>
+          {/if}
         </div>
       {/if}
 
@@ -118,6 +222,27 @@
 
   {#if error}
     <div class="floating-error-notice">{error}</div>
+  {/if}
+
+  {#if isHydrating}
+    <div class="hydration-overlay" role="dialog" aria-modal="true" aria-label="Hydrating knowledge graph">
+      <div class="hydration-modal-card">
+        <div class="hydration-pulse-icon">
+          <span class="bolt">⚡</span>
+        </div>
+        <h3>Hydrating Knowledge Graph</h3>
+        <p class="hydration-stage-label">{hydrationStage}</p>
+
+        <div class="progress-bar-track">
+          <div class="progress-bar-fill" style="width: {hydrationProgress}%;"></div>
+        </div>
+
+        <div class="progress-meta-row">
+          <span class="progress-pct">{hydrationProgress}% complete</span>
+          <span class="progress-badge">Grounded in Primary Sources</span>
+        </div>
+      </div>
+    </div>
   {/if}
 
   {#if loading}
@@ -139,6 +264,42 @@
         onSelect={(conceptId) => (selectedConceptId = conceptId)}
         bind:theme
       />
+
+      <!-- Empty State Hero when graph has 0 concepts -->
+      {#if graph.nodes.length === 0 && !loading && !isHydrating}
+        <div class="empty-graph-hero">
+          <div class="hero-icon-ring">
+            <span class="hero-bolt">⚡</span>
+          </div>
+          <span class="hero-eyebrow">Pedagogical Concept Graph</span>
+          <h2 class="hero-title">Graph Not Hydrated Yet</h2>
+          <p class="hero-desc">
+            This course contains <strong>{course.modules?.length || 0} modules</strong> with source materials in Neo4j.
+            Select a target unit below and hydrate the knowledge graph to synthesize curriculum concepts and evidence links.
+          </p>
+
+          <div class="hero-controls-box">
+            <label class="hero-select-label">
+              <span>Target Scope:</span>
+              <select bind:value={selectedModuleId} class="hero-select" disabled={isHydrating}>
+                <option value="">All Units (Entire Course)</option>
+                {#each (course.modules || []).slice().sort((a, b) => a.position - b.position) as mod}
+                  <option value={mod.module_id}>Unit {mod.position}: {mod.title}</option>
+                {/each}
+              </select>
+            </label>
+
+            <button
+              type="button"
+              class="hero-hydrate-btn"
+              onclick={startHydration}
+              disabled={isHydrating}
+            >
+              <span>⚡</span> Hydrate Knowledge Graph
+            </button>
+          </div>
+        </div>
+      {/if}
     </div>
 
     <!-- Floating Node Details Pop-up / Drawer (Opens when user clicks a node) -->
@@ -1043,6 +1204,261 @@
   }
   .dark-mode .floating-error-notice {
     color: #fca5a5;
+  }
+
+  /* Module Picker & Hydrate Button */
+  .module-picker {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--color-graphite-card, #ffffff);
+    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    border-radius: 6px;
+    padding: 3px 8px;
+  }
+  .module-picker .picker-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+  .module-picker select {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+    max-width: 170px;
+  }
+  .btn-hydrate {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 13px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.25);
+    transition: all 0.2s ease;
+  }
+  .btn-hydrate:hover:not(:disabled) {
+    background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+  }
+  .btn-hydrate:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+  .bolt-icon.spinning {
+    display: inline-block;
+    animation: spin 1s infinite linear;
+  }
+
+  /* Empty Graph Hero */
+  .empty-graph-hero {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    max-width: 520px;
+    width: 90%;
+    padding: 34px 30px;
+    border-radius: 16px;
+    text-align: center;
+    z-index: 20;
+    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(16px);
+  }
+  .light-mode .empty-graph-hero {
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid rgba(226, 232, 240, 0.9);
+    color: #1e293b;
+  }
+  .dark-mode .empty-graph-hero {
+    background: rgba(22, 22, 22, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #f1f5f9;
+  }
+  .hero-icon-ring {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.15), rgba(124, 58, 237, 0.15));
+    border: 1px solid rgba(37, 99, 235, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .hero-bolt {
+    font-size: 24px;
+  }
+  .hero-eyebrow {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #2563eb;
+    margin-bottom: 8px;
+  }
+  .hero-title {
+    font-size: 21px;
+    font-weight: 700;
+    margin: 0 0 10px;
+  }
+  .hero-desc {
+    font-size: 13.5px;
+    line-height: 1.55;
+    color: #64748b;
+    margin: 0 0 24px;
+  }
+  .dark-mode .hero-desc {
+    color: #94a3b8;
+  }
+  .hero-controls-box {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .hero-select-label {
+    display: flex;
+    flex-direction: column;
+    text-align: left;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+  .hero-select {
+    width: 100%;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--color-graphite, #ffffff);
+    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    color: inherit;
+    outline: none;
+  }
+  .hero-hydrate-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #2563eb, #7c3aed);
+    color: #ffffff;
+    border: none;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+  }
+  .hero-hydrate-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px rgba(37, 99, 235, 0.4);
+  }
+
+  /* Hydration Overlay & Progress Bar */
+  .hydration-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+  .hydration-modal-card {
+    background: #181b20;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 16px;
+    padding: 34px 28px;
+    width: 90%;
+    max-width: 480px;
+    text-align: center;
+    color: #f8fafc;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+  }
+  .hydration-pulse-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(37, 99, 235, 0.3) 0%, rgba(124, 58, 237, 0.1) 70%);
+    border: 1px solid rgba(96, 165, 250, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    animation: pulse 1.8s infinite ease-in-out;
+  }
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); box-shadow: 0 0 10px rgba(37, 99, 235, 0.2); }
+    50% { transform: scale(1.08); box-shadow: 0 0 24px rgba(124, 58, 237, 0.45); }
+  }
+  .hydration-pulse-icon .bolt {
+    font-size: 26px;
+  }
+  .hydration-modal-card h3 {
+    margin: 0 0 8px;
+    font-size: 19px;
+    font-weight: 700;
+  }
+  .hydration-stage-label {
+    font-size: 13px;
+    color: #94a3b8;
+    margin: 0 0 22px;
+    min-height: 20px;
+  }
+  .progress-bar-track {
+    height: 10px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 999px;
+    overflow: hidden;
+    position: relative;
+    margin-bottom: 14px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #2563eb, #38bdf8, #818cf8);
+    border-radius: 999px;
+    transition: width 0.5s ease;
+    box-shadow: 0 0 12px rgba(56, 189, 248, 0.6);
+  }
+  .progress-meta-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 11.5px;
+    color: #64748b;
+  }
+  .progress-pct {
+    font-weight: 600;
+    color: #38bdf8;
+  }
+  .progress-badge {
+    background: rgba(37, 99, 235, 0.15);
+    color: #93c5fd;
+    border: 1px solid rgba(59, 130, 246, 0.3);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10.5px;
+  }
+  .stat-tag.evidence {
+    background: rgba(16, 185, 129, 0.12);
+    color: #10b981;
+    border-color: rgba(16, 185, 129, 0.3);
   }
 
   @media (max-width: 768px) {

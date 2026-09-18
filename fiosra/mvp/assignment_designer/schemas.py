@@ -61,6 +61,8 @@ class PublicRubricCriterion(BaseModel):
     weight: float = Field(default=0.0, ge=0.0, le=100.0)
     levels: list[RubricLevel] = Field(default_factory=list)
     self_review_prompt: str = "What evidence in your completed work shows this criterion?"
+    concept_id: str | None = Field(default=None, description="Tied Knowledge Component ID (e.g. KC_HIST_*)")
+    concept_label: str | None = Field(default=None, description="Human-readable concept name")
 
 
 class PublicSource(BaseModel):

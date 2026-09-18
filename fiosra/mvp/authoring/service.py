@@ -6,7 +6,7 @@ from typing import Any
 from sqlalchemy import text
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
-from fiosra.mvp.assignment_designer.schemas import ClarifyAndScaffoldRequest, HintRung
+from fiosra.mvp.assignment_designer.schemas import ClarifyAndScaffoldRequest, HintRung, PublicRubricCriterion, RubricLevel
 from fiosra.mvp.authoring.schemas import (
     AssignmentDraftPackage,
     AssignmentDraftRequest,
@@ -23,6 +23,8 @@ from fiosra.mvp.authoring.schemas import (
     HintRungSpec,
     PublishAssignmentDraftRequest,
     PublishCourseDraftRequest,
+    RubricSynthesisRequest,
+    RubricSynthesisResponse,
 )
 from fiosra.mvp.config import settings
 from fiosra.mvp.courses.ingestion import syllabus_parser
@@ -627,17 +629,48 @@ class AssignmentAuthoringService:
                 is_locked=True,
             ),
         ]
-        proposal_rules = [
-            {
-                "criterion_id": f"proposal_rule_{index + 1}",
-                "label": criterion.split(":", maxsplit=1)[0].strip() or f"Assignment criterion {index + 1}",
-                "description": criterion.split(":", maxsplit=1)[-1].strip() or criterion,
-                "target_kc": target_kc,
-                "nli_threshold": 0.80,
-                "weight": 1.0,
-            }
-            for index, criterion in enumerate(draft.rubric_criteria[:4])
-        ]
+        try:
+            rubric_req = RubricSynthesisRequest(
+                title=draft.title,
+                prompt=draft.task_brief,
+                deliverable="Source-grounded analytical essay (750–1000 words)",
+                scope=draft.context_scope,
+                domain=draft.domain,
+                course_id=req.course_id,
+                module_id=req.module_id,
+                sources=[{"title": s} for s in draft.allowed_sources],
+                learning_goals=draft.learning_objectives,
+            )
+            rubric_resp = await cls.synthesize_assignment_rubric(rubric_req)
+            proposal_rules = [
+                {
+                    "criterion_id": crit.criterion_id,
+                    "title": crit.title,
+                    "label": crit.title,
+                    "description": crit.description,
+                    "target_kc": target_kc,
+                    "nli_threshold": 0.80,
+                    "weight": crit.weight,
+                    "levels": [lvl.model_dump() for lvl in crit.levels],
+                    "self_review_prompt": crit.self_review_prompt,
+                }
+                for crit in rubric_resp.public_rubric
+            ]
+        except Exception as err:
+            logger.warning("Falling back to default proposal rules: %s", err)
+            proposal_rules = [
+                {
+                    "criterion_id": f"proposal_rule_{index + 1}",
+                    "title": criterion.split(":", maxsplit=1)[0].strip() or f"Assignment criterion {index + 1}",
+                    "label": criterion.split(":", maxsplit=1)[0].strip() or f"Assignment criterion {index + 1}",
+                    "description": criterion.split(":", maxsplit=1)[-1].strip() or criterion,
+                    "target_kc": target_kc,
+                    "nli_threshold": 0.80,
+                    "weight": 1.0,
+                }
+                for index, criterion in enumerate(draft.rubric_criteria[:4])
+            ]
+
         scaffold = scaffold.model_copy(
             update={
                 "hint_ladder": proposal_hints,
@@ -766,6 +799,267 @@ class AssignmentAuthoringService:
             "status": "published",
             "spec": spec,
         }
+
+    @classmethod
+    async def synthesize_assignment_rubric(cls, req: RubricSynthesisRequest) -> RubricSynthesisResponse:
+        """Synthesize rich, concept-grounded grading criteria bound directly to course module objectives and KCs."""
+        # 1. Resolve source titles for grounding context
+        context_sources: list[str] = [
+            s.get("title") or s.get("citation") or "Assigned reading"
+            for s in req.sources
+            if isinstance(s, dict) and (s.get("title") or s.get("citation"))
+        ]
+
+        # 2. Resolve module objectives and target concepts
+        objectives = [o.strip() for o in req.module_objectives if o.strip()]
+        concepts: list[dict[str, Any]] = req.target_concepts[:]
+
+        if req.course_id and (not context_sources or not objectives or not concepts):
+            try:
+                course = await course_service.get_course(req.course_id)
+                if course and course.modules:
+                    mod = next((m for m in course.modules if str(m.module_id) == str(req.module_id)), None) if req.module_id else course.modules[0]
+                    if mod:
+                        if not objectives and mod.learning_objectives:
+                            objectives = [o.strip() for o in mod.learning_objectives if o.strip()]
+                        if not concepts and mod.knowledge_components:
+                            concepts = [
+                                {
+                                    "kc_id": k if isinstance(k, str) else k.get("kc_id"),
+                                    "label": (k if isinstance(k, str) else k.get("label", "")).replace("KC_HIST_", "").replace("KC_", "").replace("_", " ").title(),
+                                }
+                                for k in mod.knowledge_components
+                            ]
+                if not context_sources:
+                    sources = await syllabus_parser.list_chunks(course_id=req.course_id, module_id=req.module_id)
+                    usable = [s for s in sources if syllabus_parser.has_substantive_content(s.content)]
+                    context_sources = [s.title for s in (usable or sources)[:4] if s.title]
+            except Exception as e:
+                logger.debug("Could not retrieve course context for concept rubric synthesis: %s", e)
+
+        sources_text = ", ".join(context_sources) if context_sources else "the assigned course documents and readings"
+        src_lead = context_sources[0] if context_sources else "assigned primary course texts"
+        scope_lead = req.scope or "the designated module chronological and institutional boundaries"
+
+        # 3. Try live LLM provider if available
+        if settings.FIOSRA_LLM_PROVIDER.strip().lower() != "deterministic":
+            try:
+                system_prompt = (
+                    "You are an expert university pedagogical assessment designer and learning sciences specialist. "
+                    "Your role is to author an authentic, concept-grounded grading rubric for a university inquiry assignment.\n"
+                    "CRITICAL REQUIREMENT: The rubric criteria MUST directly map to the course concepts and module learning objectives.\n"
+                    "Do NOT generate generic writing skills (never use generic titles like 'Evidence Use', 'Module Alignment', or 'Argumentative Clarity').\n"
+                    "For EACH target concept / module objective, generate ONE dedicated criterion whose title, standard description, and 3-level performance descriptors (Developing, Secure, Strong) specifically evaluate student understanding and evidence use for THAT concept.\n\n"
+                    "Format your response strictly as a JSON object matching:\n"
+                    "{\n"
+                    '  "learning_goals": ["Specific goal 1", "Specific goal 2"],\n'
+                    '  "public_rubric": [\n'
+                    '    {\n'
+                    '      "criterion_id": "crit_1",\n'
+                    '      "concept_id": "KC_ID_IF_PROVIDED",\n'
+                    '      "concept_label": "Concept Name",\n'
+                    '      "title": "Concept: Specific Concept Standard Title",\n'
+                    '      "description": "Clear explanation of how the student must demonstrate this specific concept using course evidence.",\n'
+                    '      "weight": 35.0,\n'
+                    '      "levels": [\n'
+                    '        {"level_id": "developing", "label": "Developing", "description": "Common misconceptions or superficial explanations specific to this concept."},\n'
+                    '        {"level_id": "secure", "label": "Secure", "description": "Concrete explanation of proficient student work with proper evidence citations on this concept."},\n'
+                    '        {"level_id": "strong", "label": "Strong", "description": "Concrete explanation of masterful, nuanced analysis synthesizing this concept."}\n'
+                    '      ],\n'
+                    '      "self_review_prompt": "Reflective question for the student about this concept."\n'
+                    '    }\n'
+                    '  ]\n'
+                    "}\n"
+                    "Generate 2 to 4 criteria matching the provided concepts, whose weights sum to 100."
+                )
+
+                concepts_desc = "\n".join(f"- {c.get('kc_id')}: {c.get('label')}" for c in concepts) if concepts else "Extract concepts from objectives"
+                objectives_desc = "\n".join(f"- {obj}" for obj in objectives) if objectives else req.prompt
+
+                user_prompt = (
+                    f"Assignment Title: {req.title}\n"
+                    f"Discipline/Domain: {req.domain}\n"
+                    f"Inquiry Prompt: {req.prompt}\n"
+                    f"Deliverable: {req.deliverable}\n"
+                    f"Scope & Chronology: {req.scope}\n"
+                    f"Target Course Concepts:\n{concepts_desc}\n"
+                    f"Module Learning Objectives:\n{objectives_desc}\n"
+                    f"Assigned Primary Sources: {sources_text}\n"
+                )
+
+                provider = LiteLLMProvider.from_settings()
+                comp_req = CompletionRequest(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    purpose="rubric_synthesis",
+                    temperature=0.3,
+                    max_tokens=1500,
+                    timeout_seconds=30.0,
+                )
+                result = await provider.complete(comp_req)
+                parsed = _extract_json_block(result.content)
+                if parsed and "public_rubric" in parsed and isinstance(parsed["public_rubric"], list):
+                    raw_criteria = parsed["public_rubric"]
+                    if len(raw_criteria) >= 2:
+                        criteria: list[PublicRubricCriterion] = []
+                        total_w = sum(float(c.get("weight", 0)) for c in raw_criteria) or 100.0
+                        allocated = 0.0
+                        for idx, c in enumerate(raw_criteria):
+                            w = round((float(c.get("weight", 0)) / total_w) * 100, 2)
+                            if idx == len(raw_criteria) - 1:
+                                w = round(100.0 - allocated, 2)
+                            allocated += w
+                            levels = [
+                                RubricLevel(
+                                    level_id=lvl.get("level_id", "secure"),
+                                    label=lvl.get("label", lvl.get("level_id", "Secure").capitalize()),
+                                    description=lvl.get("description", "Meets standard."),
+                                )
+                                for lvl in c.get("levels", [])
+                            ]
+                            if len(levels) < 3:
+                                levels = [
+                                    RubricLevel(level_id="developing", label="Developing", description=f"Needs clearer evidence and elaboration for {c.get('title', 'this standard')}."),
+                                    RubricLevel(level_id="secure", label="Secure", description=f"Demonstrates {c.get('title', 'this standard')} with citations and clear explanation."),
+                                    RubricLevel(level_id="strong", label="Strong", description=f"Masterful, nuanced execution of {c.get('title', 'this standard')} with deep analytical insight."),
+                                ]
+                            crit_title = c.get("title") or f"Standard {idx + 1}"
+                            c_id = c.get("concept_id") or (concepts[idx]["kc_id"] if idx < len(concepts) else None)
+                            c_label = c.get("concept_label") or (concepts[idx]["label"] if idx < len(concepts) else None)
+                            criteria.append(
+                                PublicRubricCriterion(
+                                    criterion_id=c.get("criterion_id") or f"crit_{idx + 1}",
+                                    title=crit_title,
+                                    concept_id=c_id,
+                                    concept_label=c_label,
+                                    description=c.get("description", f"Demonstrates analytical standard for {crit_title}."),
+                                    weight=w,
+                                    levels=levels,
+                                    self_review_prompt=c.get("self_review_prompt") or f"Where does your completed response demonstrate {crit_title.lower()}?",
+                                )
+                            )
+                        return RubricSynthesisResponse(
+                            public_rubric=criteria,
+                            learning_goals=parsed.get("learning_goals", objectives or req.learning_goals),
+                        )
+            except Exception as e:
+                logger.warning("LLM rubric synthesis fell back to dynamic concept-grounded generation: %s", e)
+
+        # 4. Dynamic Concept-Grounded Synthesis Fallback
+        # Clean topic text for customized rubric descriptors
+        topic_phrase = req.title.strip() or "Course Inquiry"
+        if topic_phrase.lower().startswith("inquiry:"):
+            topic_phrase = topic_phrase.split(":", 1)[-1].strip()
+        if len(topic_phrase) < 5 and req.prompt:
+            topic_phrase = req.prompt[:80].strip()
+
+        # Build concept-tied criteria directly from module objectives & KCs
+        fallback_criteria: list[PublicRubricCriterion] = []
+
+        # Determine 3 concept focus areas from objectives / KCs / topic
+        c1_label = concepts[0]["label"] if len(concepts) > 0 else "Source Evidentiary Grounding"
+        c1_id = concepts[0]["kc_id"] if len(concepts) > 0 else "KC_HIST_SOURCE_ANALYSIS"
+        c1_obj = objectives[0] if len(objectives) > 0 else f"Analyze primary source evidence regarding {topic_phrase}"
+
+        c2_label = concepts[1]["label"] if len(concepts) > 1 else "Causal Analysis & Institutional Dynamics"
+        c2_id = concepts[1]["kc_id"] if len(concepts) > 1 else "KC_HIST_CAUSAL_MECHANISMS"
+        c2_obj = objectives[1] if len(objectives) > 1 else f"Explain institutional mechanisms shaping {topic_phrase}"
+
+        c3_label = concepts[2]["label"] if len(concepts) > 2 else "Historiographical Synthesis & Thesis Defensibility"
+        c3_id = concepts[2]["kc_id"] if len(concepts) > 2 else "KC_HIST_HISTORIOGRAPHY"
+        c3_obj = objectives[2] if len(objectives) > 2 else f"Formulate a defensible thesis addressing {topic_phrase}"
+
+        fallback_criteria = [
+            PublicRubricCriterion(
+                criterion_id="crit_concept_1",
+                concept_id=c1_id,
+                concept_label=c1_label,
+                title=f"Concept: {c1_label}",
+                description=f"Directly examines authentic evidence from {sources_text} to evaluate: {c1_obj}.",
+                weight=40.0,
+                levels=[
+                    RubricLevel(
+                        level_id="developing",
+                        label="Developing",
+                        description=f"Treats {c1_label} descriptively; claims about {topic_phrase} lack direct citations or misinterpret assigned material from {src_lead}.",
+                    ),
+                    RubricLevel(
+                        level_id="secure",
+                        label="Secure",
+                        description=f"Accurately demonstrates understanding of {c1_label}, substantiating arguments with relevant citations from {src_lead}.",
+                    ),
+                    RubricLevel(
+                        level_id="strong",
+                        label="Strong",
+                        description=f"Masterfully synthesizes evidence on {c1_label}; interrogates source perspectives and corroborates multiple documents to build an authoritative interpretation.",
+                    ),
+                ],
+                self_review_prompt=f"Where in your response have you directly cited evidence analyzing {c1_label.lower()}?",
+            ),
+            PublicRubricCriterion(
+                criterion_id="crit_concept_2",
+                concept_id=c2_id,
+                concept_label=c2_label,
+                title=f"Concept: {c2_label}",
+                description=f"Explains the interacting institutional, political, and material mechanisms underlying {c2_obj} within {scope_lead}.",
+                weight=35.0,
+                levels=[
+                    RubricLevel(
+                        level_id="developing",
+                        label="Developing",
+                        description=f"Adopts a simplistic or monocausal view of {c2_label}; asserts events occurred without explaining underlying institutional dynamics.",
+                    ),
+                    RubricLevel(
+                        level_id="secure",
+                        label="Secure",
+                        description=f"Clearly articulates how structural, institutional, and socio-economic factors shaped {c2_label} in {scope_lead}.",
+                    ),
+                    RubricLevel(
+                        level_id="strong",
+                        label="Strong",
+                        description=f"Delivers a sophisticated analysis of competing factors, institutional shifts, and historical consequences regarding {c2_label}.",
+                    ),
+                ],
+                self_review_prompt=f"Have you articulated the structural and causal mechanisms driving {c2_label.lower()}?",
+            ),
+            PublicRubricCriterion(
+                criterion_id="crit_concept_3",
+                concept_id=c3_id,
+                concept_label=c3_label,
+                title=f"Concept: {c3_label}",
+                description=f"Constructs a coherent, defensible thesis that synthesizes {c3_obj} into a logically organized {req.deliverable}.",
+                weight=25.0,
+                levels=[
+                    RubricLevel(
+                        level_id="developing",
+                        label="Developing",
+                        description=f"Thesis on {c3_label} is vague or descriptive rather than analytical; paragraphs wander without advancing a sustained line of reasoning.",
+                    ),
+                    RubricLevel(
+                        level_id="secure",
+                        label="Secure",
+                        description=f"Presents a clearly formulated, defensible thesis supported by a logical progression of analytical claims addressing {c3_label}.",
+                    ),
+                    RubricLevel(
+                        level_id="strong",
+                        label="Strong",
+                        description=f"Constructs an authoritative analytical argument that anticipates counter-evidence and achieves conceptual synthesis across the inquiry.",
+                    ),
+                ],
+                self_review_prompt=f"Is your thesis statement defensible and maintained consistently across your analysis of {c3_label.lower()}?",
+            ),
+        ]
+
+        goals = objectives or req.learning_goals or [
+            f"Demonstrate mastery of {c1_label} supported by authentic source citations.",
+            f"Analyze the institutional mechanisms governing {c2_label}.",
+            f"Formulate a defensible thesis addressing {c3_label}.",
+        ]
+
+        return RubricSynthesisResponse(
+            public_rubric=fallback_criteria,
+            learning_goals=goals,
+        )
 
 
 course_authoring_service = CourseAuthoringService()

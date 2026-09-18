@@ -1,6 +1,10 @@
 <script>
   import { onMount } from 'svelte';
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
+  import SocraticMarginaliaGutter from '../lib/SocraticMarginaliaGutter.svelte';
+  import PrimarySourcesSidebar from '../lib/PrimarySourcesSidebar.svelte';
+  import TutorChatDrawer from '../lib/TutorChatDrawer.svelte';
+  import { fiosraContext } from '../lib/contextStore.svelte.js';
   import {
     getStudentId,
     responseError,
@@ -9,6 +13,12 @@
     sessionStorageKey,
   } from '../lib/session.js';
   import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
+
+  let isSourcesCollapsed = $state(false);
+  let isSourcesExpanded = $state(true);
+  let isTutorChatDrawerOpen = $state(false);
+  let macroTurns = $state([]);
+  let isMacroBusy = $state(false);
 
   let courseId = $state('');
   let assignmentId = $state('');
@@ -54,14 +64,7 @@
   let sourceActionBusy = $state(false);
 
   function toggleSocraticDrawer() {
-    if (activeWorkspaceTab !== 'canvas') {
-      activeWorkspaceTab = 'canvas';
-    }
-    setTimeout(() => {
-      if (editorRef && typeof editorRef.toggleSocraticDrawer === 'function') {
-        editorRef.toggleSocraticDrawer();
-      }
-    }, activeWorkspaceTab !== 'canvas' ? 50 : 0);
+    isTutorChatDrawerOpen = !isTutorChatDrawerOpen;
   }
 
   let allDocumentBlocks = $derived.by(() => {
@@ -152,9 +155,30 @@
     return sections;
   });
 
-  let currentProbe = $derived(activeProbe());
   let published = $derived(assignment?.published || null);
-  let publicSources = $derived(published?.source_pack || []);
+  let assignmentSources = $derived.by(() => {
+    const list = published?.source_pack
+      || assignment?.grounding_sources
+      || published?.sources
+      || assignment?.sources
+      || [];
+    return list.map((s, idx) => ({
+      source_id: s.source_id || s.id || `src_${idx + 1}`,
+      author: s.author || s.citation || s.title || 'Primary Source',
+      title: s.title || s.source_title || `Primary Source ${idx + 1}`,
+      date: s.date || 'Assigned Document',
+      provenance: s.provenance || s.citation || '',
+      passage: s.passage || s.excerpt || s.text || '',
+      hidden_context: s.hidden_context || s.synopsis || s.relevance_guidance || '',
+      target_kc: s.target_kc || s.kc || 'KC_EVIDENCE',
+      source_url: s.source_url || s.url || s.download_url || null,
+      relevance_guidance: s.relevance_guidance || '',
+      resource_type: s.resource_type || 'Primary Source',
+      excerpt: s.passage || s.excerpt || s.text || '',
+      citation: s.provenance || s.citation || '',
+    }));
+  });
+  let publicSources = $derived(assignmentSources);
   let activeSourceReference = $derived.by(() => {
     const references = learningDocument?.source_references || [];
     return references.find((reference) => reference.source_id === selectedSourceId)
@@ -355,6 +379,15 @@
       localStorage.setItem(key, sessionId);
       localStorage.setItem(sessionAccessTokenStorageKey(sessionId), sessionAccessToken);
     }
+
+    fiosraContext.setCourse(courseId, assignment?.course_title || '');
+    fiosraContext.setAssignment(
+      assignmentId,
+      assignment?.title || assignment?.published?.title || '',
+      assignment?.target_kcs || [],
+      assignment?.bloom_level || 'evaluate'
+    );
+    fiosraContext.setSession(sessionId, sessionAccessToken, sessionStatus);
 
     await loadDocument();
     await loadProbes();
@@ -632,6 +665,79 @@
     }
   }
 
+  function handleFocusedBlockChange({ blockId, semanticType, text, offsetTop }) {
+    fiosraContext.setFocusedBlock(blockId, semanticType, text, offsetTop);
+    const matchingProbe = probes.find((p) => p.block_id === blockId && p.status !== 'dismissed');
+    if (matchingProbe) {
+      activeProbeId = matchingProbe.probe_id;
+    }
+  }
+
+  async function handleQuoteEvidenceFromSidebar({ quoteText, sourceId, sourceTitle, author, sourceUrl }) {
+    if (editorRef && typeof editorRef.insertEvidenceBlock === 'function') {
+      editorRef.insertEvidenceBlock({ quoteText, sourceTitle, author, sourceId, sourceUrl });
+    }
+    const sourceObj = assignmentSources.find(
+      (s) => s.source_id === sourceId || s.id === sourceId
+    ) || { source_id: sourceId, title: sourceTitle || author, source_url: sourceUrl };
+    if (fiosraContext.activeBlockId) {
+      await linkSourceToBlock(sourceObj, fiosraContext.activeBlockId);
+    } else {
+      await writeWithSource(sourceObj);
+    }
+    sourceActionNotice = `Quoted excerpt from ${sourceTitle || author} inserted into Canvas.`;
+  }
+
+  async function submitProbeExplanation(probeId, responseText) {
+    if (!probeId || !responseText.trim()) return;
+    await changeProbe(probeId, 'responses', { response_text: responseText.trim() });
+    fiosraContext.setEpistemicState('STATE_4_EVIDENTIARY_SYNTHESIS');
+  }
+
+  async function handleMacroSendMessage(studentInput, hintRequested = false) {
+    if (!sessionId || isMacroBusy) return;
+    isMacroBusy = true;
+    try {
+      const prompt = assignment?.published?.task?.prompt || assignment?.task?.prompt || assignment?.prompt || 'Explore structural historical causation';
+      const res = await fetch('/dialogue/message', {
+        method: 'POST',
+        headers: sessionHeaders(),
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: studentId,
+          student_input: studentInput,
+          question_prompt: prompt,
+          domain: assignment?.domain || 'history',
+          hint_requested: hintRequested,
+          assignment_id: assignmentId || null,
+        }),
+      });
+      if (!res.ok) throw new Error(await responseError(res, 'Dialogue service unavailable'));
+      const data = await res.json();
+      macroTurns = [
+        ...macroTurns,
+        { role: 'student', text: studentInput },
+        {
+          role: 'tutor',
+          text: data.response_text,
+          thoughts: data.thoughts_of_tutorbot,
+          hint_rung: data.hint_rung,
+          is_adversarial: data.is_adversarial,
+        }
+      ];
+      fiosraContext.setEpistemicState(null, data.hint_rung);
+      await loadSessionEvents();
+    } catch (err) {
+      console.error('Macro dialogue error:', err);
+    } finally {
+      isMacroBusy = false;
+    }
+  }
+
+  async function handleMacroRequestHint() {
+    await handleMacroSendMessage("I would like a Socratic hint to guide my reasoning.", true);
+  }
+
   async function handleChallengeIdea(blockId, text, moveType = 'challenge') {
     if (!sessionId) return;
     try {
@@ -847,18 +953,18 @@
         <button 
           type="button" 
           class="socratic-enquirer-btn" 
-          class:active={isDrawerOpen}
+          class:active={isTutorChatDrawerOpen}
           onclick={toggleSocraticDrawer}
-          title="Open writing help"
-          aria-label="Open writing help"
+          title="Open Socratic Copilot (Macro Discussion)"
+          aria-label="Open Socratic Copilot"
         >
           <span class="enquirer-icon-wrap">
-            <span class="enquirer-symbol">◌</span>
-            {#if probes.length > 0 && !isDrawerOpen}
+            <span class="enquirer-symbol">🤖</span>
+            {#if probes.length > 0 && !isTutorChatDrawerOpen}
               <span class="enquirer-pulse-dot"></span>
             {/if}
           </span>
-          <span class="enquirer-label">{probes.length > 0 && !isDrawerOpen ? 'Fiosra · question ready' : 'Ask Fiosra'}</span>
+          <span class="enquirer-label">{isTutorChatDrawerOpen ? 'Close Copilot' : 'Socratic Copilot'}</span>
         </button>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
@@ -928,6 +1034,20 @@
                         </div>
                         {#if source.citation}
                           <p class="source-citation">{source.citation}</p>
+                        {/if}
+                        {#if source.source_url}
+                          <div style="margin: 6px 0;">
+                            <a
+                              href={source.source_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              class="doc-view-link"
+                              style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 4px 10px; text-decoration: none; border-radius: var(--radius-xs); background: rgba(56, 189, 248, 0.12); color: var(--color-horizon-bright); border: 1px solid rgba(56, 189, 248, 0.35);"
+                              title="Open original authentic source PDF"
+                            >
+                              <span>📕</span> Open Original Document (PDF ↗)
+                            </a>
+                          </div>
                         {/if}
                         <button
                           type="button"
@@ -1012,59 +1132,98 @@
       <!-- TAB 2: REASONING CANVAS (Always preserved in DOM)            -->
       <!-- ============================================================ -->
       <div class="canvas-tab-wrapper" class:tab-hidden={activeWorkspaceTab !== 'canvas'}>
-        <main class="canvas-main-area">
-          {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
-          {#if sourceActionNotice}
-            <p class:source-action-error={Boolean(sourceActionError)} class="source-action-notice" role="status">
-              {sourceActionNotice}
-              {#if sourceActionError?.correlationId}
-                <span>Support ID: {sourceActionError.correlationId}</span>
-              {/if}
-            </p>
-          {/if}
-          {#if activeSourceReference}
-            <aside class="writing-source-context" aria-label="Active assigned source context">
-              <div class="writing-source-copy">
-                <span>Writing with source</span>
-                <strong>{activeSourceReference.title}</strong>
-                <p>{activeSourceReference.excerpt}</p>
-                {#if activeSourceReference.citation}<small>{activeSourceReference.citation}</small>{/if}
-              </div>
-              <div class="writing-source-actions">
-                <button type="button" onclick={() => openAssignedSource(activeSourceReference)}>Open source</button>
-                <button type="button" onclick={() => activeWorkspaceTab = 'materials'}>Change</button>
-              </div>
-            </aside>
-          {/if}
-          {#if probeNotice}
-            <div class="probe-alert-bar">
-              💡 {probeNotice}
-            </div>
-          {/if}
-
-          {#if learningDocument}
-            <LongFormDocumentEditor
-              bind:this={editorRef}
-              {learningDocument}
-              {assignment}
-              {sessionId}
-              {sessionAccessToken}
-              disabled={sessionStatus !== 'active'}
-              onSync={syncDocument}
-              onSynced={loadSessionEvents}
-              onStableDocument={offerConceptProbes}
-              proactiveProbes={probes}
-              onProbeAction={(probeId, action) => changeProbe(probeId, action)}
-              onOpenSources={() => { activeWorkspaceTab = 'materials'; }}
-              onHeadingsChange={(h) => documentHeadings = h}
-              onBlocksChange={(b) => liveBlocks = b}
-              oraclePressure={oraclePressure}
-              onChallengeIdea={handleChallengeIdea}
-              onDrawerStateChange={(open) => isDrawerOpen = open}
-              onPressureChange={(p) => oraclePressure = p}
+        <div
+          class="in-situ-workbench-grid"
+          class:sources-collapsed={isSourcesCollapsed}
+          class:sources-expanded={isSourcesExpanded && !isSourcesCollapsed}
+        >
+          <!-- Zone 1: Primary Source Exhibits / Evidentiary Well -->
+          <div
+            class="workbench-col-sources"
+            class:collapsed={isSourcesCollapsed}
+            class:expanded={isSourcesExpanded && !isSourcesCollapsed}
+          >
+            <PrimarySourcesSidebar
+              sources={assignmentSources}
+              courseId={courseId}
+              isCollapsed={isSourcesCollapsed}
+              isExpanded={isSourcesExpanded}
+              onToggleCollapse={() => isSourcesCollapsed = !isSourcesCollapsed}
+              onToggleExpand={() => isSourcesExpanded = !isSourcesExpanded}
+              onQuoteEvidence={handleQuoteEvidenceFromSidebar}
             />
-          {/if}
-        </main>
+          </div>
+
+          <!-- Zone 2: Structured Reasoning Canvas -->
+          <main class="workbench-col-canvas">
+            {#if error}<p class="error-banner" role="alert">{error}</p>{/if}
+            {#if sourceActionNotice}
+              <p class:source-action-error={Boolean(sourceActionError)} class="source-action-notice" role="status">
+                {sourceActionNotice}
+                {#if sourceActionError?.correlationId}
+                  <span>Support ID: {sourceActionError.correlationId}</span>
+                {/if}
+              </p>
+            {/if}
+            {#if probeNotice}
+              <div class="probe-alert-bar">
+                💡 {probeNotice}
+              </div>
+            {/if}
+
+            {#if learningDocument}
+              <LongFormDocumentEditor
+                bind:this={editorRef}
+                {learningDocument}
+                {assignment}
+                {sessionId}
+                {sessionAccessToken}
+                disabled={sessionStatus !== 'active'}
+                onSync={syncDocument}
+                onSynced={loadSessionEvents}
+                onStableDocument={offerConceptProbes}
+                proactiveProbes={probes}
+                onProbeAction={(probeId, action) => changeProbe(probeId, action)}
+                onOpenSources={() => { isSourcesCollapsed = false; }}
+                onHeadingsChange={(h) => documentHeadings = h}
+                onBlocksChange={(b) => liveBlocks = b}
+                oraclePressure={oraclePressure}
+                onChallengeIdea={handleChallengeIdea}
+                onDrawerStateChange={(open) => isDrawerOpen = open}
+                onPressureChange={(p) => oraclePressure = p}
+                onFocusedBlockChange={handleFocusedBlockChange}
+              />
+            {/if}
+          </main>
+
+          <!-- Zone 3: Socratic Marginalia Gutter -->
+          <div class="workbench-col-gutter">
+            <SocraticMarginaliaGutter
+              {probes}
+              activeProbeId={activeProbeId}
+              focusedBlockId={fiosraContext.activeBlockId}
+              focusedBlockOffsetTop={fiosraContext.activeBlockOffsetTop}
+              onRespond={(probeId, text) => submitProbeExplanation(probeId, text)}
+              onDismiss={(probeId) => changeProbe(probeId, 'dismiss')}
+              onDefer={(probeId) => changeProbe(probeId, 'defer')}
+              isBusy={isProbeBusy}
+              notice={probeNotice}
+            />
+          </div>
+        </div>
+
+        <!-- Zone 4: TutorChatDrawer (On-Demand Macro Dialogue) -->
+        <TutorChatDrawer
+          isOpen={isTutorChatDrawerOpen}
+          onClose={() => isTutorChatDrawerOpen = false}
+          {sessionId}
+          {assignment}
+          currentRung={fiosraContext.currentHintRung}
+          turns={macroTurns}
+          onSendMessage={handleMacroSendMessage}
+          onRequestHint={handleMacroRequestHint}
+          isBusy={isMacroBusy}
+        />
       </div>
 
       <!-- ============================================================ -->
@@ -1657,13 +1816,78 @@
     flex: 1;
     height: 100%;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
+    position: relative;
   }
 
   .canvas-tab-wrapper.tab-hidden {
     display: none !important;
+  }
+
+  .in-situ-workbench-grid {
+    display: grid;
+    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(300px, 360px);
+    width: 100%;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    transition: grid-template-columns 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .in-situ-workbench-grid.sources-collapsed {
+    grid-template-columns: 48px minmax(0, 1fr) minmax(300px, 360px);
+  }
+
+  .in-situ-workbench-grid.sources-expanded {
+    grid-template-columns: minmax(540px, 640px) minmax(0, 1fr) minmax(300px, 360px);
+  }
+
+  .workbench-col-sources {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    transition: width 0.2s ease;
+  }
+
+  .workbench-col-sources.collapsed {
+    width: 48px;
+  }
+
+  .workbench-col-canvas {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    background: var(--color-obsidian, #f8f8f5);
+  }
+
+  .workbench-col-gutter {
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  @media (max-width: 1200px) {
+    .in-situ-workbench-grid {
+      grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+    }
+    .workbench-col-sources {
+      display: none;
+    }
+  }
+
+  @media (max-width: 860px) {
+    .in-situ-workbench-grid {
+      grid-template-columns: 1fr;
+    }
+    .workbench-col-gutter {
+      display: none;
+    }
   }
 
   .canvas-main-area {

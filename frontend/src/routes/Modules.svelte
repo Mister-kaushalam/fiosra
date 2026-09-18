@@ -13,6 +13,7 @@
   let currentCourseId = $state('');
   let currentCourse = $state(null);
   let allResources = $state([]);
+  let allDocuments = $state([]);
   let rosterData = $state({ total_enrolled: 0, students: [] });
   let activeTab = $state('modules');
   let isLoading = $state(true);
@@ -55,8 +56,12 @@
   async function refreshResources() {
     if (!currentCourseId) return;
     try {
-      const res = await fetch(`/courses/${currentCourseId}/syllabus`);
+      const [res, docRes] = await Promise.all([
+        fetch(`/courses/${currentCourseId}/syllabus`),
+        fetch(`/courses/${currentCourseId}/documents`),
+      ]);
       if (res.ok) allResources = await res.json();
+      if (docRes && docRes.ok) allDocuments = await docRes.json();
     } catch (err) { console.warn('Could not refresh resources:', err); }
   }
 
@@ -95,6 +100,19 @@
         alert(detail.detail || 'This source could not be removed.');
       }
     } catch (err) { alert('Failed to delete resource: ' + err.message); }
+  }
+
+  async function handleDeleteDocument(documentId, docTitle) {
+    if (!confirm(`Delete "${docTitle || 'this document'}" and all its grounded sections? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/courses/${currentCourseId}/documents/${documentId}`, { method: 'DELETE' });
+      if (res.ok || res.status === 204) {
+        allDocuments = allDocuments.filter((d) => d.document_id !== documentId);
+        await refreshResources();
+      } else {
+        alert('This document could not be removed.');
+      }
+    } catch (err) { alert('Failed to delete document: ' + err.message); }
   }
 
   async function handleDeleteAssignment(assignmentId, title) {
@@ -167,10 +185,12 @@
             <ModuleCard
               module={mod}
               index={idx}
+              documents={allDocuments.filter((d) => d.module_id === mod.module_id)}
               resources={allResources.filter((r) => r.module_id === mod.module_id)}
               courseId={currentCourseId}
               onAddResource={handleOpenAddResource}
               onDeleteResource={handleDeleteResource}
+              onDeleteDocument={handleDeleteDocument}
               onDeleteAssignment={handleDeleteAssignment}
             />
           {/each}
