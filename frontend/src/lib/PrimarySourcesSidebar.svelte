@@ -84,15 +84,6 @@
     iframeKey += 1;
   }
 
-  // Quick concept suggestion chips
-  const quickSearchSuggestions = [
-    'Trade routes',
-    'Agrarian economy',
-    'Temple endowments',
-    'Corporate assemblies',
-    'Chola dynasty',
-    'Mughal administration',
-  ];
 </script>
 
 <aside
@@ -185,22 +176,8 @@
       {/if}
     </div>
 
-    <!-- Anchored Bottom AI Search Bar -->
+    <!-- Anchored Bottom AI Semantic Search Bar -->
     <div class="bottom-ai-search-anchor">
-      <!-- Quick Search Concept Chips -->
-      <div class="quick-chips-row">
-        {#each quickSearchSuggestions as chip}
-          <button
-            type="button"
-            class="btn-quick-chip"
-            class:active={activeSearchTerm.toLowerCase() === chip.toLowerCase()}
-            onclick={() => { searchQuery = chip; performSearch(); }}
-          >
-            {chip}
-          </button>
-        {/each}
-      </div>
-
       <!-- Search Input Container -->
       <form
         class="search-input-form"
@@ -210,7 +187,7 @@
         <input
           type="text"
           class="ai-search-input"
-          placeholder="Search in PDF... e.g. 'Chola' or 'agrarian'"
+          placeholder="Semantic search in document... e.g. 'temple endowments' or 'agrarian expansion'"
           bind:value={searchQuery}
         />
         {#if searchQuery}
@@ -416,36 +393,6 @@
     background: rgba(13, 17, 23, 0.98);
     border-color: #30363d;
     box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
-  }
-
-  .quick-chips-row {
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .btn-quick-chip {
-    background: rgba(2, 132, 199, 0.08);
-    border: 1px solid rgba(2, 132, 199, 0.2);
-    border-radius: 999px;
-    padding: 2px 8px;
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--color-aurora, #0284c7);
-    cursor: pointer;
-    white-space: nowrap;
-    transition: all 0.15s ease;
-  }
-
-  .btn-quick-chip.active {
-    background: var(--color-aurora, #0284c7);
-    color: #ffffff;
-  }
-
-  .btn-quick-chip:hover {
-    background: var(--color-aurora, #0284c7);
-    color: #ffffff;
   }
 
   .search-input-form {

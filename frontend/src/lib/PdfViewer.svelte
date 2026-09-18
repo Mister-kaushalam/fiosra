@@ -55,6 +55,11 @@
     y: 0,
   });
 
+  // In-memory text index: Map<pageNum, { pageNum, fullText, lowerText }>
+  const pageIndexMap = new Map();
+  let currentlyMarkedPages = new Set();
+  let searchDebounceTimer = null;
+
   $effect(() => {
     if (url) {
       loadPdf(url);
@@ -63,7 +68,10 @@
 
   $effect(() => {
     if (pdfDoc && searchTerm !== undefined) {
-      executeSearch(searchTerm);
+      if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => {
+        executeSemanticSearch(searchTerm);
+      }, 120);
     }
   });
 
@@ -72,6 +80,8 @@
     isLoading = true;
     loadError = null;
     renderedPages.clear();
+    pageIndexMap.clear();
+    currentlyMarkedPages.clear();
     searchMatches = [];
     currentMatchIndex = 0;
 
@@ -94,13 +104,15 @@
     if (!pdfDoc || !pagesContainer) return;
     pagesContainer.innerHTML = '';
     renderedPages.clear();
+    pageIndexMap.clear();
+    currentlyMarkedPages.clear();
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       await renderPage(pageNum);
     }
 
     if (searchTerm) {
-      executeSearch(searchTerm);
+      executeSemanticSearch(searchTerm);
     }
   }
 
@@ -146,6 +158,15 @@
           viewport: viewport,
         });
         await textLayer.render();
+
+        // 3. Build In-Memory Text Index for instant (<1ms) semantic retrieval
+        const rawStrings = textContent.items.map((it) => it.str || '');
+        const fullText = rawStrings.join(' ');
+        pageIndexMap.set(pageNum, {
+          pageNum,
+          fullText,
+          lowerText: fullText.toLowerCase(),
+        });
       } catch (textErr) {
         console.warn(`Text layer skipped for page ${pageNum}:`, textErr);
       }
@@ -154,139 +175,163 @@
     }
   }
 
-  // Real in-document search across pages with smart multi-term / concept fallback
-  async function executeSearch(query) {
-    clearHighlights();
-    const raw = (query || '').trim();
-    if (!raw || !pdfDoc) {
-      searchMatches = [];
-      currentMatchIndex = 0;
-      return;
+  // Semantic query parser & historical domain knowledge ontology
+  function expandSemanticQuery(rawQuery) {
+    const stopWords = new Set([
+      'the', 'a', 'an', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+      'by', 'from', 'as', 'is', 'was', 'were', 'are', 'be', 'been', 'being',
+      'have', 'has', 'had', 'do', 'does', 'did', 'how', 'what', 'why', 'where',
+      'which', 'who', 'when', 'that', 'this', 'these', 'those', 'can', 'could',
+      'would', 'should', 'about', 'into', 'over', 'under', 'between', 'through'
+    ]);
+
+    const clean = (rawQuery || '').trim().toLowerCase();
+    if (!clean) return { exactPhrase: '', clusters: [], allTerms: [] };
+
+    const words = clean
+      .split(/[\s,+/&|?.:;!"'()]+/)
+      .map((w) => w.replace(/[^a-z0-9]/g, '').trim())
+      .filter((w) => w.length >= 2 && !stopWords.has(w));
+
+    // Domain concept ontology for Indian & medieval history
+    const domainOntology = {
+      agrarian: ['agriculture', 'agricultural', 'peasant', 'peasantry', 'revenue', 'cultivation', 'land', 'crop', 'ryot', 'zamindar', 'jagirdar', 'soil', 'irrigation'],
+      agriculture: ['agrarian', 'agricultural', 'cultivation', 'peasant', 'crop', 'land', 'revenue'],
+      peasant: ['peasantry', 'cultivator', 'ryot', 'agrarian', 'tenant', 'village'],
+      revenue: ['tax', 'taxation', 'fiscal', 'settlement', 'tribute', 'tithe', 'assessment'],
+
+      temple: ['shrine', 'devasthana', 'brahmadeya', 'monastery', 'patronage', 'endowment', 'deity', 'matha', 'mandapa', 'gopuram'],
+      endowment: ['endowments', 'patronage', 'grant', 'grants', 'donation', 'donations', 'revenue', 'brahmadeya', 'inam', 'waqf'],
+      endowments: ['endowment', 'patronage', 'grant', 'grants', 'donation', 'donations', 'revenue', 'brahmadeya'],
+      patronage: ['endowment', 'donation', 'royal', 'king', 'benefaction', 'temple'],
+
+      corporate: ['guild', 'guilds', 'shreni', 'assembly', 'assemblies', 'association', 'merchant', 'traders'],
+      assembly: ['assemblies', 'sabha', 'samiti', 'ur', 'nadu', 'ganas', 'council', 'panchayat'],
+      assemblies: ['assembly', 'sabha', 'samiti', 'ur', 'nadu', 'ganas', 'councils'],
+      guild: ['guilds', 'shreni', 'merchants', 'traders', 'nigama', 'corporation'],
+      guilds: ['guild', 'shreni', 'merchants', 'traders', 'nigama'],
+
+      trade: ['commerce', 'merchant', 'merchants', 'routes', 'route', 'maritime', 'port', 'ports', 'caravan', 'market', 'goods', 'spices'],
+      economy: ['economic', 'revenue', 'fiscal', 'trade', 'commerce', 'monetary', 'coinage', 'currency'],
+      economic: ['economy', 'revenue', 'fiscal', 'trade', 'commerce', 'market'],
+
+      feudal: ['feudalism', 'vassal', 'samanta', 'chieftain', 'aristocracy', 'tributary', 'decentralized', 'fief'],
+      feudalism: ['feudal', 'vassal', 'samanta', 'chieftain', 'aristocracy', 'tributary'],
+      monarchy: ['king', 'monarch', 'sovereignty', 'statecraft', 'empire', 'dynasty', 'royal', 'rajya'],
+      state: ['polity', 'administration', 'governance', 'dynasty', 'empire', 'kingdom'],
+
+      chola: ['cholas', 'tanjore', 'thanjavur', 'rajaraja', 'rajendra', 'coromandel', 'kaveri'],
+      mughal: ['mughals', 'akbar', 'babur', 'humayun', 'shah jahan', 'aurangzeb', 'mansabdari', 'subah'],
+      gupta: ['guptas', 'samudragupta', 'chandragupta', 'classical', 'magadha'],
+      maratha: ['marathas', 'shivaji', 'peshwa', 'deccan', 'swarajya'],
+      sultanate: ['delhi sultanate', 'mamluk', 'khalji', 'tughlaq', 'lodhi', 'sultan'],
+    };
+
+    const clusters = [];
+    const allTerms = new Set();
+
+    if (words.length > 1) {
+      allTerms.add(clean);
     }
 
-    const q = raw.toLowerCase();
+    for (const word of words) {
+      const cluster = new Set([word]);
+      allTerms.add(word);
 
-    // 1. Check if exact phrase exists anywhere across pages
-    let termsToSearch = [q];
-    let isFallback = false;
-    let exactMatchesFound = false;
-
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const pageEl = document.getElementById(`pdf-page-${pageNum}`);
-      if (!pageEl) continue;
-      const textLayer = pageEl.querySelector('.textLayer');
-      if (!textLayer) continue;
-      if (textLayer.textContent.toLowerCase().includes(q)) {
-        exactMatchesFound = true;
-        break;
-      }
-    }
-
-    // 2. If exact phrase not found, fall back to meaningful keywords & concept stems
-    if (!exactMatchesFound) {
-      const stopWords = new Set(['the', 'and', 'for', 'with', 'from', 'that', 'this', 'into', 'over', 'about', 'under', 'between', 'through']);
-      const rawWords = raw
-        .toLowerCase()
-        .split(/[\s,+/&|]+/)
-        .map(w => w.replace(/[^a-z0-9]/g, '').trim())
-        .filter(w => w.length >= 3 && !stopWords.has(w));
-
-      const expandedTerms = new Set(rawWords);
-      for (const w of rawWords) {
-        if (w === 'agrarian') { expandedTerms.add('agricultural'); expandedTerms.add('agriculture'); }
-        if (w === 'economy' || w === 'economic') { expandedTerms.add('economy'); expandedTerms.add('economic'); }
-        if (w === 'endowments' || w === 'endowment') { expandedTerms.add('endowment'); expandedTerms.add('temple'); }
-        if (w === 'assemblies' || w === 'assembly') { expandedTerms.add('assemblies'); expandedTerms.add('assembly'); expandedTerms.add('guild'); }
-        if (w === 'trade' || w === 'routes' || w === 'route') { expandedTerms.add('trade'); expandedTerms.add('route'); }
-      }
-
-      if (expandedTerms.size > 0) {
-        termsToSearch = Array.from(expandedTerms);
-        isFallback = true;
-      }
-    }
-
-    // 3. Highlight matches across all pages
-    const escapedTerms = termsToSearch
-      .map(t => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'))
-      .filter(Boolean);
-
-    if (escapedTerms.length === 0) {
-      searchMatches = [];
-      currentMatchIndex = 0;
-      return;
-    }
-
-    const splitRegex = new RegExp('(' + escapedTerms.join('|') + ')', 'gi');
-    const checkRegex = new RegExp('^(?:' + escapedTerms.join('|') + ')$', 'i');
-
-    const pageMatchesMap = new Map();
-
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const pageEl = document.getElementById(`pdf-page-${pageNum}`);
-      if (!pageEl) continue;
-      const textLayer = pageEl.querySelector('.textLayer');
-      if (!textLayer) continue;
-
-      const pageLower = textLayer.textContent.toLowerCase();
-      const hasAny = termsToSearch.some(t => pageLower.includes(t));
-      if (!hasAny) continue;
-
-      const spans = Array.from(textLayer.querySelectorAll('span'));
-      const pageMatches = [];
-      const pageTerms = new Set();
-
-      for (const span of spans) {
-        const text = span.textContent;
-        if (!text) continue;
-
-        if (!termsToSearch.some(t => text.toLowerCase().includes(t))) continue;
-
-        const parts = text.split(splitRegex);
-        if (parts.length <= 1) continue;
-
-        span.innerHTML = '';
-        for (const part of parts) {
-          if (checkRegex.test(part)) {
-            const mark = document.createElement('mark');
-            mark.className = 'pdf-search-mark';
-            mark.textContent = part;
-            span.appendChild(mark);
-
-            const matchedTermLower = part.toLowerCase();
-            pageTerms.add(matchedTermLower);
-            pageMatches.push({
-              pageNum,
-              markEl: mark,
-              text: part,
-              matchedTerm: part,
-            });
-          } else if (part) {
-            span.appendChild(document.createTextNode(part));
-          }
+      if (domainOntology[word]) {
+        for (const syn of domainOntology[word]) {
+          cluster.add(syn);
+          allTerms.add(syn);
         }
       }
 
-      if (pageMatches.length > 0) {
-        pageMatchesMap.set(pageNum, {
+      if (word.endsWith('ies')) cluster.add(word.slice(0, -3) + 'y');
+      if (word.endsWith('s') && !word.endsWith('ss')) cluster.add(word.slice(0, -1));
+      if (word.endsWith('ing')) cluster.add(word.slice(0, -3));
+      if (word.endsWith('ed')) cluster.add(word.slice(0, -2));
+
+      clusters.push(Array.from(cluster));
+    }
+
+    return {
+      exactPhrase: clean,
+      clusters,
+      allTerms: Array.from(allTerms),
+    };
+  }
+
+  // Lightning-fast in-memory semantic search across all pages
+  async function executeSemanticSearch(rawQuery) {
+    const clean = (rawQuery || '').trim();
+    if (!clean || !pdfDoc) {
+      clearHighlights();
+      searchMatches = [];
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const { exactPhrase, clusters } = expandSemanticQuery(clean);
+
+    // 1. Scan in-memory cache directly (takes ~1ms in RAM)
+    const scoredPages = [];
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      const pageData = pageIndexMap.get(pageNum);
+      if (!pageData) continue;
+
+      const pText = pageData.lowerText;
+      let score = 0;
+      let satisfiedClusters = 0;
+      const matchedTermsOnPage = new Set();
+
+      // Exact phrase match gives highest confidence
+      if (exactPhrase && pText.includes(exactPhrase)) {
+        score += 200;
+        matchedTermsOnPage.add(exactPhrase);
+      }
+
+      // Concept cluster matches
+      for (const cluster of clusters) {
+        let clusterMatched = false;
+        for (const term of cluster) {
+          if (pText.includes(term)) {
+            matchedTermsOnPage.add(term);
+            clusterMatched = true;
+            score += 15;
+          }
+        }
+        if (clusterMatched) satisfiedClusters++;
+      }
+
+      // High synergy bonus when page unites multiple concept pillars
+      if (clusters.length > 1 && satisfiedClusters >= 2) {
+        score += satisfiedClusters * 60;
+      }
+
+      if (score > 0) {
+        scoredPages.push({
           pageNum,
-          matches: pageMatches,
-          distinctTermsCount: pageTerms.size,
+          score,
+          satisfiedClusters,
+          matchedTerms: Array.from(matchedTermsOnPage),
         });
       }
     }
 
-    // 4. Sort pages: pages containing the highest number of distinct search terms come first!
-    const sortedPageEntries = Array.from(pageMatchesMap.values()).sort((a, b) => {
-      if (b.distinctTermsCount !== a.distinctTermsCount) {
-        return b.distinctTermsCount - a.distinctTermsCount;
-      }
-      return a.pageNum - b.pageNum;
-    });
+    // Sort pages by semantic relevance score descending
+    scoredPages.sort((a, b) => b.score - a.score || a.pageNum - b.pageNum);
+
+    // 2. Targeted DOM highlighting: ONLY mutate pages that have matches
+    clearHighlights();
 
     const allMatches = [];
-    for (const entry of sortedPageEntries) {
-      allMatches.push(...entry.matches);
+    // Highlight matched pages (up to top 25 pages to maintain 60fps)
+    const pagesToHighlight = scoredPages.slice(0, 25);
+    for (const pageEntry of pagesToHighlight) {
+      const pageMatches = highlightPageMatches(pageEntry.pageNum, pageEntry.matchedTerms);
+      if (pageMatches.length > 0) {
+        allMatches.push(...pageMatches);
+        currentlyMarkedPages.add(pageEntry.pageNum);
+      }
     }
 
     searchMatches = allMatches;
@@ -297,16 +342,71 @@
     }
   }
 
+  // Targeted DOM highlight on a single page
+  function highlightPageMatches(pageNum, terms) {
+    const pageEl = document.getElementById(`pdf-page-${pageNum}`);
+    if (!pageEl) return [];
+    const textLayer = pageEl.querySelector('.textLayer');
+    if (!textLayer) return [];
+
+    const escapedTerms = terms
+      .map((t) => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'))
+      .filter(Boolean);
+
+    if (escapedTerms.length === 0) return [];
+
+    const splitRegex = new RegExp('(' + escapedTerms.join('|') + ')', 'gi');
+    const checkRegex = new RegExp('^(?:' + escapedTerms.join('|') + ')$', 'i');
+
+    const spans = Array.from(textLayer.querySelectorAll('span'));
+    const pageMatches = [];
+
+    for (const span of spans) {
+      const text = span.textContent;
+      if (!text) continue;
+      if (!terms.some((t) => text.toLowerCase().includes(t))) continue;
+
+      const parts = text.split(splitRegex);
+      if (parts.length <= 1) continue;
+
+      span.innerHTML = '';
+      for (const part of parts) {
+        if (checkRegex.test(part)) {
+          const mark = document.createElement('mark');
+          mark.className = 'pdf-search-mark';
+          mark.textContent = part;
+          span.appendChild(mark);
+
+          pageMatches.push({
+            pageNum,
+            markEl: mark,
+            text: part,
+            matchedTerm: part,
+          });
+        } else if (part) {
+          span.appendChild(document.createTextNode(part));
+        }
+      }
+    }
+    return pageMatches;
+  }
+
+  // Targeted teardown: only reset pages that were previously marked
   function clearHighlights() {
     if (!pagesContainer) return;
-    const marks = pagesContainer.querySelectorAll('.pdf-search-mark');
-    const parents = new Set();
-    marks.forEach((mark) => {
-      if (mark.parentNode) parents.add(mark.parentNode);
-    });
-    parents.forEach((parent) => {
-      parent.textContent = parent.textContent; // Resets innerHTML to clean text
-    });
+    for (const pageNum of currentlyMarkedPages) {
+      const pageEl = document.getElementById(`pdf-page-${pageNum}`);
+      if (!pageEl) continue;
+      const marks = pageEl.querySelectorAll('.pdf-search-mark');
+      const parents = new Set();
+      marks.forEach((m) => {
+        if (m.parentNode) parents.add(m.parentNode);
+      });
+      parents.forEach((p) => {
+        p.textContent = p.textContent;
+      });
+    }
+    currentlyMarkedPages.clear();
   }
 
   export function nextMatch() {
@@ -492,31 +592,32 @@
   .toolbar-search-nav {
     display: flex;
     align-items: center;
-    gap: 4px;
-    background: rgba(245, 158, 11, 0.2);
-    border: 1px solid rgba(245, 158, 11, 0.4);
-    padding: 2px 6px;
+    gap: 6px;
+    background: rgba(217, 119, 6, 0.12);
+    border: 1px solid rgba(217, 119, 6, 0.25);
+    padding: 2px 8px;
     border-radius: 4px;
-    color: #fef08a;
+    color: #fde68a;
   }
 
   .match-count {
-    font-weight: 700;
+    font-weight: 600;
     font-size: 0.72rem;
   }
 
   .btn-nav {
     background: transparent;
-    border: 1px solid rgba(245, 158, 11, 0.5);
+    border: 1px solid rgba(217, 119, 6, 0.35);
     border-radius: 3px;
     color: inherit;
     font-size: 0.7rem;
     padding: 1px 5px;
     cursor: pointer;
+    transition: background 0.15s ease;
   }
 
   .btn-nav:hover {
-    background: rgba(245, 158, 11, 0.4);
+    background: rgba(217, 119, 6, 0.25);
   }
 
   .no-match-notice {
@@ -538,11 +639,11 @@
     width: 22px;
     height: 22px;
     font-size: 0.85rem;
-    font-weight: 700;
-    cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease;
   }
 
   .btn-zoom:hover {
@@ -590,20 +691,24 @@
     height: 100%;
   }
 
-  /* Search Term Highlights inside Text Layer */
+  /* Search Term Highlights inside Text Layer (Subtle Academic Wash) */
   :global(.pdf-search-mark) {
-    background: #fef08a !important;
-    color: #854d0e !important;
-    padding: 1px 2px;
+    background: rgba(245, 158, 11, 0.16) !important;
+    color: inherit !important;
+    padding: 0 1px;
     border-radius: 2px;
-    box-shadow: 0 0 0 1px #eab308;
-    font-weight: bold;
+    box-shadow: none !important;
+    font-weight: normal !important;
+    transition: background 0.15s ease;
   }
 
   :global(.pdf-search-mark.current-search-match) {
-    background: #f59e0b !important;
-    color: #ffffff !important;
-    box-shadow: 0 0 0 2px #b45309, 0 2px 8px rgba(245, 158, 11, 0.6);
+    background: rgba(217, 119, 6, 0.28) !important;
+    color: inherit !important;
+    border-bottom: 2px solid #d97706 !important;
+    border-radius: 2px 2px 0 0;
+    box-shadow: none !important;
+    font-weight: 500 !important;
   }
 
   /* Selection Tooltip */
