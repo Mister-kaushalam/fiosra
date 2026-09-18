@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
-  import SocraticMarginaliaGutter from '../lib/SocraticMarginaliaGutter.svelte';
+  import RightWorkbenchGutter from '../lib/RightWorkbenchGutter.svelte';
   import PrimarySourcesSidebar from '../lib/PrimarySourcesSidebar.svelte';
   import TutorChatDrawer from '../lib/TutorChatDrawer.svelte';
   import { fiosraContext } from '../lib/contextStore.svelte.js';
@@ -16,6 +16,8 @@
 
   let isSourcesCollapsed = $state(false);
   let isSourcesExpanded = $state(true);
+  let isGutterCollapsed = $state(true);
+  let activeGutterTab = $state('marginalia'); // 'marginalia' | 'agent'
   let isTutorChatDrawerOpen = $state(false);
   let macroTurns = $state([]);
   let isMacroBusy = $state(false);
@@ -63,8 +65,27 @@
   let sourceLookupResults = $state({});
   let sourceActionBusy = $state(false);
 
+  function handleToggleSourcesExpand() {
+    if (isSourcesExpanded && !isSourcesCollapsed) {
+      // It is currently expanded. Collapse it back to sidebar completely so canvas is visible!
+      isSourcesExpanded = false;
+      isSourcesCollapsed = true;
+      isGutterCollapsed = false;
+    } else {
+      // Expand fully to maximum width, and collapse gutter to right!
+      isSourcesExpanded = true;
+      isSourcesCollapsed = false;
+      isGutterCollapsed = true;
+    }
+  }
+
   function toggleSocraticDrawer() {
-    isTutorChatDrawerOpen = !isTutorChatDrawerOpen;
+    if (!isGutterCollapsed && activeGutterTab === 'agent') {
+      isGutterCollapsed = true;
+    } else {
+      activeGutterTab = 'agent';
+      isGutterCollapsed = false;
+    }
   }
 
   let allDocumentBlocks = $derived.by(() => {
@@ -951,18 +972,18 @@
         <button 
           type="button" 
           class="socratic-enquirer-btn" 
-          class:active={isTutorChatDrawerOpen}
+          class:active={!isGutterCollapsed && activeGutterTab === 'agent'}
           onclick={toggleSocraticDrawer}
           title="Open Socratic Copilot (Macro Discussion)"
           aria-label="Open Socratic Copilot"
         >
           <span class="enquirer-icon-wrap">
             <span class="enquirer-symbol">🤖</span>
-            {#if probes.length > 0 && !isTutorChatDrawerOpen}
+            {#if probes.length > 0 && isGutterCollapsed}
               <span class="enquirer-pulse-dot"></span>
             {/if}
           </span>
-          <span class="enquirer-label">{isTutorChatDrawerOpen ? 'Close Copilot' : 'Socratic Copilot'}</span>
+          <span class="enquirer-label">{!isGutterCollapsed && activeGutterTab === 'agent' ? 'Close Copilot' : 'Socratic Copilot'}</span>
         </button>
 
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
@@ -1134,6 +1155,8 @@
           class="in-situ-workbench-grid"
           class:sources-collapsed={isSourcesCollapsed}
           class:sources-expanded={isSourcesExpanded && !isSourcesCollapsed}
+          class:gutter-collapsed={isGutterCollapsed}
+          class:gutter-open={!isGutterCollapsed}
         >
           <!-- Zone 1: Primary Source Exhibits / Evidentiary Well -->
           <div
@@ -1145,9 +1168,9 @@
               sources={assignmentSources}
               courseId={courseId}
               isCollapsed={isSourcesCollapsed}
-              isExpanded={isSourcesExpanded}
-              onToggleCollapse={() => isSourcesCollapsed = !isSourcesCollapsed}
-              onToggleExpand={() => isSourcesExpanded = !isSourcesExpanded}
+              isExpanded={isSourcesExpanded && !isSourcesCollapsed}
+              onToggleCollapse={handleToggleSourcesExpand}
+              onToggleExpand={handleToggleSourcesExpand}
               onQuoteEvidence={handleQuoteEvidenceFromSidebar}
             />
           </div>
@@ -1182,7 +1205,7 @@
                 onStableDocument={offerConceptProbes}
                 proactiveProbes={probes}
                 onProbeAction={(probeId, action) => changeProbe(probeId, action)}
-                onOpenSources={() => { isSourcesCollapsed = false; }}
+                onOpenSources={handleToggleSourcesExpand}
                 onHeadingsChange={(h) => documentHeadings = h}
                 onBlocksChange={(b) => liveBlocks = b}
                 oraclePressure={oraclePressure}
@@ -1194,9 +1217,12 @@
             {/if}
           </main>
 
-          <!-- Zone 3: Socratic Marginalia Gutter -->
-          <div class="workbench-col-gutter">
-            <SocraticMarginaliaGutter
+          <!-- Zone 3: Socratic Gutter (Marginalia + Agent Tabs) -->
+          <div
+            class="workbench-col-gutter"
+            class:collapsed={isGutterCollapsed}
+          >
+            <RightWorkbenchGutter
               {probes}
               activeProbeId={activeProbeId}
               focusedBlockId={fiosraContext.activeBlockId}
@@ -1205,24 +1231,22 @@
               onDismiss={(probeId) => changeProbe(probeId, 'dismiss')}
               onDefer={(probeId) => changeProbe(probeId, 'defer')}
               onSelectBlock={(blockId) => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(blockId); }}
-              isBusy={isProbeBusy}
-              notice={probeNotice}
+              isProbeBusy={isProbeBusy}
+              probeNotice={probeNotice}
+              sessionId={sessionId}
+              assignment={assignment}
+              currentRung={fiosraContext.currentHintRung}
+              turns={macroTurns}
+              onSendMessage={handleMacroSendMessage}
+              onRequestHint={handleMacroRequestHint}
+              isAgentBusy={isMacroBusy}
+              activeTab={activeGutterTab}
+              isCollapsed={isGutterCollapsed}
+              onToggleCollapse={(val) => isGutterCollapsed = (val !== undefined ? val : !isGutterCollapsed)}
+              onSelectTab={(tab) => { activeGutterTab = tab; isGutterCollapsed = false; }}
             />
           </div>
         </div>
-
-        <!-- Zone 4: TutorChatDrawer (On-Demand Macro Dialogue) -->
-        <TutorChatDrawer
-          isOpen={isTutorChatDrawerOpen}
-          onClose={() => isTutorChatDrawerOpen = false}
-          {sessionId}
-          {assignment}
-          currentRung={fiosraContext.currentHintRung}
-          turns={macroTurns}
-          onSendMessage={handleMacroSendMessage}
-          onRequestHint={handleMacroRequestHint}
-          isBusy={isMacroBusy}
-        />
       </div>
 
       <!-- ============================================================ -->
@@ -1827,20 +1851,35 @@
 
   .in-situ-workbench-grid {
     display: grid;
-    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(320px, 360px);
     width: 100%;
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    transition: grid-template-columns 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Sources Collapsed (slim 48px sidebar): Canvas is completely visible */
   .in-situ-workbench-grid.sources-collapsed {
-    grid-template-columns: 48px minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-columns: 48px minmax(0, 1fr) minmax(320px, 360px);
   }
 
+  .in-situ-workbench-grid.sources-collapsed.gutter-collapsed {
+    grid-template-columns: 48px minmax(0, 1fr) 44px;
+  }
+
+  /* Sources Expanded: Doc reader expands to max width, gutter collapses to right */
   .in-situ-workbench-grid.sources-expanded {
-    grid-template-columns: minmax(540px, 640px) minmax(0, 1fr) minmax(300px, 360px);
+    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr) 44px;
+  }
+
+  .in-situ-workbench-grid.sources-expanded.gutter-open {
+    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 1fr) minmax(300px, 340px);
+  }
+
+  /* Standard sources with gutter collapsed */
+  .in-situ-workbench-grid.gutter-collapsed {
+    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) 44px;
   }
 
   .workbench-col-sources {
@@ -1869,6 +1908,11 @@
     min-height: 0;
     overflow: hidden;
     position: relative;
+    transition: width 0.2s ease;
+  }
+
+  .workbench-col-gutter.collapsed {
+    width: 44px;
   }
 
   @media (max-width: 1200px) {

@@ -92,57 +92,96 @@
   class:expanded={isExpanded}
   aria-label="Primary Source Document Reader"
 >
-  <!-- Header Bar -->
-  <div class="well-header">
-    <div class="well-title-group">
-      <span class="well-icon">📕</span>
-      <div class="well-meta-info">
-        <h3 class="well-title">Document Reader</h3>
-        {#if activeDoc}
-          <span class="well-subtitle" title={activeDoc.title}>
-            {activeDoc.title}
-          </span>
+{#if isCollapsed}
+    <!-- Collapsed Slim Sidebar Strip -->
+    <div
+      class="collapsed-sidebar-strip"
+      onclick={onToggleExpand}
+      role="button"
+      tabindex="0"
+      onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggleExpand(); }}
+      title="Click to expand Document Reader"
+    >
+      <span class="collapsed-icon">📕</span>
+      <button
+        type="button"
+        class="btn-collapsed-expand"
+        onclick={(e) => { e.stopPropagation(); onToggleExpand(); }}
+        title="Expand to max width"
+        aria-label="Expand to max width"
+      >
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 3 21 3 21 9"></polyline>
+          <polyline points="9 21 3 21 3 15"></polyline>
+          <line x1="21" y1="3" x2="14" y2="10"></line>
+          <line x1="3" y1="21" x2="10" y2="14"></line>
+        </svg>
+      </button>
+      <div class="vertical-title">DOCUMENT READER</div>
+    </div>
+  {:else}
+    <!-- Header Bar -->
+    <div class="well-header">
+      <div class="well-title-group">
+        <span class="well-icon">📕</span>
+        <div class="well-meta-info">
+          <h3 class="well-title">Document Reader</h3>
+          {#if activeDoc}
+            <span class="well-subtitle" title={activeDoc.title}>
+              {activeDoc.title}
+            </span>
+          {/if}
+        </div>
+      </div>
+
+      <div class="well-header-actions">
+        <!-- Open PDF External Fullscreen (Symbol) -->
+        {#if activeDoc?.source_url}
+          <a
+            href={activeDoc.source_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            class="btn-header-action"
+            title="Full screen in new tab"
+            aria-label="Full screen in new tab"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <polyline points="9 21 3 21 3 15"></polyline>
+              <line x1="21" y1="3" x2="14" y2="10"></line>
+              <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+          </a>
         {/if}
+
+        <!-- Expand / Collapse to sidebar Toggle (Symbol) -->
+        <button
+          type="button"
+          class="btn-header-action"
+          onclick={onToggleExpand}
+          title={isExpanded ? 'Collapse to sidebar' : 'Expand to max width'}
+          aria-label={isExpanded ? 'Collapse to sidebar' : 'Expand to max width'}
+        >
+          {#if isExpanded}
+            <!-- Collapse Symbol -->
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="4 14 10 14 10 20"></polyline>
+              <polyline points="20 10 14 10 14 4"></polyline>
+              <line x1="14" y1="10" x2="21" y2="3"></line>
+              <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+          {:else}
+            <!-- Expand Symbol -->
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <polyline points="9 21 3 21 3 15"></polyline>
+              <line x1="21" y1="3" x2="14" y2="10"></line>
+              <line x1="3" y1="21" x2="10" y2="14"></line>
+            </svg>
+          {/if}
+        </button>
       </div>
     </div>
-
-    <div class="well-header-actions">
-      <!-- Open PDF External Fullscreen -->
-      {#if activeDoc?.source_url}
-        <a
-          href={activeDoc.source_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          class="btn-header-action"
-          title="Open PDF in new window"
-        >
-          Fullscreen ↗
-        </a>
-      {/if}
-
-      <!-- Expand / Compact Width Toggle -->
-      <button
-        type="button"
-        class="btn-header-action"
-        onclick={onToggleExpand}
-        title={isExpanded ? 'Compact sidebar' : 'Expand sidebar for reading'}
-      >
-        {isExpanded ? '⤡ Compact' : '⤢ Expand'}
-      </button>
-
-      <!-- Collapse Sidebar Toggle -->
-      <button
-        type="button"
-        class="btn-header-action btn-collapse"
-        onclick={onToggleCollapse}
-        title={isCollapsed ? 'Open reader' : 'Collapse reader'}
-      >
-        {isCollapsed ? '▶' : '◀'}
-      </button>
-    </div>
-  </div>
-
-  {#if !isCollapsed}
     <!-- Document Switcher (if more than 1 document) -->
     {#if documents.length > 1}
       <div class="doc-switcher-bar">
@@ -307,7 +346,9 @@
     border: 1px solid var(--color-graphite-border, #cbd5e1);
     color: var(--color-slate-subtle, #475569);
     border-radius: 6px;
-    padding: 4px 8px;
+    padding: 5px;
+    width: 28px;
+    height: 28px;
     font-size: 0.72rem;
     font-weight: 600;
     cursor: pointer;
@@ -315,6 +356,8 @@
     transition: all 0.15s ease;
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
   }
 
   :global([data-theme="dark"]) .btn-header-action {
@@ -328,8 +371,67 @@
     border-color: var(--color-aurora, #0284c7);
   }
 
-  .btn-collapse {
-    padding: 4px 6px;
+  /* Collapsed Slim Sidebar Strip */
+  .collapsed-sidebar-strip {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 0;
+    height: 100%;
+    width: 48px;
+    cursor: pointer;
+    background: rgba(0, 0, 0, 0.02);
+    user-select: none;
+    box-sizing: border-box;
+  }
+
+  :global([data-theme="dark"]) .collapsed-sidebar-strip {
+    background: rgba(255, 255, 255, 0.02);
+  }
+
+  .collapsed-icon {
+    font-size: 1.15rem;
+  }
+
+  .btn-collapsed-expand {
+    background: transparent;
+    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    border-radius: 4px;
+    color: var(--color-slate-subtle, #64748b);
+    width: 26px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  :global([data-theme="dark"]) .btn-collapsed-expand {
+    border-color: #30363d;
+    color: #8b949e;
+  }
+
+  .btn-collapsed-expand:hover {
+    color: var(--color-aurora, #0284c7);
+    border-color: var(--color-aurora, #0284c7);
+    background: rgba(2, 132, 199, 0.08);
+  }
+
+  .vertical-title {
+    writing-mode: vertical-rl;
+    text-orientation: mixed;
+    transform: rotate(180deg);
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--color-slate-subtle, #94a3b8);
+    margin-top: 14px;
+  }
+
+  .vertical-title:hover {
+    color: var(--color-aurora, #0284c7);
   }
 
   /* Document Switcher */
