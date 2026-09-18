@@ -1,0 +1,36 @@
+# Version control
+.git
+.gitignore
+.github
+
+# System
+.DS_Store
+Thumbs.db
+
+# Python
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.ruff_cache
+*.egg-info
+
+# Node / Frontend build artifacts
+frontend/node_modules
+frontend/dist
+frontend/.svelte-kit
+**/node_modules
+
+# Storage & documentation
+storage/
+reference/
+docs/
+tests/
+*.md
+
+# Local secrets & envs
+.env
+.env.*
+!.env.example
