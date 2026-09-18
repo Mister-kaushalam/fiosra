@@ -750,9 +750,13 @@
     width: 100%;
     flex: 1;
     min-height: 0;
-    background: #525659;
+    background: #e5e7eb;
     position: relative;
     padding-bottom: 74px; /* clearance for bottom search bar */
+  }
+
+  :global([data-theme="dark"]) .pdf-reader-frame-container {
+    background: #090d13;
   }
 
   /* Anchored Bottom AI Search Bar */
