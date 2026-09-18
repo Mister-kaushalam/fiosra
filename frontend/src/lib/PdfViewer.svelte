@@ -33,6 +33,7 @@
     title = 'Document',
     searchTerm = '',
     onQuoteEvidence = () => null,
+    onMatchesChange = () => null,
   } = $props();
 
   let pdfDoc = $state(null);
@@ -46,6 +47,10 @@
   let renderedPages = new Set();
   let searchMatches = $state([]);
   let currentMatchIndex = $state(0);
+
+  $effect(() => {
+    onMatchesChange({ current: currentMatchIndex, total: searchMatches.length });
+  });
 
   // Selection tooltip state
   let selectionTooltip = $state({
@@ -491,31 +496,7 @@
 </script>
 
 <div class="pdf-viewer-root" onmouseup={handleMouseUp} role="region" aria-label="PDF Document Viewer">
-  <!-- Top Utility Bar (Zoom & Match Navigation) -->
-  <div class="pdf-toolbar">
-    <div class="pdf-toolbar-left">
-      <span class="toolbar-page-badge">{numPages} {numPages === 1 ? 'page' : 'pages'}</span>
-      {#if searchMatches.length > 0}
-        <div class="toolbar-search-nav">
-          <span class="match-count">
-            Match {currentMatchIndex + 1} of {searchMatches.length}
-          </span>
-          <button type="button" class="btn-nav" onclick={prevMatch} title="Previous match (↑)">↑</button>
-          <button type="button" class="btn-nav" onclick={nextMatch} title="Next match (↓)">↓</button>
-        </div>
-      {:else if searchTerm.trim() && !isLoading}
-        <span class="no-match-notice">No matches for "{searchTerm}"</span>
-      {/if}
-    </div>
-
-    <div class="pdf-toolbar-right">
-      <button type="button" class="btn-zoom" onclick={zoomOut} title="Zoom out">−</button>
-      <span class="zoom-level">{Math.round(scale * 100)}%</span>
-      <button type="button" class="btn-zoom" onclick={zoomIn} title="Zoom in">+</button>
-    </div>
-  </div>
-
-  <!-- Main Scrollable PDF Viewport -->
+  <!-- Main Scrollable PDF Viewport (Clean paper look matching Assignment Brief) -->
   <div class="pdf-viewport-scroll">
     {#if isLoading}
       <div class="pdf-loading-state">
@@ -567,163 +548,43 @@
     background: #090d13;
   }
 
-  .pdf-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.95);
-    color: var(--color-slate-bright, #0f172a);
-    font-size: 0.75rem;
-    border-bottom: 1px solid var(--color-graphite-border, #e2e8f0);
-    backdrop-filter: blur(8px);
-    flex-shrink: 0;
-    z-index: 10;
-  }
-
-  :global([data-theme="dark"]) .pdf-toolbar {
-    background: rgba(22, 27, 34, 0.95);
-    color: #f0f6fc;
-    border-color: #30363d;
-  }
-
-  .pdf-toolbar-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .toolbar-page-badge {
-    background: rgba(0, 0, 0, 0.05);
-    color: var(--color-slate-bright, #0f172a);
-    border: 1px solid var(--color-graphite-border, #cbd5e1);
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-weight: 600;
-  }
-
-  :global([data-theme="dark"]) .toolbar-page-badge {
-    background: rgba(255, 255, 255, 0.1);
-    color: #f0f6fc;
-    border-color: #30363d;
-  }
-
-  .toolbar-search-nav {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    background: rgba(217, 119, 6, 0.1);
-    border: 1px solid rgba(217, 119, 6, 0.25);
-    padding: 2px 8px;
-    border-radius: 4px;
-    color: #b45309;
-  }
-
-  :global([data-theme="dark"]) .toolbar-search-nav {
-    background: rgba(217, 119, 6, 0.15);
-    color: #fde68a;
-  }
-
-  .match-count {
-    font-weight: 600;
-    font-size: 0.72rem;
-  }
-
-  .btn-nav {
-    background: transparent;
-    border: 1px solid rgba(217, 119, 6, 0.35);
-    border-radius: 3px;
-    color: inherit;
-    font-size: 0.7rem;
-    padding: 1px 5px;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-
-  .btn-nav:hover {
-    background: rgba(217, 119, 6, 0.2);
-  }
-
-  .no-match-notice {
-    color: var(--color-slate-subtle, #94a3b8);
-    font-size: 0.72rem;
-  }
-
-  .pdf-toolbar-right {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .btn-zoom {
-    background: transparent;
-    border: 1px solid var(--color-graphite-border, #cbd5e1);
-    color: var(--color-slate-subtle, #475569);
-    border-radius: 4px;
-    width: 22px;
-    height: 22px;
-    font-size: 0.85rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  :global([data-theme="dark"]) .btn-zoom {
-    border-color: #30363d;
-    color: #8b949e;
-  }
-
-  .btn-zoom:hover {
-    background: rgba(2, 132, 199, 0.08);
-    color: var(--color-aurora, #0284c7);
-    border-color: var(--color-aurora, #0284c7);
-  }
-
-  .zoom-level {
-    font-size: 0.72rem;
-    color: var(--color-slate-subtle, #64748b);
-    min-width: 38px;
-    text-align: center;
-  }
-
-  :global([data-theme="dark"]) .zoom-level {
-    color: #8b949e;
-  }
-
-  /* Viewport Scroll */
+  /* Viewport Scroll: exact same feel as assignment brief scroll container */
   .pdf-viewport-scroll {
     flex: 1;
     min-height: 0;
     overflow-y: auto;
     overflow-x: auto;
-    padding: 16px 12px 90px 12px; /* Bottom padding clearance for bottom search bar */
+    padding: 20px 24px 80px 24px;
     display: flex;
     flex-direction: column;
     align-items: center;
+    background: #e5e7eb;
+  }
+
+  :global([data-theme="dark"]) .pdf-viewport-scroll {
+    background: #090d13;
   }
 
   .pdf-pages-stack {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 20px;
     align-items: center;
   }
 
   /* Each Page Wrapper (Clean paper style matching .academic-sheet) */
   :global(.pdf-page-wrapper) {
     position: relative;
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
     background: #ffffff;
-    border-radius: 6px;
+    border-radius: 4px;
     overflow: hidden;
-    border: 1px solid rgba(0, 0, 0, 0.06);
+    border: none !important;
   }
 
   :global([data-theme="dark"]) :global(.pdf-page-wrapper) {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
-    border-color: #30363d;
+    border: none !important;
   }
 
   :global(.pdf-page-canvas) {

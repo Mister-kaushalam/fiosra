@@ -58,6 +58,8 @@
   let activeDoc = $derived(documents[selectedDocIndex] || documents[0] || null);
 
   // Search State
+  let pdfViewerRef = $state(null);
+  let matchInfo = $state({ current: 0, total: 0 });
   let searchQuery = $state('');
   let activeSearchTerm = $state('');
   let iframeKey = $state(1);
@@ -419,10 +421,12 @@
       <div class="pdf-reader-frame-container">
         {#if activeDoc?.source_url}
           <PdfViewer
+            bind:this={pdfViewerRef}
             url={activeDoc.source_url}
             title={activeDoc.title}
             searchTerm={activeSearchTerm}
             {onQuoteEvidence}
+            onMatchesChange={(info) => matchInfo = info}
           />
         {:else}
           <div class="empty-doc-view">
@@ -432,7 +436,7 @@
         {/if}
       </div>
 
-      <!-- Anchored Bottom AI Semantic Search Bar -->
+      <!-- Floating Bottom AI Semantic Search Bar (Clean Pill, No Rectangular Shelf) -->
       <div class="bottom-ai-search-anchor">
         <form
           class="search-input-form"
@@ -442,9 +446,30 @@
           <input
             type="text"
             class="ai-search-input"
-            placeholder="Semantic search in document... e.g. 'temple endowments' or 'agrarian expansion'"
+            placeholder="Search document... e.g. 'temple endowments' or 'agrarian expansion'"
             bind:value={searchQuery}
           />
+          {#if matchInfo.total > 0}
+            <div class="search-match-nav">
+              <span class="match-count">{matchInfo.current + 1} of {matchInfo.total}</span>
+              <button
+                type="button"
+                class="btn-match-arrow"
+                onclick={() => pdfViewerRef?.prevMatch()}
+                title="Previous match (↑)"
+              >
+                ↑
+              </button>
+              <button
+                type="button"
+                class="btn-match-arrow"
+                onclick={() => pdfViewerRef?.nextMatch()}
+                title="Next match (↓)"
+              >
+                ↓
+              </button>
+            </div>
+          {/if}
           {#if searchQuery}
             <button
               type="button"
@@ -752,61 +777,57 @@
     min-height: 0;
     background: #e5e7eb;
     position: relative;
-    padding-bottom: 74px; /* clearance for bottom search bar */
   }
 
   :global([data-theme="dark"]) .pdf-reader-frame-container {
     background: #090d13;
   }
 
-  /* Anchored Bottom AI Search Bar */
+  /* Floating Bottom AI Search Pill (Zero Unnecessary Borders or Boxes) */
   .bottom-ai-search-anchor {
     position: absolute;
-    bottom: 0;
+    bottom: 20px;
     left: 0;
     right: 0;
-    padding: 8px 12px 10px 12px;
-    background: rgba(255, 255, 255, 0.98);
-    border-top: 1px solid var(--color-graphite-border, #e2e8f0);
-    backdrop-filter: blur(10px);
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.06);
     display: flex;
-    flex-direction: column;
-    gap: 6px;
+    justify-content: center;
+    padding: 0 20px;
+    pointer-events: none;
     z-index: 50;
   }
 
-  :global([data-theme="dark"]) .bottom-ai-search-anchor {
-    background: rgba(13, 17, 23, 0.98);
-    border-color: #30363d;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
-  }
-
   .search-input-form {
+    pointer-events: auto;
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--color-surface, #ffffff);
-    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    width: 100%;
+    max-width: 520px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(0, 0, 0, 0.08);
     border-radius: 999px;
-    padding: 3px 6px 3px 12px;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
-    transition: all 0.2s ease;
+    padding: 5px 8px 5px 14px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.04);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   :global([data-theme="dark"]) .search-input-form {
-    background: #161b22;
-    border-color: #30363d;
+    background: rgba(22, 27, 34, 0.94);
+    border-color: rgba(255, 255, 255, 0.12);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
   }
 
   .search-input-form:focus-within {
     border-color: var(--color-aurora, #0284c7);
-    box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.15);
+    box-shadow: 0 12px 36px rgba(2, 132, 199, 0.18), 0 0 0 3px rgba(2, 132, 199, 0.15);
   }
 
   .search-sparkle-icon {
     font-size: 0.95rem;
     color: #f59e0b;
+    flex-shrink: 0;
   }
 
   .ai-search-input {
@@ -816,6 +837,7 @@
     background: transparent;
     font-size: 0.78rem;
     color: var(--color-slate-bright, #0f172a);
+    min-width: 0;
   }
 
   :global([data-theme="dark"]) .ai-search-input {
@@ -826,6 +848,54 @@
     color: var(--color-slate-subtle, #94a3b8);
   }
 
+  .search-match-nav {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(0, 0, 0, 0.05);
+    padding: 2px 6px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--color-slate-subtle, #475569);
+    flex-shrink: 0;
+  }
+
+  :global([data-theme="dark"]) .search-match-nav {
+    background: rgba(255, 255, 255, 0.08);
+    color: #94a3b8;
+  }
+
+  .match-count {
+    padding: 0 4px;
+    white-space: nowrap;
+  }
+
+  .btn-match-arrow {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 0.75rem;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+    transition: background 0.12s ease;
+  }
+
+  .btn-match-arrow:hover {
+    background: rgba(0, 0, 0, 0.08);
+    color: var(--color-aurora, #0284c7);
+  }
+
+  :global([data-theme="dark"]) .btn-match-arrow:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: #38bdf8;
+  }
+
   .btn-input-clear {
     background: transparent;
     border: none;
@@ -833,6 +903,13 @@
     font-size: 0.8rem;
     cursor: pointer;
     padding: 0 4px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .btn-input-clear:hover {
+    color: var(--color-slate-bright, #0f172a);
   }
 
   .btn-submit-search {
@@ -840,11 +917,11 @@
     color: #ffffff;
     border: none;
     border-radius: 999px;
-    padding: 5px 12px;
+    padding: 5px 14px;
     font-size: 0.72rem;
     font-weight: 700;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: all 0.15s ease;
     flex-shrink: 0;
   }
 
