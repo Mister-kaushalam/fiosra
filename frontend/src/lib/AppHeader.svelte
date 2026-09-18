@@ -195,29 +195,13 @@
           >
             Course Map
           </a>
-          {#if parsed.activeTab !== 'student-canvas'}
-            <a
-              href="#/student/sources{parsed.courseQuery}"
-              class="nav-pill {parsed.activeTab === 'student-sources' ? 'active' : ''}"
-              onclick={(e) => { e.preventDefault(); navigateTo(`/student/sources${parsed.courseQuery}`); }}
-            >
-              Primary Sources
-            </a>
-            <a
-              href="#/student{parsed.courseQuery}"
-              class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
-              onclick={(e) => { e.preventDefault(); navigateTo(`/student${parsed.courseQuery}`); }}
-            >
-              Reasoning Canvas
-            </a>
-            <a
-              href="#/student/trace{parsed.courseQuery}"
-              class="nav-pill {parsed.activeTab === 'student-trace' ? 'active' : ''}"
-              onclick={(e) => { e.preventDefault(); navigateTo(`/student/trace${parsed.courseQuery}`); }}
-            >
-              Evidence Trace
-            </a>
-          {/if}
+          <a
+            href="#/student{parsed.courseQuery}"
+            class="nav-pill {parsed.activeTab === 'student-canvas' ? 'active' : ''}"
+            onclick={(e) => { e.preventDefault(); navigateTo(`/student${parsed.courseQuery}`); }}
+          >
+            ✍️ Reasoning Canvas
+          </a>
         {/if}
       {:else}
         {#if parsed.isGlobalView || !parsed.courseId}

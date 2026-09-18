@@ -1,7 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
-  import SocraticMarginaliaGutter from '../lib/SocraticMarginaliaGutter.svelte';
+  import RightWorkbenchGutter from '../lib/RightWorkbenchGutter.svelte';
   import PrimarySourcesSidebar from '../lib/PrimarySourcesSidebar.svelte';
   import TutorChatDrawer from '../lib/TutorChatDrawer.svelte';
   import { fiosraContext } from '../lib/contextStore.svelte.js';
@@ -16,6 +16,8 @@
 
   let isSourcesCollapsed = $state(false);
   let isSourcesExpanded = $state(true);
+  let isGutterCollapsed = $state(true);
+  let activeGutterTab = $state('marginalia'); // 'marginalia' | 'agent'
   let isTutorChatDrawerOpen = $state(false);
   let macroTurns = $state([]);
   let isMacroBusy = $state(false);
@@ -63,8 +65,37 @@
   let sourceLookupResults = $state({});
   let sourceActionBusy = $state(false);
 
-  function toggleSocraticDrawer() {
-    isTutorChatDrawerOpen = !isTutorChatDrawerOpen;
+  function handleToggleSourcesExpand() {
+    if (isSourcesExpanded && !isSourcesCollapsed) {
+      // It is currently expanded. Collapse it back to sidebar completely so canvas is visible!
+      isSourcesExpanded = false;
+      isSourcesCollapsed = true;
+      isGutterCollapsed = false;
+    } else {
+      // Expand fully to 40% width, and collapse gutter to right!
+      isSourcesExpanded = true;
+      isSourcesCollapsed = false;
+      isGutterCollapsed = true;
+    }
+  }
+
+  function handleSelectGutterTab(tab) {
+    activeGutterTab = tab;
+    isGutterCollapsed = false;
+    // When opening right gutter (40% width), collapse sources so canvas remains roomy!
+    if (isSourcesExpanded) {
+      isSourcesExpanded = false;
+      isSourcesCollapsed = true;
+    }
+  }
+
+  function handleToggleGutterCollapse(val) {
+    const willCollapse = val !== undefined ? val : !isGutterCollapsed;
+    isGutterCollapsed = willCollapse;
+    if (!willCollapse && isSourcesExpanded) {
+      isSourcesExpanded = false;
+      isSourcesCollapsed = true;
+    }
   }
 
   let allDocumentBlocks = $derived.by(() => {
@@ -668,9 +699,7 @@
   function handleFocusedBlockChange({ blockId, semanticType, text, offsetTop }) {
     fiosraContext.setFocusedBlock(blockId, semanticType, text, offsetTop);
     const matchingProbe = probes.find((p) => p.block_id === blockId && p.status !== 'dismissed');
-    if (matchingProbe) {
-      activeProbeId = matchingProbe.probe_id;
-    }
+    activeProbeId = matchingProbe ? matchingProbe.probe_id : '';
   }
 
   async function handleQuoteEvidenceFromSidebar({ quoteText, sourceId, sourceTitle, author, sourceUrl }) {
@@ -893,249 +922,19 @@
   </main>
 {:else}
   <div class="workspace-viewport">
-    <!-- Top Control Bar with Segmented Horizontal Navigation -->
-    <header class="workspace-topbar">
-      <div class="topbar-left">
-        <div class="assignment-headline">
-          <span class="eyebrow">{published?.domain || 'Reasoning Milestone'}</span>
-          <h1>{published?.title || 'Assignment'}</h1>
-        </div>
-      </div>
-
-      <!-- Center: 3 Primary Horizontal Workspace Tabs -->
-      <nav class="workspace-horizontal-tabs" role="tablist" aria-label="Workspace Navigation">
-        <button 
-          type="button"
-          class="tab-btn" 
-          class:active={activeWorkspaceTab === 'materials'}
-          onclick={() => activeWorkspaceTab = 'materials'}
-          role="tab"
-          aria-selected={activeWorkspaceTab === 'materials'}
-        >
-          <span class="tab-icon">📖</span>
-          <span class="tab-label">Assignment & Materials</span>
-          <span class="tab-pill">{publicSources.length} sources</span>
-        </button>
-
-        <button 
-          type="button"
-          class="tab-btn" 
-          class:active={activeWorkspaceTab === 'canvas'}
-          onclick={() => activeWorkspaceTab = 'canvas'}
-          role="tab"
-          aria-selected={activeWorkspaceTab === 'canvas'}
-        >
-          <span class="tab-icon">✍️</span>
-          <span class="tab-label">Reasoning Canvas</span>
-          <span class="tab-pill canvas-pill">{allDocumentBlocks.length > 0 ? `${allDocumentBlocks.length} blocks` : 'Draft'}</span>
-        </button>
-
-        <button 
-          type="button"
-          class="tab-btn" 
-          class:active={activeWorkspaceTab === 'trace'}
-          onclick={() => activeWorkspaceTab = 'trace'}
-          role="tab"
-          aria-selected={activeWorkspaceTab === 'trace'}
-        >
-          <span class="tab-icon">🎓</span>
-          <span class="tab-label">Engagement Trace</span>
-          {#if probes.length > 0}
-            <span class="tab-pill alert-pill">{probes.length} probes</span>
-          {:else}
-            <span class="tab-pill">Portfolio</span>
-          {/if}
-        </button>
-      </nav>
-
-      <div class="topbar-right">
-        <!-- Single entry point for learner-controlled writing help. -->
-        <button 
-          type="button" 
-          class="socratic-enquirer-btn" 
-          class:active={isTutorChatDrawerOpen}
-          onclick={toggleSocraticDrawer}
-          title="Open Socratic Copilot (Macro Discussion)"
-          aria-label="Open Socratic Copilot"
-        >
-          <span class="enquirer-icon-wrap">
-            <span class="enquirer-symbol">🤖</span>
-            {#if probes.length > 0 && !isTutorChatDrawerOpen}
-              <span class="enquirer-pulse-dot"></span>
-            {/if}
-          </span>
-          <span class="enquirer-label">{isTutorChatDrawerOpen ? 'Close Copilot' : 'Socratic Copilot'}</span>
-        </button>
-
-        <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
-      </div>
-    </header>
-
-    <!-- Workspace Content Body with 3 Horizontal Tabs -->
+    <!-- Workspace Content Body -->
     <div class="workspace-content-body">
       <!-- ============================================================ -->
-      <!-- TAB 1: ASSIGNMENT, PRIMARY SOURCES & PUBLIC RUBRICS          -->
+      <!-- REASONING CANVAS & INTEGRATED DOC READER (Always preserved)  -->
       <!-- ============================================================ -->
-      {#if activeWorkspaceTab === 'materials'}
-        <div class="materials-tab-viewport">
-          <div class="materials-grid-container">
-            <!-- Left / Main Column: Brief, Task Scope & Primary Sources -->
-            <div class="materials-main-col">
-              <!-- Task Prompt & Purpose Card -->
-              <section class="materials-card hero-prompt-card">
-                <span class="card-eyebrow">Milestone Brief & Task</span>
-                <h2 class="task-prompt-heading">{published?.task?.prompt || 'No prompt specified.'}</h2>
-                {#if published?.purpose}
-                  <div class="purpose-callout">
-                    <strong>Why this matters:</strong>
-                    <p>{published.purpose}</p>
-                  </div>
-                {/if}
-                <div class="scope-tags-row">
-                  <div class="scope-tag">
-                    <span class="tag-label">Deliverable:</span>
-                    <strong>{published?.task?.deliverable || 'Argumentative Essay'}</strong>
-                  </div>
-                  <div class="scope-tag">
-                    <span class="tag-label">Permitted Scope:</span>
-                    <strong>{published?.task?.scope || 'Course scope'}</strong>
-                  </div>
-                </div>
-              </section>
-
-              <!-- Primary Source Pack (Deep Reader) -->
-              <section class="materials-card sources-section-card">
-                <div class="sources-header-bar">
-                  <div>
-                    <span class="card-eyebrow">Grounding Evidence Pack</span>
-                    <h3>Primary Source Readings ({publicSources.length})</h3>
-                  </div>
-                  <input
-                    type="search"
-                    class="sources-search-box"
-                    placeholder="Search source titles or text..."
-                    bind:value={sourceSearchQuery}
-                  />
-                </div>
-
-                <div class="sources-deck-grid">
-                  {#each filteredSources as source}
-                    <article class="source-reader-item">
-                      <div class="source-reader-header">
-                        <span class="source-type-pill">{source.resource_type || 'Primary Source'}</span>
-                        <h4>{source.title}</h4>
-                      </div>
-                      <div class="source-excerpt-content">
-                        <p>{source.excerpt}</p>
-                      </div>
-                      <div class="source-reader-footer">
-                        <div class="relevance-guidance-box">
-                          <strong>Why assigned:</strong> {source.relevance_guidance}
-                        </div>
-                        {#if source.citation}
-                          <p class="source-citation">{source.citation}</p>
-                        {/if}
-                        {#if source.source_url}
-                          <div style="margin: 6px 0;">
-                            <a
-                              href={source.source_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              class="doc-view-link"
-                              style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 4px 10px; text-decoration: none; border-radius: var(--radius-xs); background: rgba(56, 189, 248, 0.12); color: var(--color-horizon-bright); border: 1px solid rgba(56, 189, 248, 0.35);"
-                              title="Open original authentic source PDF"
-                            >
-                              <span>📕</span> Open Original Document (PDF ↗)
-                            </a>
-                          </div>
-                        {/if}
-                        <button
-                          type="button"
-                          class="btn-cite-to-canvas"
-                          onclick={() => writeWithSource(source)}
-                          disabled={sourceActionBusy || sessionStatus !== 'active'}
-                          title="Select this source as writing context"
-                        >
-                          {activeSourceReference?.source_id === source.source_id ? 'Writing with this source' : 'Write with Source ✍️'}
-                        </button>
-                      </div>
-                    </article>
-                  {:else}
-                    <p class="empty-sources-msg">No sources match your search query.</p>
-                  {/each}
-                </div>
-              </section>
-            </div>
-
-            <!-- Right Column: Learning Goals, Rubric & Checklist -->
-            <div class="materials-side-col">
-              <!-- Milestone Goals -->
-              {#if published?.learning_goals?.length}
-                <section class="materials-card">
-                  <span class="card-eyebrow">Learning Goals</span>
-                  <ul class="materials-goals-list">
-                    {#each published.learning_goals as goal}
-                      <li>✓ {goal}</li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
-
-              <!-- Public Rubric Criteria -->
-              <section class="materials-card rubric-overview-card">
-                <span class="card-eyebrow">Assessment Rubric</span>
-                <h3>Evaluation Criteria ({published?.public_rubric?.length || 0})</h3>
-                <div class="rubric-items-stack">
-                  {#each published?.public_rubric || [] as criterion}
-                    <article class="rubric-overview-item">
-                      <div class="rubric-item-header">
-                        <strong>{criterion.title}</strong>
-                        {#if criterion.weight}
-                          <span class="rubric-weight-chip">{criterion.weight}%</span>
-                        {/if}
-                      </div>
-                      <p class="rubric-item-desc">{criterion.description}</p>
-                      <div class="rubric-levels-mini-grid">
-                        {#each criterion.levels as level}
-                          <div class="level-mini-box">
-                            <span class="level-title">{level.label}</span>
-                            <small>{level.description}</small>
-                          </div>
-                        {/each}
-                      </div>
-                      <p class="rubric-self-review">
-                        <em>Self-review prompt: {criterion.self_review_prompt}</em>
-                      </p>
-                    </article>
-                  {/each}
-                </div>
-              </section>
-
-              <!-- Completion Checklist & Integrity Notice -->
-              <section class="materials-card checklist-card">
-                <span class="card-eyebrow">Readiness Checklist</span>
-                <ul class="checklist-items-stack">
-                  {#each published?.completion_checklist || [] as check}
-                    <li>◻ {check}</li>
-                  {/each}
-                </ul>
-                <div class="integrity-notice-box">
-                  <small>🔒 {published?.integrity_notice || 'Your educator evaluates the final submission.'}</small>
-                </div>
-              </section>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- ============================================================ -->
-      <!-- TAB 2: REASONING CANVAS (Always preserved in DOM)            -->
-      <!-- ============================================================ -->
-      <div class="canvas-tab-wrapper" class:tab-hidden={activeWorkspaceTab !== 'canvas'}>
+      <div class="canvas-tab-wrapper">
         <div
           class="in-situ-workbench-grid"
           class:sources-collapsed={isSourcesCollapsed}
           class:sources-expanded={isSourcesExpanded && !isSourcesCollapsed}
+          class:gutter-collapsed={isGutterCollapsed}
+          class:gutter-wide={activeGutterTab === 'trace' && !isGutterCollapsed}
+          class:gutter-open={!isGutterCollapsed}
         >
           <!-- Zone 1: Primary Source Exhibits / Evidentiary Well -->
           <div
@@ -1145,11 +944,13 @@
           >
             <PrimarySourcesSidebar
               sources={assignmentSources}
+              assignment={published || assignment}
+              courseTitle={published?.domain || 'Department of Historical Studies'}
               courseId={courseId}
               isCollapsed={isSourcesCollapsed}
-              isExpanded={isSourcesExpanded}
-              onToggleCollapse={() => isSourcesCollapsed = !isSourcesCollapsed}
-              onToggleExpand={() => isSourcesExpanded = !isSourcesExpanded}
+              isExpanded={isSourcesExpanded && !isSourcesCollapsed}
+              onToggleCollapse={handleToggleSourcesExpand}
+              onToggleExpand={handleToggleSourcesExpand}
               onQuoteEvidence={handleQuoteEvidenceFromSidebar}
             />
           </div>
@@ -1184,7 +985,7 @@
                 onStableDocument={offerConceptProbes}
                 proactiveProbes={probes}
                 onProbeAction={(probeId, action) => changeProbe(probeId, action)}
-                onOpenSources={() => { isSourcesCollapsed = false; }}
+                onOpenSources={handleToggleSourcesExpand}
                 onHeadingsChange={(h) => documentHeadings = h}
                 onBlocksChange={(b) => liveBlocks = b}
                 oraclePressure={oraclePressure}
@@ -1196,9 +997,13 @@
             {/if}
           </main>
 
-          <!-- Zone 3: Socratic Marginalia Gutter -->
-          <div class="workbench-col-gutter">
-            <SocraticMarginaliaGutter
+          <!-- Zone 3: Socratic Gutter (Marginalia + Agent + Engagement Trace Tabs) -->
+          <div
+            class="workbench-col-gutter"
+            class:collapsed={isGutterCollapsed}
+            class:wide={activeGutterTab === 'trace' && !isGutterCollapsed}
+          >
+            <RightWorkbenchGutter
               {probes}
               activeProbeId={activeProbeId}
               focusedBlockId={fiosraContext.activeBlockId}
@@ -1206,284 +1011,52 @@
               onRespond={(probeId, text) => submitProbeExplanation(probeId, text)}
               onDismiss={(probeId) => changeProbe(probeId, 'dismiss')}
               onDefer={(probeId) => changeProbe(probeId, 'defer')}
-              isBusy={isProbeBusy}
-              notice={probeNotice}
+              onSelectBlock={(blockId) => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(blockId); }}
+              isProbeBusy={isProbeBusy}
+              probeNotice={probeNotice}
+              sessionId={sessionId}
+              assignment={assignment}
+              currentRung={fiosraContext.currentHintRung}
+              turns={macroTurns}
+              onSendMessage={handleMacroSendMessage}
+              onRequestHint={handleMacroRequestHint}
+              isAgentBusy={isMacroBusy}
+              activeTab={activeGutterTab}
+              isCollapsed={isGutterCollapsed}
+              onToggleCollapse={handleToggleGutterCollapse}
+              onSelectTab={handleSelectGutterTab}
+              traceProps={{
+                graphMetrics,
+                graphSections,
+                probes,
+                readinessItems,
+                readinessSummary,
+                sessionStatus,
+                submittedRevision,
+                submittedAt,
+                submissionNotice,
+                submissionError,
+                isSubmitting,
+                onSubmitMilestone: submitSession,
+                sessionEvents,
+                sourceLookupResults,
+                sourceActionBusy,
+                sourceReferenceForBlock,
+                openAssignedSource,
+                findAssignedEvidence,
+                useLocatedEvidenceForClaim,
+                onJumpToBlock: (id) => {
+                  if (editorRef?.scrollToBlock) editorRef.scrollToBlock(id);
+                },
+                onExamineProbe: (id) => {
+                  if (editorRef?.expandBlockProbe) editorRef.expandBlockProbe(id);
+                },
+                promptTitle: published?.task?.prompt || published?.title || 'Thesis',
+              }}
             />
           </div>
         </div>
-
-        <!-- Zone 4: TutorChatDrawer (On-Demand Macro Dialogue) -->
-        <TutorChatDrawer
-          isOpen={isTutorChatDrawerOpen}
-          onClose={() => isTutorChatDrawerOpen = false}
-          {sessionId}
-          {assignment}
-          currentRung={fiosraContext.currentHintRung}
-          turns={macroTurns}
-          onSendMessage={handleMacroSendMessage}
-          onRequestHint={handleMacroRequestHint}
-          isBusy={isMacroBusy}
-        />
       </div>
-
-      <!-- ============================================================ -->
-      <!-- TAB 3: ENGAGEMENT TRACE & REASONING PORTFOLIO               -->
-      <!-- ============================================================ -->
-      {#if activeWorkspaceTab === 'trace'}
-        <div class="trace-tab-viewport">
-          <div class="trace-dashboard-container">
-            <!-- Top Metric Banner -->
-            <div class="trace-metrics-banner">
-              <div class="trace-stat-tile">
-                <span class="stat-num claims">{graphMetrics.claims}</span>
-                <span class="stat-lbl">Claims Drafted</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num evidence">{graphMetrics.evidence}</span>
-                <span class="stat-lbl">Evidence Grounded</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num warrants">{graphMetrics.warrants}</span>
-                <span class="stat-lbl">Causal Warrants</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num assumptions">{graphMetrics.assumptions}</span>
-                <span class="stat-lbl">Implicit Assumptions</span>
-              </div>
-            </div>
-
-            <!-- Two-Column Trace Grid -->
-            <div class="trace-two-col-grid">
-              <!-- Left Column: Living Reasoning Graph Tree -->
-              <div class="trace-panel-card graph-map-card">
-                <header class="panel-card-header">
-                  <div>
-                    <span class="card-eyebrow">Living Argument Architecture</span>
-                    <h3>Reasoning Graph & Claim Tree</h3>
-                  </div>
-                </header>
-
-                <div class="trace-graph-tree-body">
-                  {#if graphSections.length === 0}
-                    <div class="empty-trace-state">
-                      <p>Start writing in the Reasoning Canvas to see your living argument tree assemble in real time.</p>
-                      <button type="button" class="btn btn-secondary" onclick={() => activeWorkspaceTab = 'canvas'}>
-                        Open Canvas ✍️
-                      </button>
-                    </div>
-                  {:else}
-                    <div class="graph-root-node">
-                      <div class="node-badge-chip root">Central Thesis</div>
-                      <h5>{published?.task?.prompt || published?.title || 'Thesis'}</h5>
-                    </div>
-
-                    {#each graphSections as section, sIdx}
-                      <div class="graph-section-group">
-                        <div class="section-branch-header">
-                          <span class="branch-connector">├─ Section {sIdx + 1}:</span>
-                          <span class="sec-title">{section.heading.text}</span>
-                        </div>
-                        <div class="section-children-tree">
-                          {#each section.blocks as item}
-                            <div class="graph-claim-node {item.semanticType}" class:has-probe={item.hasProbe}>
-                              <div class="claim-node-top">
-                                <span class="claim-badge-icon">{item.icon}</span>
-                                <span class="claim-type-label">{item.label}</span>
-                                {#if item.hasProbe}
-                                  <span class="claim-status-tag probe">◌ Socratic Tension</span>
-                                {:else if item.semanticType === 'evidence'}
-                                  <span class="claim-status-tag grounded">✓ Grounding</span>
-                                {:else if item.hasPremature}
-                                  <span class="claim-status-tag premature">🔴 Premature Leap</span>
-                                {:else if item.semanticType === 'claim'}
-                                  <span class="claim-status-tag ungrounded">? Needs Warrant</span>
-                                {/if}
-                              </div>
-                              <p class="claim-excerpt">"{item.text || 'Untitled block'}"</p>
-                              {#if sourceReferenceForBlock(item.block_id).length}
-                                <div class="claim-source-links" aria-label="Sources linked by the learner">
-                                  {#each sourceReferenceForBlock(item.block_id) as reference}
-                                    <button type="button" onclick={() => openAssignedSource(reference)}>
-                                      ↗ {reference.title}
-                                    </button>
-                                  {/each}
-                                </div>
-                              {/if}
-                              <div class="claim-node-actions">
-                                <button 
-                                  type="button" 
-                                  class="node-jump-btn"
-                                  onclick={() => {
-                                    activeWorkspaceTab = 'canvas';
-                                    setTimeout(() => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(item.block_id); }, 60);
-                                  }}
-                                  title="Jump to this block in canvas"
-                                >
-                                  Jump to Canvas ↗
-                                </button>
-                                <button 
-                                  type="button" 
-                                  class="node-probe-btn"
-                                  onclick={() => {
-                                    activeWorkspaceTab = 'canvas';
-                                    setTimeout(() => { if (editorRef?.expandBlockProbe) editorRef.expandBlockProbe(item.block_id); }, 60);
-                                  }}
-                                  title="Examine Socratic inquiry on this block"
-                                >
-                                  ◌ Examine ⚡
-                                </button>
-                                {#if sessionStatus === 'active'}
-                                  <button
-                                    type="button"
-                                    class="node-source-btn"
-                                    onclick={() => findAssignedEvidence(item.block_id, item.text)}
-                                    disabled={sourceActionBusy}
-                                    title="Find relevant passages from assigned materials"
-                                  >
-                                    Find assigned evidence
-                                  </button>
-                                {/if}
-                              </div>
-                              {#if sourceLookupResults[item.block_id]}
-                                <div class="assigned-evidence-results" role="status">
-                                  <p>{sourceLookupResults[item.block_id].message}</p>
-                                  {#each sourceLookupResults[item.block_id].candidates as candidate}
-                                    <article>
-                                      <strong>{candidate.title}</strong>
-                                      <p>{candidate.excerpt}</p>
-                                      {#if candidate.matched_terms?.length}
-                                        <small>Matched terms: {candidate.matched_terms.join(', ')}</small>
-                                      {/if}
-                                      <div>
-                                        <button type="button" onclick={() => openAssignedSource(candidate)}>Open source</button>
-                                        <button
-                                          type="button"
-                                          onclick={() => useLocatedEvidenceForClaim(candidate, item.block_id)}
-                                          disabled={sourceActionBusy}
-                                        >
-                                          Link beside this claim
-                                        </button>
-                                      </div>
-                                    </article>
-                                  {/each}
-                                </div>
-                              {/if}
-                            </div>
-                          {:else}
-                            <p class="empty-leaf-note">No claims drafted in this section yet.</p>
-                          {/each}
-                        </div>
-                      </div>
-                    {/each}
-                  {/if}
-                </div>
-              </div>
-
-              <!-- Right Column: Socratic Inquiry Dossier & Milestone Submission -->
-              <div class="trace-panel-card trace-dossier-card">
-                <header class="panel-card-header">
-                  <div>
-                    <span class="card-eyebrow">Epistemic Audit & Dossier</span>
-                    <h3>Socratic Inquiries & Justifications</h3>
-                  </div>
-                </header>
-
-                <div class="trace-dossier-body">
-                  <section class="readiness-self-review" aria-label="Rubric-linked self-review">
-                    <div class="readiness-header">
-                      <div>
-                        <span class="card-eyebrow">Before you submit</span>
-                        <h4>Rubric-linked self-review</h4>
-                      </div>
-                      <span>{readinessSummary.met}/{readinessSummary.total} signals present</span>
-                    </div>
-                    <p>This is not a grade. It only shows which public rubric signals are visible in the current saved draft.</p>
-                    <ul>
-                      {#each readinessItems as item}
-                        <li class:met={item.met}>
-                          <span>{item.met ? '✓' : '○'}</span>
-                          <div>
-                            <strong>{item.criterion.title}</strong>
-                            {#if !item.met}<small>{item.nextStep}</small>{/if}
-                          </div>
-                        </li>
-                      {/each}
-                    </ul>
-                  </section>
-
-                  <!-- Milestone Submission Action Tile -->
-                  <div class="milestone-submission-banner">
-                    <div class="submission-meta">
-                      <span class="sub-badge" class:submitted={sessionStatus === 'submitted'}>
-                        {sessionStatus === 'submitted' ? '✓ Submitted for Review' : '● In Progress (Draft)'}
-                      </span>
-                      <h4>Reasoning Milestone Verification</h4>
-                      <p>Once you are satisfied that your claims are grounded with warrants and evidence, submit this session for educator evaluation.</p>
-                    </div>
-                    {#if sessionStatus === 'submitted'}
-                      <div class="submission-complete-pill" role="status">
-                        <span>
-                          Milestone submitted for educator review
-                          {#if submittedRevision !== null} at revision {submittedRevision}{/if}
-                          {#if submittedAt} on {new Date(submittedAt).toLocaleString()}{/if}.
-                        </span>
-                      </div>
-                    {:else}
-                      <div class="submission-action-stack">
-                        {#if submissionNotice}
-                          <p class:submission-error={Boolean(submissionError)} class="submission-status-note" role="status">
-                            {submissionNotice}
-                            {#if submissionError?.correlationId}
-                              <span class="submission-correlation">Support ID: {submissionError.correlationId}</span>
-                            {/if}
-                          </p>
-                        {/if}
-                        <button
-                          type="button"
-                          class="btn-submit-milestone"
-                          onclick={submitSession}
-                          disabled={isSubmitting || sessionStatus !== 'active'}
-                        >
-                          {isSubmitting ? 'Submitting saved revision…' : submissionError?.retryable ? 'Retry Submission' : 'Submit Milestone for Evaluation'}
-                        </button>
-                      </div>
-                    {/if}
-                  </div>
-
-                  <!-- Dossier Events List -->
-                  <h4 class="dossier-section-title">Dialectic Inquiry History ({sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe')).length})</h4>
-                  
-                  <div class="dossier-events-stack">
-                    {#each sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe') || e.event_type === 'milestone_submitted') as evt}
-                      <div class="dossier-event-item">
-                        <div class="event-header-row">
-                          <span class="event-type-pill {evt.event_type}">{evt.event_type.replace(/_/g, ' ')}</span>
-                          <span class="event-time">{evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ''}</span>
-                        </div>
-                        {#if evt.payload?.text}
-                          <p class="event-text"><em>"{evt.payload.text}"</em></p>
-                        {/if}
-                        {#if evt.payload?.response_text}
-                          <div class="event-student-note">
-                            <strong>Student Note:</strong> {evt.payload.response_text}
-                          </div>
-                        {/if}
-                        {#if evt.payload?.move_type}
-                          <span class="event-move-tag">Move: {evt.payload.move_type}</span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <div class="empty-dossier-state">
-                        <p>No Socratic inquiries recorded yet. As you engage with the Oracle and answer probes, your epistemic reasoning history will be collected here.</p>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
 
       <!-- Optional Flyout Support Panel (Toggleable from Top Bar) -->
       {#if isTutorPanelOpen}
@@ -1828,20 +1401,35 @@
 
   .in-situ-workbench-grid {
     display: grid;
-    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(300px, 360px);
+    /* Default: sources expanded to 40%, gutter collapsed to 44px rail */
+    grid-template-columns: clamp(620px, 40vw, 780px) minmax(0, 1fr) 44px;
     width: 100%;
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    transition: grid-template-columns 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  .in-situ-workbench-grid.sources-collapsed {
-    grid-template-columns: 48px minmax(0, 1fr) minmax(300px, 360px);
+  /* Sources Collapsed (slim 48px rail on left) + Gutter Collapsed (44px rail on right): Canvas is full width */
+  .in-situ-workbench-grid.sources-collapsed.gutter-collapsed {
+    grid-template-columns: 48px minmax(0, 1fr) 44px;
   }
 
-  .in-situ-workbench-grid.sources-expanded {
-    grid-template-columns: minmax(540px, 640px) minmax(0, 1fr) minmax(300px, 360px);
+  /* Sources Expanded (40% width on left) + Gutter Collapsed (44px rail on right) */
+  .in-situ-workbench-grid.sources-expanded.gutter-collapsed,
+  .in-situ-workbench-grid.gutter-collapsed {
+    grid-template-columns: clamp(620px, 40vw, 780px) minmax(0, 1fr) 44px;
+  }
+
+  /* Gutter Open (Agent / Marginalia / Trace taking exact same 40% width on right) */
+  .in-situ-workbench-grid.sources-collapsed.gutter-open,
+  .in-situ-workbench-grid.gutter-open {
+    grid-template-columns: 48px minmax(0, 1fr) clamp(620px, 40vw, 780px);
+  }
+
+  /* If both explicitly open/expanded */
+  .in-situ-workbench-grid.sources-expanded.gutter-open {
+    grid-template-columns: clamp(520px, 35vw, 660px) minmax(0, 1fr) clamp(520px, 35vw, 660px);
   }
 
   .workbench-col-sources {
@@ -1870,6 +1458,11 @@
     min-height: 0;
     overflow: hidden;
     position: relative;
+    transition: width 0.2s ease;
+  }
+
+  .workbench-col-gutter.collapsed {
+    width: 44px;
   }
 
   @media (max-width: 1200px) {

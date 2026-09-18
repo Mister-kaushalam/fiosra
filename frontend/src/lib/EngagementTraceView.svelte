@@ -1,0 +1,880 @@
+<script>
+  let {
+    graphMetrics = { claims: 0, evidence: 0, warrants: 0, assumptions: 0, probes: 0 },
+    graphSections = [],
+    probes = [],
+    readinessItems = [],
+    readinessSummary = { met: 0, total: 0 },
+    sessionStatus = 'active',
+    submittedRevision = null,
+    submittedAt = null,
+    submissionNotice = '',
+    submissionError = null,
+    isSubmitting = false,
+    onSubmitMilestone = async () => null,
+    sessionEvents = [],
+    sourceLookupResults = {},
+    sourceActionBusy = false,
+    sourceReferenceForBlock = () => [],
+    openAssignedSource = () => null,
+    findAssignedEvidence = () => null,
+    useLocatedEvidenceForClaim = () => null,
+    onJumpToBlock = () => null,
+    onExamineProbe = () => null,
+    promptTitle = '',
+  } = $props();
+
+  let activeTraceSubTab = $state('tree'); // 'tree' | 'dossier'
+</script>
+
+<div class="engagement-trace-root" aria-label="Engagement Trace & Reasoning Portfolio">
+  <!-- Sub-tabs to easily switch between Argument Architecture & Epistemic Dossier -->
+  <div class="trace-subtab-bar">
+    <button
+      type="button"
+      class="subtab-btn"
+      class:active={activeTraceSubTab === 'tree'}
+      onclick={() => activeTraceSubTab = 'tree'}
+    >
+      🌳 Living Argument Tree
+    </button>
+    <button
+      type="button"
+      class="subtab-btn"
+      class:active={activeTraceSubTab === 'dossier'}
+      onclick={() => activeTraceSubTab = 'dossier'}
+    >
+      📋 Audit & Submission
+    </button>
+  </div>
+
+  <div class="trace-scrollable-content">
+    <!-- Top Metrics Summary (Compact 4-Tile Grid) -->
+    <div class="trace-metrics-grid">
+      <div class="metric-tile claims">
+        <span class="metric-val">{graphMetrics.claims}</span>
+        <span class="metric-lbl">Claims Drafted</span>
+      </div>
+      <div class="metric-tile evidence">
+        <span class="metric-val">{graphMetrics.evidence}</span>
+        <span class="metric-lbl">Evidence Grounded</span>
+      </div>
+      <div class="metric-tile warrants">
+        <span class="metric-val">{graphMetrics.warrants}</span>
+        <span class="metric-lbl">Causal Warrants</span>
+      </div>
+      <div class="metric-tile assumptions">
+        <span class="metric-val">{graphMetrics.assumptions}</span>
+        <span class="metric-lbl">Assumptions</span>
+      </div>
+    </div>
+
+    {#if activeTraceSubTab === 'tree'}
+      <!-- TAB A: LIVING ARGUMENT ARCHITECTURE -->
+      <section class="trace-panel-card">
+        <header class="panel-card-header">
+          <span class="card-eyebrow">Living Argument Architecture</span>
+          <h4>Reasoning Graph &amp; Claim Tree</h4>
+        </header>
+
+        {#if graphSections.length === 0}
+          <div class="empty-trace-state">
+            <p>Start writing in the Reasoning Canvas to see your living argument tree assemble in real time.</p>
+          </div>
+        {:else}
+          {#if promptTitle}
+            <div class="graph-root-node">
+              <span class="node-badge-chip root">Central Thesis</span>
+              <h5>{promptTitle}</h5>
+            </div>
+          {/if}
+
+          <div class="trace-tree-sections">
+            {#each graphSections as section, sIdx}
+              <div class="graph-section-group">
+                <div class="section-branch-header">
+                  <span class="branch-connector">├─ Section {sIdx + 1}:</span>
+                  <span class="sec-title">{section.heading.text}</span>
+                </div>
+                <div class="section-children-tree">
+                  {#each section.blocks as item}
+                    <div class="graph-claim-node {item.semanticType}" class:has-probe={item.hasProbe}>
+                      <div class="claim-node-top">
+                        <span class="claim-badge-icon">{item.icon}</span>
+                        <span class="claim-type-label">{item.label}</span>
+                        {#if item.hasProbe}
+                          <span class="claim-status-tag probe">◌ Socratic Tension</span>
+                        {:else if item.semanticType === 'evidence'}
+                          <span class="claim-status-tag grounded">✓ Grounding</span>
+                        {:else if item.hasPremature}
+                          <span class="claim-status-tag premature">🔴 Premature Leap</span>
+                        {:else if item.semanticType === 'claim'}
+                          <span class="claim-status-tag ungrounded">? Needs Warrant</span>
+                        {/if}
+                      </div>
+
+                      <p class="claim-excerpt">"{item.text || 'Untitled block'}"</p>
+
+                      {#if sourceReferenceForBlock(item.block_id).length}
+                        <div class="claim-source-links" aria-label="Sources linked by the learner">
+                          {#each sourceReferenceForBlock(item.block_id) as reference}
+                            <button type="button" class="btn-ref-pill" onclick={() => openAssignedSource(reference)}>
+                              ↗ {reference.title}
+                            </button>
+                          {/each}
+                        </div>
+                      {/if}
+
+                      <div class="claim-node-actions">
+                        <button 
+                          type="button" 
+                          class="node-jump-btn"
+                          onclick={() => onJumpToBlock(item.block_id)}
+                          title="Jump to this block in canvas"
+                        >
+                          Jump ↗
+                        </button>
+                        <button 
+                          type="button" 
+                          class="node-probe-btn"
+                          onclick={() => onExamineProbe(item.block_id)}
+                          title="Examine Socratic inquiry on this block"
+                        >
+                          ◌ Examine ⚡
+                        </button>
+                        {#if sessionStatus === 'active'}
+                          <button
+                            type="button"
+                            class="node-source-btn"
+                            onclick={() => findAssignedEvidence(item.block_id, item.text)}
+                            disabled={sourceActionBusy}
+                            title="Find relevant passages from assigned materials"
+                          >
+                            Find evidence
+                          </button>
+                        {/if}
+                      </div>
+
+                      {#if sourceLookupResults[item.block_id]}
+                        <div class="assigned-evidence-results" role="status">
+                          <p>{sourceLookupResults[item.block_id].message}</p>
+                          {#each sourceLookupResults[item.block_id].candidates as candidate}
+                            <article class="candidate-article">
+                              <strong>{candidate.title}</strong>
+                              <p>{candidate.excerpt}</p>
+                              <div class="candidate-actions">
+                                <button type="button" onclick={() => openAssignedSource(candidate)}>Open</button>
+                                <button
+                                  type="button"
+                                  onclick={() => useLocatedEvidenceForClaim(candidate, item.block_id)}
+                                  disabled={sourceActionBusy}
+                                >
+                                  Link Evidence
+                                </button>
+                              </div>
+                            </article>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  {:else}
+                    <p class="empty-leaf-note">No claims drafted in this section yet.</p>
+                  {/each}
+                </div>
+              </div>
+            {/each}
+          </div>
+        {/if}
+      </section>
+    {:else}
+      <!-- TAB B: AUDIT & SUBMISSION -->
+      <section class="trace-panel-card">
+        <header class="panel-card-header">
+          <span class="card-eyebrow">Epistemic Audit &amp; Dossier</span>
+          <h4>Rubric Verification &amp; Submission</h4>
+        </header>
+
+        <!-- Readiness Self-Review -->
+        <div class="readiness-self-review" aria-label="Rubric-linked self-review">
+          <div class="readiness-header">
+            <div>
+              <span class="card-eyebrow">Before you submit</span>
+              <h5>Rubric-Linked Verification</h5>
+            </div>
+            <span class="readiness-count-badge">{readinessSummary.met}/{readinessSummary.total} Signals</span>
+          </div>
+          <p class="readiness-intro">This tracks which public rubric signals are visible in your saved draft.</p>
+          <ul class="readiness-list">
+            {#each readinessItems as item}
+              <li class="readiness-item" class:met={item.met}>
+                <span class="item-check">{item.met ? '✓' : '○'}</span>
+                <div class="item-content">
+                  <strong>{item.criterion.title}</strong>
+                  {#if !item.met}<small>{item.nextStep}</small>{/if}
+                </div>
+              </li>
+            {/each}
+          </ul>
+        </div>
+
+        <!-- Milestone Submission Tile -->
+        <div class="milestone-submission-banner">
+          <div class="submission-meta">
+            <span class="sub-badge" class:submitted={sessionStatus === 'submitted'}>
+              {sessionStatus === 'submitted' ? '✓ Submitted for Review' : '● In Progress (Draft)'}
+            </span>
+            <h5>Milestone Verification</h5>
+            <p>Once you are satisfied that your claims are grounded with warrants and evidence, submit this session for educator evaluation.</p>
+          </div>
+
+          {#if sessionStatus === 'submitted'}
+            <div class="submission-complete-pill" role="status">
+              <span>
+                ✓ Milestone submitted for educator review
+                {#if submittedRevision !== null} at revision {submittedRevision}{/if}
+                {#if submittedAt} on {new Date(submittedAt).toLocaleString()}{/if}.
+              </span>
+            </div>
+          {:else}
+            <div class="submission-action-stack">
+              {#if submissionNotice}
+                <p class:submission-error={Boolean(submissionError)} class="submission-status-note" role="status">
+                  {submissionNotice}
+                  {#if submissionError?.correlationId}
+                    <span class="submission-correlation">Support ID: {submissionError.correlationId}</span>
+                  {/if}
+                </p>
+              {/if}
+              <button
+                type="button"
+                class="btn-submit-milestone"
+                onclick={onSubmitMilestone}
+                disabled={isSubmitting || sessionStatus !== 'active'}
+              >
+                {isSubmitting ? 'Submitting saved revision…' : submissionError?.retryable ? 'Retry Submission' : 'Submit Milestone for Evaluation'}
+              </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Dialectic Inquiry History -->
+        <h5 class="dossier-section-title">Dialectic Inquiry History ({sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe')).length})</h5>
+        
+        <div class="dossier-events-stack">
+          {#each sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe') || e.event_type === 'milestone_submitted') as evt}
+            <div class="dossier-event-item">
+              <div class="event-header-row">
+                <span class="event-type-pill {evt.event_type}">{evt.event_type.replace(/_/g, ' ')}</span>
+                <span class="event-time">{evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ''}</span>
+              </div>
+              {#if evt.payload?.text}
+                <p class="event-text"><em>"{evt.payload.text}"</em></p>
+              {/if}
+              {#if evt.payload?.response_text}
+                <div class="event-student-note">
+                  <strong>Student Note:</strong> {evt.payload.response_text}
+                </div>
+              {/if}
+              {#if evt.payload?.move_type}
+                <span class="event-move-tag">Move: {evt.payload.move_type}</span>
+              {/if}
+            </div>
+          {:else}
+            <div class="empty-dossier-state">
+              <p>No Socratic inquiries recorded yet. As you engage with the Oracle and answer probes, your epistemic reasoning history will appear here.</p>
+            </div>
+          {/each}
+        </div>
+      </section>
+    {/if}
+  </div>
+</div>
+
+<style>
+  .engagement-trace-root {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    width: 100%;
+    background: var(--color-obsidian, #ffffff);
+    overflow: hidden;
+  }
+
+  :global([data-theme="dark"]) .engagement-trace-root {
+    background: #0d1117;
+  }
+
+  .trace-subtab-bar {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    background: rgba(0, 0, 0, 0.03);
+    border-bottom: 1px solid var(--color-graphite-border, #e2e8f0);
+    flex-shrink: 0;
+  }
+
+  :global([data-theme="dark"]) .trace-subtab-bar {
+    background: rgba(255, 255, 255, 0.03);
+    border-color: #30363d;
+  }
+
+  .subtab-btn {
+    flex: 1;
+    padding: 6px 10px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--color-slate-subtle, #64748b);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  :global([data-theme="dark"]) .subtab-btn {
+    color: #8b949e;
+  }
+
+  .subtab-btn:hover {
+    color: var(--color-slate-bright, #0f172a);
+    background: rgba(0, 0, 0, 0.04);
+  }
+
+  :global([data-theme="dark"]) .subtab-btn:hover {
+    color: #f0f6fc;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .subtab-btn.active {
+    background: var(--color-surface, #ffffff);
+    color: var(--color-aurora, #0284c7);
+    border-color: var(--color-graphite-border, #cbd5e1);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  }
+
+  :global([data-theme="dark"]) .subtab-btn.active {
+    background: #21262d;
+    color: #38bdf8;
+    border-color: #30363d;
+  }
+
+  .trace-scrollable-content {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 14px 40px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  /* Metric 4-Tile Grid */
+  .trace-metrics-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
+  .metric-tile {
+    background: var(--color-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, #e2e8f0);
+    border-radius: 8px;
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+  }
+
+  :global([data-theme="dark"]) .metric-tile {
+    background: #161b22;
+    border-color: #30363d;
+  }
+
+  .metric-val {
+    font-size: 1.3rem;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+
+  .metric-tile.claims .metric-val { color: #0284c7; }
+  .metric-tile.evidence .metric-val { color: #059669; }
+  .metric-tile.warrants .metric-val { color: #7c3aed; }
+  .metric-tile.assumptions .metric-val { color: #d97706; }
+
+  :global([data-theme="dark"]) .metric-tile.claims .metric-val { color: #38bdf8; }
+  :global([data-theme="dark"]) .metric-tile.evidence .metric-val { color: #34d399; }
+  :global([data-theme="dark"]) .metric-tile.warrants .metric-val { color: #a78bfa; }
+  :global([data-theme="dark"]) .metric-tile.assumptions .metric-val { color: #fbbf24; }
+
+  .metric-lbl {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--color-slate-subtle, #64748b);
+  }
+
+  :global([data-theme="dark"]) .metric-lbl {
+    color: #8b949e;
+  }
+
+  /* Card */
+  .trace-panel-card {
+    background: var(--color-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, #e2e8f0);
+    border-radius: 10px;
+    padding: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  :global([data-theme="dark"]) .trace-panel-card {
+    background: #161b22;
+    border-color: #30363d;
+  }
+
+  .panel-card-header {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .card-eyebrow {
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--color-aurora, #0284c7);
+  }
+
+  .panel-card-header h4 {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--color-slate-bright, #0f172a);
+  }
+
+  :global([data-theme="dark"]) .panel-card-header h4 {
+    color: #f0f6fc;
+  }
+
+  .empty-trace-state, .empty-dossier-state {
+    text-align: center;
+    padding: 24px 12px;
+    color: var(--color-slate-subtle, #64748b);
+    font-size: 0.78rem;
+  }
+
+  .graph-root-node {
+    padding: 8px 12px;
+    background: rgba(2, 132, 199, 0.06);
+    border: 1px solid rgba(2, 132, 199, 0.2);
+    border-radius: 8px;
+    margin-bottom: 8px;
+  }
+
+  .node-badge-chip.root {
+    font-size: 0.62rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    color: #0284c7;
+  }
+
+  .graph-root-node h5 {
+    margin: 2px 0 0;
+    font-size: 0.8rem;
+    color: var(--color-slate-bright, #0f172a);
+  }
+
+  :global([data-theme="dark"]) .graph-root-node h5 {
+    color: #f0f6fc;
+  }
+
+  /* Tree Sections */
+  .trace-tree-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .graph-section-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .section-branch-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: var(--color-slate-subtle, #475569);
+  }
+
+  :global([data-theme="dark"]) .section-branch-header {
+    color: #8b949e;
+  }
+
+  .section-children-tree {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-left: 10px;
+    border-left: 2px solid rgba(0, 0, 0, 0.06);
+  }
+
+  :global([data-theme="dark"]) .section-children-tree {
+    border-left-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .graph-claim-node {
+    background: var(--color-surface, #ffffff);
+    border: 1px solid var(--color-graphite-border, #e2e8f0);
+    border-radius: 8px;
+    padding: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.76rem;
+  }
+
+  :global([data-theme="dark"]) .graph-claim-node {
+    background: #0d1117;
+    border-color: #30363d;
+  }
+
+  .graph-claim-node.claim { border-left: 3px solid #0284c7; }
+  .graph-claim-node.evidence { border-left: 3px solid #059669; }
+  .graph-claim-node.reasoning { border-left: 3px solid #7c3aed; }
+  .graph-claim-node.assumption { border-left: 3px solid #d97706; }
+
+  .claim-node-top {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .claim-badge-icon { font-size: 0.82rem; }
+  .claim-type-label { font-weight: 700; font-size: 0.72rem; }
+
+  .claim-status-tag {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+  }
+
+  .claim-status-tag.grounded { background: rgba(5, 150, 105, 0.12); color: #059669; }
+  .claim-status-tag.probe { background: rgba(217, 119, 6, 0.12); color: #d97706; }
+  .claim-status-tag.premature { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
+  .claim-status-tag.ungrounded { background: rgba(100, 116, 139, 0.12); color: #64748b; }
+
+  .claim-excerpt {
+    margin: 0;
+    font-size: 0.74rem;
+    line-height: 1.4;
+    color: var(--color-slate-bright, #1e293b);
+  }
+
+  :global([data-theme="dark"]) .claim-excerpt {
+    color: #c9d1d9;
+  }
+
+  .claim-source-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+
+  .btn-ref-pill {
+    background: rgba(2, 132, 199, 0.08);
+    color: #0284c7;
+    border: none;
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 0.68rem;
+    cursor: pointer;
+  }
+
+  .claim-node-actions {
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+  }
+
+  .node-jump-btn, .node-probe-btn, .node-source-btn {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    background: transparent;
+    color: var(--color-slate-subtle, #475569);
+    transition: all 0.12s ease;
+  }
+
+  :global([data-theme="dark"]) .node-jump-btn,
+  :global([data-theme="dark"]) .node-probe-btn,
+  :global([data-theme="dark"]) .node-source-btn {
+    border-color: #30363d;
+    color: #8b949e;
+  }
+
+  .node-jump-btn:hover { background: rgba(2, 132, 199, 0.08); color: #0284c7; border-color: #0284c7; }
+  .node-probe-btn:hover { background: rgba(124, 58, 237, 0.08); color: #7c3aed; border-color: #7c3aed; }
+  .node-source-btn:hover { background: rgba(5, 150, 105, 0.08); color: #059669; border-color: #059669; }
+
+  .empty-leaf-note {
+    font-size: 0.7rem;
+    color: var(--color-slate-subtle, #94a3b8);
+    font-style: italic;
+    margin: 0;
+  }
+
+  /* Candidate article */
+  .assigned-evidence-results {
+    margin-top: 6px;
+    padding: 8px;
+    background: rgba(0, 0, 0, 0.03);
+    border-radius: 6px;
+  }
+
+  .candidate-article {
+    margin-top: 4px;
+    font-size: 0.7rem;
+  }
+
+  .candidate-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 4px;
+  }
+
+  .candidate-actions button {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+    border-radius: 3px;
+    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    background: transparent;
+    cursor: pointer;
+  }
+
+  /* Readiness */
+  .readiness-self-review {
+    padding: 12px;
+    background: rgba(2, 132, 199, 0.04);
+    border: 1px solid rgba(2, 132, 199, 0.16);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .readiness-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .readiness-header h5 {
+    margin: 2px 0 0;
+    font-size: 0.8rem;
+    color: var(--color-slate-bright, #0f172a);
+  }
+
+  :global([data-theme="dark"]) .readiness-header h5 {
+    color: #f0f6fc;
+  }
+
+  .readiness-count-badge {
+    font-size: 0.68rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    background: rgba(2, 132, 199, 0.12);
+    color: #0284c7;
+    border-radius: 999px;
+  }
+
+  .readiness-intro {
+    font-size: 0.7rem;
+    color: var(--color-slate-subtle, #64748b);
+    margin: 0;
+  }
+
+  .readiness-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .readiness-item {
+    display: flex;
+    gap: 6px;
+    font-size: 0.72rem;
+    align-items: flex-start;
+    color: var(--color-slate-subtle, #64748b);
+  }
+
+  .readiness-item.met {
+    color: #059669;
+  }
+
+  .item-check { font-weight: 700; }
+  .item-content { display: flex; flex-direction: column; }
+  .item-content small { font-size: 0.65rem; color: #94a3b8; }
+
+  /* Milestone Submission */
+  .milestone-submission-banner {
+    padding: 12px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--color-graphite-border, #e2e8f0);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  :global([data-theme="dark"]) .milestone-submission-banner {
+    background: rgba(255, 255, 255, 0.02);
+    border-color: #30363d;
+  }
+
+  .submission-meta h5 {
+    margin: 4px 0 2px;
+    font-size: 0.8rem;
+  }
+
+  .submission-meta p {
+    font-size: 0.7rem;
+    color: var(--color-slate-subtle, #64748b);
+    margin: 0;
+  }
+
+  .sub-badge {
+    display: inline-block;
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 2px 6px;
+    border-radius: 999px;
+    background: rgba(217, 119, 6, 0.12);
+    color: #d97706;
+  }
+
+  .sub-badge.submitted {
+    background: rgba(5, 150, 105, 0.12);
+    color: #059669;
+  }
+
+  .btn-submit-milestone {
+    width: 100%;
+    padding: 8px 14px;
+    border-radius: 6px;
+    background: var(--color-aurora, #0284c7);
+    color: #ffffff;
+    font-size: 0.76rem;
+    font-weight: 700;
+    border: none;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .btn-submit-milestone:hover:not(:disabled) {
+    background: #0369a1;
+  }
+
+  .btn-submit-milestone:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .submission-status-note {
+    font-size: 0.7rem;
+    color: #059669;
+    margin: 0;
+  }
+
+  .submission-status-note.submission-error {
+    color: #dc2626;
+  }
+
+  /* Dossier */
+  .dossier-section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    margin: 6px 0 2px;
+    color: var(--color-slate-bright, #0f172a);
+  }
+
+  :global([data-theme="dark"]) .dossier-section-title {
+    color: #f0f6fc;
+  }
+
+  .dossier-events-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dossier-event-item {
+    padding: 8px 10px;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px solid var(--color-graphite-border, #e2e8f0);
+    border-radius: 6px;
+    font-size: 0.72rem;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  :global([data-theme="dark"]) .dossier-event-item {
+    background: #0d1117;
+    border-color: #30363d;
+  }
+
+  .event-header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .event-type-pill {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 1px 5px;
+    border-radius: 4px;
+    background: rgba(124, 58, 237, 0.1);
+    color: #7c3aed;
+  }
+
+  .event-time {
+    font-size: 0.62rem;
+    color: #94a3b8;
+  }
+
+  .event-text {
+    margin: 0;
+    font-size: 0.7rem;
+  }
+
+  .event-student-note {
+    font-size: 0.68rem;
+    background: rgba(2, 132, 199, 0.06);
+    padding: 4px 6px;
+    border-radius: 4px;
+  }
+
+  .event-move-tag {
+    font-size: 0.62rem;
+    color: #64748b;
+  }
+</style>
