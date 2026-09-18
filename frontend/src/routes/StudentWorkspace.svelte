@@ -72,14 +72,31 @@
       isSourcesCollapsed = true;
       isGutterCollapsed = false;
     } else {
-      // Expand fully to maximum width, and collapse gutter to right!
+      // Expand fully to 40% width, and collapse gutter to right!
       isSourcesExpanded = true;
       isSourcesCollapsed = false;
       isGutterCollapsed = true;
     }
   }
 
+  function handleSelectGutterTab(tab) {
+    activeGutterTab = tab;
+    isGutterCollapsed = false;
+    // When opening right gutter (40% width), collapse sources so canvas remains roomy!
+    if (isSourcesExpanded) {
+      isSourcesExpanded = false;
+      isSourcesCollapsed = true;
+    }
+  }
 
+  function handleToggleGutterCollapse(val) {
+    const willCollapse = val !== undefined ? val : !isGutterCollapsed;
+    isGutterCollapsed = willCollapse;
+    if (!willCollapse && isSourcesExpanded) {
+      isSourcesExpanded = false;
+      isSourcesCollapsed = true;
+    }
+  }
 
   let allDocumentBlocks = $derived.by(() => {
     if (liveBlocks && liveBlocks.length > 0) return liveBlocks;
@@ -1006,8 +1023,8 @@
               isAgentBusy={isMacroBusy}
               activeTab={activeGutterTab}
               isCollapsed={isGutterCollapsed}
-              onToggleCollapse={(val) => isGutterCollapsed = (val !== undefined ? val : !isGutterCollapsed)}
-              onSelectTab={(tab) => { activeGutterTab = tab; isGutterCollapsed = false; }}
+              onToggleCollapse={handleToggleGutterCollapse}
+              onSelectTab={handleSelectGutterTab}
               traceProps={{
                 graphMetrics,
                 graphSections,
@@ -1384,7 +1401,8 @@
 
   .in-situ-workbench-grid {
     display: grid;
-    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(320px, 360px);
+    /* Default: sources expanded to 40%, gutter collapsed to 44px rail */
+    grid-template-columns: clamp(620px, 40vw, 780px) minmax(0, 1fr) 44px;
     width: 100%;
     height: 100%;
     min-height: 0;
@@ -1392,41 +1410,26 @@
     transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
-  /* Standard sources with gutter collapsed */
-  .in-situ-workbench-grid.gutter-collapsed {
-    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) 44px;
-  }
-
-  /* Sources Collapsed (slim 48px sidebar): Canvas is completely visible */
-  .in-situ-workbench-grid.sources-collapsed {
-    grid-template-columns: 48px minmax(0, 1fr) minmax(320px, 360px);
-  }
-
+  /* Sources Collapsed (slim 48px rail on left) + Gutter Collapsed (44px rail on right): Canvas is full width */
   .in-situ-workbench-grid.sources-collapsed.gutter-collapsed {
     grid-template-columns: 48px minmax(0, 1fr) 44px;
   }
 
-  /* Sources Expanded: Doc reader expands to approx 40% width to reveal full PDF page comfortably, canvas visible alongside */
-  .in-situ-workbench-grid.sources-expanded,
-  .in-situ-workbench-grid.sources-expanded.gutter-collapsed {
-    grid-template-columns: clamp(680px, 41vw, 780px) minmax(0, 1fr) 44px;
+  /* Sources Expanded (40% width on left) + Gutter Collapsed (44px rail on right) */
+  .in-situ-workbench-grid.sources-expanded.gutter-collapsed,
+  .in-situ-workbench-grid.gutter-collapsed {
+    grid-template-columns: clamp(620px, 40vw, 780px) minmax(0, 1fr) 44px;
   }
 
+  /* Gutter Open (Agent / Marginalia / Trace taking exact same 40% width on right) */
+  .in-situ-workbench-grid.sources-collapsed.gutter-open,
+  .in-situ-workbench-grid.gutter-open {
+    grid-template-columns: 48px minmax(0, 1fr) clamp(620px, 40vw, 780px);
+  }
+
+  /* If both explicitly open/expanded */
   .in-situ-workbench-grid.sources-expanded.gutter-open {
-    grid-template-columns: clamp(620px, 38vw, 740px) minmax(0, 1fr) minmax(320px, 360px);
-  }
-
-  /* Wide gutter mode (for Engagement Trace & Living Argument Tree) */
-  .in-situ-workbench-grid.gutter-wide {
-    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr) minmax(420px, 480px);
-  }
-
-  .in-situ-workbench-grid.sources-collapsed.gutter-wide {
-    grid-template-columns: 48px minmax(0, 1fr) minmax(460px, 560px);
-  }
-
-  .in-situ-workbench-grid.sources-expanded.gutter-wide {
-    grid-template-columns: clamp(620px, 38vw, 740px) minmax(0, 1fr) minmax(420px, 480px);
+    grid-template-columns: clamp(520px, 35vw, 660px) minmax(0, 1fr) clamp(520px, 35vw, 660px);
   }
 
   .workbench-col-sources {
