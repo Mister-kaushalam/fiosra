@@ -4,7 +4,17 @@
 
   // colorBy: 'level' (default - the teacher-facing course topology) or 'mastery'
   // (a student overlay - color encodes what THIS student knows, not hierarchy).
-  let { graph = { nodes: [], edges: [] }, selectedConceptId = '', onSelect = () => {}, colorBy = 'level' } = $props();
+  // initialStyle just seeds the in-component toggle below (see visualStyle) - a
+  // parent can suggest a starting look, but the toggle in this component's own
+  // toolbar is what actually switches it, so it works the same in every place
+  // this canvas is embedded (the dedicated graph page, the Course Studio tab)
+  // without each embedding needing its own selector.
+  let { graph = { nodes: [], edges: [] }, selectedConceptId = '', onSelect = () => {}, colorBy = 'level', initialStyle = 'fiosra' } = $props();
+
+  // 'fiosra' (default - labeled, glowing, sized by level) or 'obsidian' (a minimal
+  // dark constellation - small dots, labels hidden until you hover or select, thin
+  // muted lines - deliberately echoing the Obsidian notes-app graph view).
+  let visualStyle = $state(initialStyle);
 
   const levelLabels = {
     course_theme: 'Course theme', strand: 'Strand', topic: 'Topic',
@@ -51,30 +61,48 @@
   function buildDatasets(currentGraph) {
     const nodes = currentGraph?.nodes || [];
     const edges = currentGraph?.edges || [];
+    const isObsidian = visualStyle === 'obsidian';
+    const isMastery = colorBy === 'mastery';
     const visNodes = nodes.map((node) => {
-      const isMastery = colorBy === 'mastery';
       const palette = (isMastery ? stateColor[node.state] : levelColor[node.level]) || DEFAULT_COLOR;
+      const degree = degreeOf(node.concept_id, edges);
       // Unassessed/emergent nodes stay a fixed modest size in mastery mode - size there
       // shouldn't imply "more important", only the base topology's level does that.
-      const size = isMastery
-        ? (node.state === 'emergent' ? 14 : 17) + Math.min(4, degreeOf(node.concept_id, edges))
-        : (levelSize[node.level] || 16) + Math.min(6, degreeOf(node.concept_id, edges));
+      // Obsidian's own graph view sizes purely by link count, regardless of mode -
+      // that's the one part of the look that overrides colorBy's sizing rule.
+      const size = isObsidian
+        ? 6 + Math.min(14, degree * 1.6)
+        : isMastery
+          ? (node.state === 'emergent' ? 14 : 17) + Math.min(4, degree)
+          : (levelSize[node.level] || 16) + Math.min(6, degree);
       return {
         id: node.concept_id,
-        label: node.label,
+        label: isObsidian ? '' : node.label, // Obsidian mode: hidden until hover/select reveals it.
+        fullLabel: node.label,
         title: node.definition,
         shape: 'dot',
         size,
-        color: {
-          background: palette.bg,
-          border: palette.border,
-          highlight: { background: palette.border, border: '#ffffff' },
-          hover: { background: palette.border, border: '#ffffff' },
-        },
-        font: { color: '#f8fafc', face: 'Inter, sans-serif', size: 10, vadjust: -(size + 8), strokeWidth: 2, strokeColor: 'rgba(10,14,20,0.85)' },
-        borderWidth: 2,
-        borderWidthSelected: 3,
-        shadow: { enabled: true, color: `${palette.bg}99`, size: 14, x: 0, y: 0 },
+        color: isObsidian
+          ? {
+              background: palette.border,
+              border: `${palette.border}55`,
+              highlight: { background: '#ffffff', border: palette.border },
+              hover: { background: '#ffffff', border: palette.border },
+            }
+          : {
+              background: palette.bg,
+              border: palette.border,
+              highlight: { background: palette.border, border: '#ffffff' },
+              hover: { background: palette.border, border: '#ffffff' },
+            },
+        font: isObsidian
+          ? { color: '#e5e7eb', face: 'Inter, sans-serif', size: 11, vadjust: -(size + 9), strokeWidth: 0 }
+          : { color: '#f8fafc', face: 'Inter, sans-serif', size: 10, vadjust: -(size + 8), strokeWidth: 2, strokeColor: 'rgba(10,14,20,0.85)' },
+        borderWidth: isObsidian ? 1 : 2,
+        borderWidthSelected: isObsidian ? 2 : 3,
+        shadow: isObsidian
+          ? { enabled: true, color: 'rgba(255,255,255,0.25)', size: 6, x: 0, y: 0 }
+          : { enabled: true, color: `${palette.bg}99`, size: 14, x: 0, y: 0 },
         level: node.level,
         concept_type: node.concept_type,
         state: node.state,
@@ -83,15 +111,17 @@
     const visEdges = edges.map((edge, index) => {
       const isPrereq = edge.relation === 'PREREQUISITE_OF';
       const isMentioned = edge.relation === 'MENTIONED_ALONGSIDE';
-      const color = isMentioned ? MENTIONED_COLOR : isPrereq ? PREREQ_COLOR : CONTAINS_COLOR;
+      const color = isObsidian
+        ? (isMentioned ? MENTIONED_COLOR : 'rgba(255,255,255,0.55)')
+        : (isMentioned ? MENTIONED_COLOR : isPrereq ? PREREQ_COLOR : CONTAINS_COLOR);
       return {
         id: `${edge.source}->${edge.target}-${index}`,
         from: edge.source,
         to: edge.target,
-        arrows: 'to',
-        color: { color, opacity: isMentioned ? 0.55 : 0.65, highlight: color },
+        arrows: isObsidian ? '' : 'to',
+        color: { color, opacity: isObsidian ? (isMentioned ? 0.45 : 0.25) : isMentioned ? 0.55 : 0.65, highlight: color },
         dashes: isMentioned ? [2, 4] : isPrereq ? [6, 5] : false,
-        width: 1.75,
+        width: isObsidian ? 1 : 1.75,
         smooth: { type: 'curvedCW', roundness: 0.15 },
         relation: edge.relation,
       };
@@ -101,15 +131,25 @@
 
   function applyFocus(id) {
     if (!network || !nodesData || !edgesData) return;
+    const isObsidian = visualStyle === 'obsidian';
     if (!id) {
-      nodesData.update(nodesData.getIds().map((nodeId) => ({ id: nodeId, opacity: 1 })));
-      edgesData.update(edgesData.get().map((edge) => ({ id: edge.id, color: { ...edge.color, opacity: 0.65 } })));
+      // Obsidian's resting state is dot-only, no text - fiosra's resting state keeps every label visible.
+      nodesData.update(
+        nodesData.get().map((node) => ({ id: node.id, opacity: 1, label: isObsidian ? '' : node.fullLabel }))
+      );
+      edgesData.update(edgesData.get().map((edge) => ({ id: edge.id, color: { ...edge.color, opacity: edge.relation === 'MENTIONED_ALONGSIDE' ? 0.45 : isObsidian ? 0.25 : 0.65 } })));
       return;
     }
     const connectedNodeIds = new Set([id, ...network.getConnectedNodes(id)]);
     const connectedEdgeIds = new Set(network.getConnectedEdges(id));
     nodesData.update(
-      nodesData.getIds().map((nodeId) => ({ id: nodeId, opacity: connectedNodeIds.has(nodeId) ? 1 : 0.18 }))
+      nodesData.get().map((node) => ({
+        id: node.id,
+        opacity: connectedNodeIds.has(node.id) ? 1 : 0.18,
+        // Obsidian: reveal names only for the focused node and its direct neighbors.
+        // Fiosra: labels are always on, focus is conveyed by opacity alone.
+        label: isObsidian ? (connectedNodeIds.has(node.id) ? node.fullLabel : '') : node.fullLabel,
+      }))
     );
     edgesData.update(
       edgesData.get().map((edge) => ({
@@ -164,9 +204,10 @@
   onDestroy(() => network?.destroy());
 
   $effect(() => {
-    // Re-render whenever the underlying graph data, or the color mode, changes.
+    // Re-render whenever the underlying graph data, color mode, or visual style changes.
     void graph;
     void colorBy;
+    void visualStyle;
     if (canvasEl) renderNetwork();
   });
 
@@ -177,6 +218,9 @@
   function togglePhysics() {
     physicsOn = !physicsOn;
     network?.setOptions({ physics: { enabled: physicsOn } });
+  }
+  function toggleVisualStyle() {
+    visualStyle = visualStyle === 'obsidian' ? 'fiosra' : 'obsidian';
   }
   function zoom(factor) {
     if (!network) return;
@@ -207,7 +251,7 @@
 
 <svelte:window onkeydown={onKeydown} />
 
-<div class="canvas-shell" class:maximized>
+<div class="canvas-shell" class:maximized class:obsidian={visualStyle === 'obsidian'}>
   <div class="canvas-toolbar">
     <div class="canvas-key">
       {#if colorBy === 'mastery'}
@@ -224,6 +268,9 @@
     <div class="toolbar-actions">
       <button type="button" class="physics-toggle" class:active={physicsOn} onclick={togglePhysics}>
         <span class="dot"></span> Physics
+      </button>
+      <button type="button" class="physics-toggle" class:active={visualStyle === 'obsidian'} onclick={toggleVisualStyle} title="Switch between the labeled Fiosra look and a minimal Obsidian-style constellation">
+        <span class="dot"></span> Obsidian
       </button>
       <div class="zoom-controls">
         <button type="button" onclick={() => zoom(0.8)} aria-label="Zoom out">−</button>
@@ -243,6 +290,8 @@
 
 <style>
   .canvas-shell { background: #0a0e14; display: flex; flex: 1; flex-direction: column; min-height: 520px; overflow: hidden; position: relative; }
+  .canvas-shell.obsidian { background: #000000; }
+  .canvas-shell.obsidian .canvas-toolbar { background: rgba(0,0,0,.85); }
   .canvas-shell.maximized { border-radius: 0; bottom: 16px; left: 16px; position: fixed; right: 16px; top: 16px; z-index: 1000; box-shadow: 0 20px 60px rgba(0,0,0,.6); }
   .canvas-toolbar { align-items: center; background: rgba(15,18,26,.9); border-bottom: 1px solid rgba(255,255,255,.08); display: flex; justify-content: space-between; padding: 10px 14px; position: relative; z-index: 2; }
   .canvas-key { color: #9ca3af; display: flex; font-size: 10px; gap: 14px; }
