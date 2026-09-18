@@ -1848,18 +1848,14 @@
     grid-template-columns: 48px minmax(0, 1fr) 44px;
   }
 
-  /* Sources Expanded: Doc reader expands fully to the right to reveal full PDF */
+  /* Sources Expanded: Doc reader expands to approx 40% width to reveal full PDF page comfortably, canvas visible alongside */
   .in-situ-workbench-grid.sources-expanded,
   .in-situ-workbench-grid.sources-expanded.gutter-collapsed {
-    grid-template-columns: 1fr 44px;
+    grid-template-columns: clamp(680px, 41vw, 780px) minmax(0, 1fr) 44px;
   }
 
   .in-situ-workbench-grid.sources-expanded.gutter-open {
-    grid-template-columns: 1fr minmax(320px, 360px);
-  }
-
-  .in-situ-workbench-grid.sources-expanded .workbench-col-canvas {
-    display: none !important;
+    grid-template-columns: clamp(620px, 38vw, 740px) minmax(0, 1fr) minmax(320px, 360px);
   }
 
   .workbench-col-sources {
