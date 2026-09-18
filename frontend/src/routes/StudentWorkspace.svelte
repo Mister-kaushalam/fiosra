@@ -914,21 +914,8 @@
         </div>
       </div>
 
-      <!-- Center: 3 Primary Horizontal Workspace Tabs -->
+      <!-- Center: Workspace Horizontal Tabs -->
       <nav class="workspace-horizontal-tabs" role="tablist" aria-label="Workspace Navigation">
-        <button 
-          type="button"
-          class="tab-btn" 
-          class:active={activeWorkspaceTab === 'materials'}
-          onclick={() => activeWorkspaceTab = 'materials'}
-          role="tab"
-          aria-selected={activeWorkspaceTab === 'materials'}
-        >
-          <span class="tab-icon">📖</span>
-          <span class="tab-label">Assignment & Materials</span>
-          <span class="tab-pill">{publicSources.length} sources</span>
-        </button>
-
         <button 
           type="button"
           class="tab-btn" 
@@ -965,165 +952,10 @@
       </div>
     </header>
 
-    <!-- Workspace Content Body with 3 Horizontal Tabs -->
+    <!-- Workspace Content Body -->
     <div class="workspace-content-body">
       <!-- ============================================================ -->
-      <!-- TAB 1: ASSIGNMENT, PRIMARY SOURCES & PUBLIC RUBRICS          -->
-      <!-- ============================================================ -->
-      {#if activeWorkspaceTab === 'materials'}
-        <div class="materials-tab-viewport">
-          <div class="materials-grid-container">
-            <!-- Left / Main Column: Brief, Task Scope & Primary Sources -->
-            <div class="materials-main-col">
-              <!-- Task Prompt & Purpose Card -->
-              <section class="materials-card hero-prompt-card">
-                <span class="card-eyebrow">Milestone Brief & Task</span>
-                <h2 class="task-prompt-heading">{published?.task?.prompt || 'No prompt specified.'}</h2>
-                {#if published?.purpose}
-                  <div class="purpose-callout">
-                    <strong>Why this matters:</strong>
-                    <p>{published.purpose}</p>
-                  </div>
-                {/if}
-                <div class="scope-tags-row">
-                  <div class="scope-tag">
-                    <span class="tag-label">Deliverable:</span>
-                    <strong>{published?.task?.deliverable || 'Argumentative Essay'}</strong>
-                  </div>
-                  <div class="scope-tag">
-                    <span class="tag-label">Permitted Scope:</span>
-                    <strong>{published?.task?.scope || 'Course scope'}</strong>
-                  </div>
-                </div>
-              </section>
-
-              <!-- Primary Source Pack (Deep Reader) -->
-              <section class="materials-card sources-section-card">
-                <div class="sources-header-bar">
-                  <div>
-                    <span class="card-eyebrow">Grounding Evidence Pack</span>
-                    <h3>Primary Source Readings ({publicSources.length})</h3>
-                  </div>
-                  <input
-                    type="search"
-                    class="sources-search-box"
-                    placeholder="Search source titles or text..."
-                    bind:value={sourceSearchQuery}
-                  />
-                </div>
-
-                <div class="sources-deck-grid">
-                  {#each filteredSources as source}
-                    <article class="source-reader-item">
-                      <div class="source-reader-header">
-                        <span class="source-type-pill">{source.resource_type || 'Primary Source'}</span>
-                        <h4>{source.title}</h4>
-                      </div>
-                      <div class="source-excerpt-content">
-                        <p>{source.excerpt}</p>
-                      </div>
-                      <div class="source-reader-footer">
-                        <div class="relevance-guidance-box">
-                          <strong>Why assigned:</strong> {source.relevance_guidance}
-                        </div>
-                        {#if source.citation}
-                          <p class="source-citation">{source.citation}</p>
-                        {/if}
-                        {#if source.source_url}
-                          <div style="margin: 6px 0;">
-                            <a
-                              href={source.source_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              class="doc-view-link"
-                              style="display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; padding: 4px 10px; text-decoration: none; border-radius: var(--radius-xs); background: rgba(56, 189, 248, 0.12); color: var(--color-horizon-bright); border: 1px solid rgba(56, 189, 248, 0.35);"
-                              title="Open original authentic source PDF"
-                            >
-                              <span>📕</span> Open Original Document (PDF ↗)
-                            </a>
-                          </div>
-                        {/if}
-                        <button
-                          type="button"
-                          class="btn-cite-to-canvas"
-                          onclick={() => writeWithSource(source)}
-                          disabled={sourceActionBusy || sessionStatus !== 'active'}
-                          title="Select this source as writing context"
-                        >
-                          {activeSourceReference?.source_id === source.source_id ? 'Writing with this source' : 'Write with Source ✍️'}
-                        </button>
-                      </div>
-                    </article>
-                  {:else}
-                    <p class="empty-sources-msg">No sources match your search query.</p>
-                  {/each}
-                </div>
-              </section>
-            </div>
-
-            <!-- Right Column: Learning Goals, Rubric & Checklist -->
-            <div class="materials-side-col">
-              <!-- Milestone Goals -->
-              {#if published?.learning_goals?.length}
-                <section class="materials-card">
-                  <span class="card-eyebrow">Learning Goals</span>
-                  <ul class="materials-goals-list">
-                    {#each published.learning_goals as goal}
-                      <li>✓ {goal}</li>
-                    {/each}
-                  </ul>
-                </section>
-              {/if}
-
-              <!-- Public Rubric Criteria -->
-              <section class="materials-card rubric-overview-card">
-                <span class="card-eyebrow">Assessment Rubric</span>
-                <h3>Evaluation Criteria ({published?.public_rubric?.length || 0})</h3>
-                <div class="rubric-items-stack">
-                  {#each published?.public_rubric || [] as criterion}
-                    <article class="rubric-overview-item">
-                      <div class="rubric-item-header">
-                        <strong>{criterion.title}</strong>
-                        {#if criterion.weight}
-                          <span class="rubric-weight-chip">{criterion.weight}%</span>
-                        {/if}
-                      </div>
-                      <p class="rubric-item-desc">{criterion.description}</p>
-                      <div class="rubric-levels-mini-grid">
-                        {#each criterion.levels as level}
-                          <div class="level-mini-box">
-                            <span class="level-title">{level.label}</span>
-                            <small>{level.description}</small>
-                          </div>
-                        {/each}
-                      </div>
-                      <p class="rubric-self-review">
-                        <em>Self-review prompt: {criterion.self_review_prompt}</em>
-                      </p>
-                    </article>
-                  {/each}
-                </div>
-              </section>
-
-              <!-- Completion Checklist & Integrity Notice -->
-              <section class="materials-card checklist-card">
-                <span class="card-eyebrow">Readiness Checklist</span>
-                <ul class="checklist-items-stack">
-                  {#each published?.completion_checklist || [] as check}
-                    <li>◻ {check}</li>
-                  {/each}
-                </ul>
-                <div class="integrity-notice-box">
-                  <small>🔒 {published?.integrity_notice || 'Your educator evaluates the final submission.'}</small>
-                </div>
-              </section>
-            </div>
-          </div>
-        </div>
-      {/if}
-
-      <!-- ============================================================ -->
-      <!-- TAB 2: REASONING CANVAS (Always preserved in DOM)            -->
+      <!-- REASONING CANVAS & INTEGRATED DOC READER (Always preserved)  -->
       <!-- ============================================================ -->
       <div class="canvas-tab-wrapper" class:tab-hidden={activeWorkspaceTab !== 'canvas'}>
         <div
@@ -1141,6 +973,8 @@
           >
             <PrimarySourcesSidebar
               sources={assignmentSources}
+              assignment={published || assignment}
+              courseTitle={published?.domain || 'Department of Historical Studies'}
               courseId={courseId}
               isCollapsed={isSourcesCollapsed}
               isExpanded={isSourcesExpanded && !isSourcesCollapsed}
