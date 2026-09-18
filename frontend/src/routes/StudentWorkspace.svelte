@@ -668,9 +668,7 @@
   function handleFocusedBlockChange({ blockId, semanticType, text, offsetTop }) {
     fiosraContext.setFocusedBlock(blockId, semanticType, text, offsetTop);
     const matchingProbe = probes.find((p) => p.block_id === blockId && p.status !== 'dismissed');
-    if (matchingProbe) {
-      activeProbeId = matchingProbe.probe_id;
-    }
+    activeProbeId = matchingProbe ? matchingProbe.probe_id : '';
   }
 
   async function handleQuoteEvidenceFromSidebar({ quoteText, sourceId, sourceTitle, author, sourceUrl }) {
@@ -1206,6 +1204,7 @@
               onRespond={(probeId, text) => submitProbeExplanation(probeId, text)}
               onDismiss={(probeId) => changeProbe(probeId, 'dismiss')}
               onDefer={(probeId) => changeProbe(probeId, 'defer')}
+              onSelectBlock={(blockId) => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(blockId); }}
               isBusy={isProbeBusy}
               notice={probeNotice}
             />

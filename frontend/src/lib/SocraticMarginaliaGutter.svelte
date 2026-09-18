@@ -7,50 +7,56 @@
     onRespond = async () => null,
     onDismiss = async () => null,
     onDefer = async () => null,
+    onSelectBlock = () => null,
     isBusy = false,
     notice = '',
   } = $props();
 
-  let responseInput = $state('');
-  let internalSelectedProbeId = $state('');
+  let replyInputs = $state({});
+  let containerEl = $state(null);
 
   const focusTypeLabels = {
-    direct_observation: { label: 'Direct Observation', icon: '🔍', color: 'var(--color-aurora)' },
-    warrant: { label: 'Warrant Required', icon: '⚖️', color: 'var(--color-amber)' },
-    causal_bridge: { label: 'Causal Bridge', icon: '🌉', color: 'var(--color-signal-green)' },
-    alternative_explanation: { label: 'Alternative Hypothesis', icon: '🔄', color: 'var(--color-horizon-blue)' },
-    qualification: { label: 'Nuance & Scope', icon: '🎯', color: 'var(--color-slate-light)' },
+    direct_observation: { label: 'Direct Observation', icon: '🔍', color: 'var(--color-aurora, #0284c7)' },
+    warrant: { label: 'Warrant Required', icon: '⚖️', color: 'var(--color-amber, #d97706)' },
+    causal_bridge: { label: 'Causal Bridge', icon: '🌉', color: 'var(--color-signal-green, #10b981)' },
+    alternative_explanation: { label: 'Alternative Hypothesis', icon: '🔄', color: 'var(--color-horizon-blue, #3b82f6)' },
+    qualification: { label: 'Nuance & Scope', icon: '🎯', color: 'var(--color-slate-light, #64748b)' },
   };
 
-  // Determine active probe: priority to focused block's probe, then selected probe, then first offered probe
-  let effectiveProbe = $derived.by(() => {
-    if (focusedBlockId) {
-      const blockProbe = probes.find((p) => p.block_id === focusedBlockId && p.status !== 'dismissed');
-      if (blockProbe) return blockProbe;
-    }
-    if (internalSelectedProbeId) {
-      const match = probes.find((p) => p.probe_id === internalSelectedProbeId);
-      if (match) return match;
-    }
-    if (activeProbeId) {
-      const match = probes.find((p) => p.probe_id === activeProbeId);
-      if (match) return match;
-    }
-    return probes.find((p) => p.status === 'offered' || p.status === 'deferred') || probes[0] || null;
+  // Visible probes: exclude dismissed, sort offered first, then deferred, then responded
+  let visibleProbes = $derived.by(() => {
+    return probes
+      .filter((p) => p && p.status !== 'dismissed')
+      .sort((a, b) => {
+        const order = { offered: 1, deferred: 2, responded: 3 };
+        return (order[a.status] || 99) - (order[b.status] || 99);
+      });
   });
 
-  // Calculate vertical alignment coordinate smoothly clamped to the gutter
-  let gutterTranslateY = $derived.by(() => {
-    if (!focusedBlockOffsetTop || focusedBlockOffsetTop < 0) return 0;
-    return Math.max(0, focusedBlockOffsetTop - 24);
+  let activeProbeCount = $derived(
+    visibleProbes.filter((p) => p.status === 'offered').length
+  );
+
+  let currentBlockProbe = $derived(
+    focusedBlockId ? visibleProbes.find((p) => p.block_id === focusedBlockId) : null
+  );
+
+  // Auto-scroll the matching card into view inside the gutter without dislodging anything
+  $effect(() => {
+    if (focusedBlockId && containerEl) {
+      const card = containerEl.querySelector(`[data-probe-block-id="${focusedBlockId}"]`);
+      if (card) {
+        card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }
+    }
   });
 
-  async function handleFormSubmit(e) {
+  async function handleFormSubmit(e, probeId) {
     e.preventDefault();
-    if (!effectiveProbe || !responseInput.trim() || isBusy) return;
-    const text = responseInput.trim();
-    responseInput = '';
-    await onRespond(effectiveProbe.probe_id, text);
+    const text = (replyInputs[probeId] || '').trim();
+    if (!probeId || text.length < 5 || isBusy) return;
+    replyInputs[probeId] = '';
+    await onRespond(probeId, text);
   }
 
   async function handleDismiss(probeId) {
@@ -64,132 +70,175 @@
   }
 </script>
 
-<aside class="marginalia-gutter" aria-label="Socratic Marginalia Gutter">
+<aside class="marginalia-gutter" bind:this={containerEl} aria-label="Socratic Marginalia Gutter">
   <div class="gutter-header">
     <div class="gutter-title">
       <span class="gutter-icon">🧠</span>
       <span>Socratic Marginalia</span>
     </div>
-    {#if probes.length > 0}
-      <span class="probe-count-pill">{probes.filter(p => p.status === 'offered').length} active</span>
+    {#if activeProbeCount > 0}
+      <span class="probe-count-pill">{activeProbeCount} active</span>
+    {:else if visibleProbes.length > 0}
+      <span class="probe-count-pill subtle">All resolved</span>
     {/if}
   </div>
 
   {#if notice}
     <div class="gutter-notice" role="status">
-      <span>ℹ️</span> {notice}
+      <span>ℹ️</span> <span>{notice}</span>
     </div>
   {/if}
 
-  <div 
-    class="gutter-track"
-    style:transform={`translateY(${gutterTranslateY}px)`}
-  >
-    {#if effectiveProbe}
-      {@const focusInfo = focusTypeLabels[effectiveProbe.focus_type] || { label: effectiveProbe.focus_type || 'Inquiry', icon: '❓', color: 'var(--color-aurora)' }}
-      
-      <div class="probe-card" class:responded={effectiveProbe.status === 'responded'}>
-        <div class="probe-card-header">
-          <span class="focus-badge" style:--focus-color={focusInfo.color}>
-            <span class="focus-icon">{focusInfo.icon}</span>
-            <span>{focusInfo.label}</span>
-          </span>
-          {#if effectiveProbe.concept_label || effectiveProbe.concept_id}
-            <span class="kc-badge" title={effectiveProbe.concept_id}>
-              {effectiveProbe.concept_label || effectiveProbe.concept_id}
+  <!-- Contextual status banner indicating current block alignment -->
+  {#if focusedBlockId}
+    <div class="focus-context-banner" class:has-probe={!!currentBlockProbe}>
+      {#if currentBlockProbe}
+        <span class="context-icon">🎯</span>
+        <span class="context-text">Inquiry matches current paragraph</span>
+      {:else}
+        <span class="context-icon">✍️</span>
+        <span class="context-text">Paragraph active · No open inquiries here</span>
+      {/if}
+    </div>
+  {/if}
+
+  <div class="gutter-stream">
+    {#if visibleProbes.length > 0}
+      {#each visibleProbes as probe (probe.probe_id)}
+        {@const focusInfo = focusTypeLabels[probe.focus_type] || { label: probe.focus_type || 'Inquiry', icon: '❓', color: 'var(--color-aurora)' }}
+        {@const isTargeted = (focusedBlockId && probe.block_id === focusedBlockId) || probe.probe_id === activeProbeId}
+
+        <div
+          class="probe-card"
+          data-probe-block-id={probe.block_id}
+          class:is-active-target={isTargeted}
+          class:status-responded={probe.status === 'responded'}
+          class:status-deferred={probe.status === 'deferred'}
+        >
+          <!-- Card Header: Focus badge, concept badge, and active status -->
+          <div class="probe-card-header">
+            <span class="focus-badge" style:--focus-color={focusInfo.color}>
+              <span class="focus-icon">{focusInfo.icon}</span>
+              <span>{focusInfo.label}</span>
             </span>
-          {/if}
-        </div>
 
-        <div class="probe-question">
-          <p>{effectiveProbe.question}</p>
-        </div>
+            {#if probe.concept_label || probe.concept_id}
+              <span class="kc-badge" title={probe.concept_id}>
+                {probe.concept_label || probe.concept_id}
+              </span>
+            {/if}
 
-        {#if effectiveProbe.status === 'responded'}
-          <div class="probe-resolved-box">
-            <div class="resolved-badge">
-              <span>✅</span>
-              <strong>Epistemic Pivot Captured</strong>
-            </div>
-            {#if effectiveProbe.response_text}
-              <p class="resolved-text">"{effectiveProbe.response_text}"</p>
+            {#if isTargeted}
+              <span class="current-block-tag">
+                <span class="dot-pulse"></span>
+                <span>Active Block</span>
+              </span>
             {/if}
           </div>
-        {:else}
-          <div class="probe-canvas-hint">
-            <span>💡</span>
-            <small>Rewrite your sentence in the Canvas to resolve this inquiry, or answer below:</small>
+
+          <!-- Claim Anchor Excerpt (clickable jump to canvas block) -->
+          {#if probe.claim_text}
+            <button
+              type="button"
+              class="claim-anchor"
+              onclick={() => onSelectBlock(probe.block_id)}
+              title="Click to jump to this paragraph in the canvas"
+            >
+              <span class="anchor-pin">📌</span>
+              <span class="anchor-quote">
+                "{probe.claim_text.length > 95 ? probe.claim_text.slice(0, 95) + '…' : probe.claim_text}"
+              </span>
+              <span class="anchor-jump">Jump ↗</span>
+            </button>
+          {/if}
+
+          <!-- Inquiry Question -->
+          <div class="probe-question">
+            <p>{probe.question}</p>
           </div>
 
-          <form class="probe-reply-form" onsubmit={handleFormSubmit}>
-            <textarea
-              bind:value={responseInput}
-              placeholder="Explain your reasoning or cite an exhibit..."
-              rows="3"
-              disabled={isBusy}
-              aria-label="Socratic explanation response"
-            ></textarea>
-
-            <div class="probe-form-actions">
-              <button
-                type="submit"
-                class="btn-respond"
-                disabled={isBusy || responseInput.trim().length < 5}
-              >
-                {isBusy ? 'Submitting...' : 'Submit Explanation'}
-              </button>
-              
-              <div class="secondary-actions">
-                <button
-                  type="button"
-                  class="btn-text"
-                  onclick={() => handleDefer(effectiveProbe.probe_id)}
-                  disabled={isBusy}
-                  title="Defer probe for 5 minutes"
-                >
-                  Later
-                </button>
-                <button
-                  type="button"
-                  class="btn-text"
-                  onclick={() => handleDismiss(effectiveProbe.probe_id)}
-                  disabled={isBusy}
-                  title="Dismiss probe"
-                >
-                  Dismiss
-                </button>
+          <!-- Inquiry Response State -->
+          {#if probe.status === 'responded'}
+            <div class="probe-resolved-box">
+              <div class="resolved-badge">
+                <span>✅</span>
+                <strong>Epistemic Pivot Captured</strong>
               </div>
+              {#if probe.response_text}
+                <p class="resolved-text">"{probe.response_text}"</p>
+              {/if}
             </div>
-          </form>
-        {/if}
-      </div>
+          {:else if probe.status === 'deferred'}
+            <div class="probe-deferred-box">
+              <div class="deferred-badge">
+                <span>⏳</span>
+                <span>Postponed for later revision</span>
+              </div>
+              <button
+                type="button"
+                class="btn-resume"
+                onclick={() => handleDefer(probe.probe_id)}
+                disabled={isBusy}
+              >
+                Reopen Inquiry
+              </button>
+            </div>
+          {:else}
+            <div class="probe-canvas-hint">
+              <span>💡</span>
+              <small>Rewrite in the Canvas to resolve, or explain your reasoning:</small>
+            </div>
+
+            <form class="probe-reply-form" onsubmit={(e) => handleFormSubmit(e, probe.probe_id)}>
+              <textarea
+                bind:value={replyInputs[probe.probe_id]}
+                placeholder="Clarify evidence, scope, or causal link..."
+                rows="3"
+                disabled={isBusy}
+                aria-label="Socratic explanation response"
+              ></textarea>
+
+              <div class="probe-form-actions">
+                <button
+                  type="submit"
+                  class="btn-respond"
+                  disabled={isBusy || !(replyInputs[probe.probe_id] && replyInputs[probe.probe_id].trim().length >= 5)}
+                >
+                  {isBusy ? 'Submitting...' : 'Submit Explanation'}
+                </button>
+
+                <div class="secondary-actions">
+                  <button
+                    type="button"
+                    class="btn-text"
+                    onclick={() => handleDefer(probe.probe_id)}
+                    disabled={isBusy}
+                    title="Defer inquiry for later"
+                  >
+                    Later
+                  </button>
+                  <button
+                    type="button"
+                    class="btn-text"
+                    onclick={() => handleDismiss(probe.probe_id)}
+                    disabled={isBusy}
+                    title="Dismiss inquiry"
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              </div>
+            </form>
+          {/if}
+        </div>
+      {/each}
     {:else}
       <div class="empty-gutter-state">
         <div class="empty-icon">✨</div>
         <p class="empty-text">Your writing flow is uninterrupted.</p>
-        <small class="empty-subtext">As you articulate claims and anchor evidence, targeted Socratic challenges will appear here beside your text.</small>
-      </div>
-    {/if}
-
-    <!-- Collapsed other probes list if multiple exist -->
-    {#if probes.length > 1}
-      <div class="probe-switcher">
-        <span class="switcher-label">Other Inquiries:</span>
-        <div class="switcher-list">
-          {#each probes as p}
-            {#if p.probe_id !== effectiveProbe?.probe_id}
-              <button
-                type="button"
-                class="switcher-item"
-                class:active={p.probe_id === activeProbeId}
-                onclick={() => { internalSelectedProbeId = p.probe_id; }}
-              >
-                <span class="switcher-dot" class:responded={p.status === 'responded'}></span>
-                <span class="switcher-q">{p.question.slice(0, 48)}...</span>
-              </button>
-            {/if}
-          {/each}
-        </div>
+        <small class="empty-subtext">
+          As you articulate claims and anchor evidence, targeted Socratic challenges will anchor here beside your arguments.
+        </small>
       </div>
     {/if}
   </div>
@@ -207,6 +256,7 @@
     position: relative;
     overflow-y: auto;
     overflow-x: hidden;
+    box-sizing: border-box;
   }
 
   .gutter-header {
@@ -216,6 +266,7 @@
     padding-bottom: 12px;
     margin-bottom: 12px;
     border-bottom: 1px solid var(--color-graphite-border);
+    flex-shrink: 0;
   }
 
   .gutter-title {
@@ -232,13 +283,19 @@
   .gutter-icon { font-size: 1rem; }
 
   .probe-count-pill {
-    font-size: 0.75rem;
+    font-size: 0.72rem;
     padding: 2px 8px;
     border-radius: 999px;
-    background: var(--color-aurora-glow);
-    color: var(--color-aurora);
-    border: 1px solid rgba(2, 132, 199, 0.25);
-    font-weight: 500;
+    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.15));
+    color: var(--color-aurora, #0284c7);
+    border: 1px solid rgba(2, 132, 199, 0.28);
+    font-weight: 600;
+  }
+
+  .probe-count-pill.subtle {
+    background: rgba(5, 150, 105, 0.12);
+    color: var(--color-signal-green, #10b981);
+    border-color: rgba(5, 150, 105, 0.25);
   }
 
   .gutter-notice {
@@ -249,41 +306,87 @@
     border: 1px solid rgba(2, 132, 199, 0.2);
     color: var(--color-slate-light);
     margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
   }
 
-  .gutter-track {
-    transition: transform 0.25s cubic-bezier(0.2, 0, 0, 1);
-    will-change: transform;
+  .focus-context-banner {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: 0.75rem;
+    padding: 6px 10px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px solid var(--color-graphite-border);
+    color: var(--color-slate-subtle);
+    margin-bottom: 12px;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+  }
+
+  :global([data-theme="dark"]) .focus-context-banner {
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  .focus-context-banner.has-probe {
+    background: rgba(2, 132, 199, 0.08);
+    border-color: rgba(2, 132, 199, 0.28);
+    color: var(--color-aurora, #0284c7);
+    font-weight: 500;
+  }
+
+  .gutter-stream {
     display: flex;
     flex-direction: column;
     gap: 14px;
+    flex: 1;
+    min-height: 0;
   }
 
   .probe-card {
     background: var(--color-graphite-card, #ffffff);
-    border: 1px solid rgba(2, 132, 199, 0.35);
+    border: 1px solid var(--color-graphite-border);
     border-radius: 10px;
-    padding: 16px;
-    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08), 0 0 0 1px rgba(2, 132, 199, 0.12);
-    transition: all 0.2s ease;
+    padding: 15px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
   }
 
   :global([data-theme="dark"]) .probe-card {
     background: rgba(30, 36, 46, 0.95);
-    border-color: rgba(2, 132, 199, 0.4);
-    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+    border-color: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3);
   }
 
-  .probe-card.responded {
-    border-color: rgba(5, 150, 105, 0.4);
-    box-shadow: 0 4px 18px rgba(5, 150, 105, 0.1);
+  .probe-card:hover {
+    border-color: rgba(2, 132, 199, 0.35);
+  }
+
+  .probe-card.is-active-target {
+    border-color: var(--color-aurora, #0284c7);
+    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.35), 0 6px 18px rgba(2, 132, 199, 0.12);
+  }
+
+  .probe-card.status-responded {
+    border-color: rgba(5, 150, 105, 0.35);
+    background: rgba(5, 150, 105, 0.02);
+  }
+
+  .probe-card.status-deferred {
+    opacity: 0.75;
+    border-style: dashed;
   }
 
   .probe-card-header {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 7px;
     margin-bottom: 10px;
   }
 
@@ -297,7 +400,7 @@
     letter-spacing: 0.04em;
     color: var(--focus-color, var(--color-aurora));
     background: rgba(2, 132, 199, 0.08);
-    padding: 3px 7px;
+    padding: 2px 7px;
     border-radius: 4px;
     border: 1px solid rgba(2, 132, 199, 0.18);
   }
@@ -312,8 +415,88 @@
     font-family: var(--font-mono, monospace);
   }
 
+  :global([data-theme="dark"]) .kc-badge {
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .current-block-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 0.68rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--color-aurora, #0284c7);
+    margin-left: auto;
+    background: rgba(2, 132, 199, 0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+  }
+
+  .dot-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--color-aurora, #0284c7);
+    animation: pulseGlow 1.8s infinite;
+  }
+
+  @keyframes pulseGlow {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.4; transform: scale(1.3); }
+  }
+
+  .claim-anchor {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    background: rgba(0, 0, 0, 0.03);
+    border: 1px dashed var(--color-graphite-border);
+    border-radius: 6px;
+    padding: 5px 8px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    text-align: left;
+    transition: all 0.15s ease;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  :global([data-theme="dark"]) .claim-anchor {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .claim-anchor:hover {
+    background: rgba(2, 132, 199, 0.08);
+    border-color: rgba(2, 132, 199, 0.35);
+  }
+
+  .anchor-pin {
+    font-size: 0.78rem;
+    flex-shrink: 0;
+  }
+
+  .anchor-quote {
+    font-size: 0.76rem;
+    font-style: italic;
+    color: var(--color-slate-light);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .anchor-jump {
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: var(--color-aurora, #0284c7);
+    flex-shrink: 0;
+    letter-spacing: 0.02em;
+  }
+
   .probe-question {
-    font-size: 0.92rem;
+    font-size: 0.9rem;
     line-height: 1.45;
     color: var(--color-heading, var(--color-slate-bright));
     margin-bottom: 12px;
@@ -326,9 +509,9 @@
     display: flex;
     align-items: flex-start;
     gap: 6px;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--color-slate-subtle);
-    margin-bottom: 10px;
+    margin-bottom: 8px;
     line-height: 1.35;
   }
 
@@ -336,7 +519,7 @@
     width: 100%;
     box-sizing: border-box;
     font-family: var(--font-ui, sans-serif);
-    font-size: 0.85rem;
+    font-size: 0.84rem;
     line-height: 1.4;
     padding: 8px 10px;
     border-radius: 6px;
@@ -362,27 +545,27 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-top: 10px;
+    margin-top: 8px;
   }
 
   .btn-respond {
-    background: var(--color-aurora);
+    background: var(--color-aurora, #0284c7);
     color: #ffffff;
     border: none;
     padding: 6px 12px;
     border-radius: 6px;
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
     transition: background 0.15s ease;
   }
 
   .btn-respond:hover:not(:disabled) {
-    background: var(--color-aurora-bright);
+    background: var(--color-aurora-bright, #0369a1);
   }
 
   .btn-respond:disabled {
-    opacity: 0.5;
+    opacity: 0.45;
     cursor: not-allowed;
   }
 
@@ -394,7 +577,7 @@
   .btn-text {
     background: none;
     border: none;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     color: var(--color-slate-subtle);
     cursor: pointer;
     padding: 4px 6px;
@@ -406,27 +589,69 @@
     background: rgba(0, 0, 0, 0.05);
   }
 
+  :global([data-theme="dark"]) .btn-text:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .probe-resolved-box {
     background: rgba(5, 150, 105, 0.08);
     border: 1px solid rgba(5, 150, 105, 0.25);
     border-radius: 6px;
-    padding: 10px;
+    padding: 9px 11px;
   }
 
   .resolved-badge {
     display: flex;
     align-items: center;
     gap: 6px;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     color: var(--color-signal-green-text, #065f46);
-    margin-bottom: 6px;
+    margin-bottom: 4px;
+  }
+
+  :global([data-theme="dark"]) .resolved-badge {
+    color: #34d399;
   }
 
   .resolved-text {
-    font-size: 0.82rem;
+    font-size: 0.8rem;
     font-style: italic;
     color: var(--color-slate-light);
     margin: 0;
+  }
+
+  .probe-deferred-box {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px dashed rgba(245, 158, 11, 0.3);
+    border-radius: 6px;
+    padding: 9px 11px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .deferred-badge {
+    font-size: 0.76rem;
+    color: var(--color-amber, #d97706);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+
+  .btn-resume {
+    background: none;
+    border: 1px solid rgba(245, 158, 11, 0.4);
+    color: var(--color-amber, #d97706);
+    border-radius: 4px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    padding: 3px 8px;
+    cursor: pointer;
+  }
+
+  .btn-resume:hover {
+    background: rgba(245, 158, 11, 0.15);
   }
 
   .empty-gutter-state {
@@ -435,68 +660,14 @@
     background: rgba(0, 0, 0, 0.02);
     border: 1px dashed var(--color-graphite-border);
     border-radius: 8px;
+    margin-top: 12px;
+  }
+
+  :global([data-theme="dark"]) .empty-gutter-state {
+    background: rgba(255, 255, 255, 0.02);
   }
 
   .empty-icon { font-size: 1.8rem; margin-bottom: 8px; }
   .empty-text { font-size: 0.88rem; font-weight: 600; color: var(--color-slate-bright); margin: 0 0 6px 0; }
   .empty-subtext { font-size: 0.78rem; color: var(--color-slate-subtle); line-height: 1.4; display: block; }
-
-  .probe-switcher {
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px solid var(--color-graphite-border);
-  }
-
-  .switcher-label {
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: var(--color-slate-subtle);
-    display: block;
-    margin-bottom: 6px;
-  }
-
-  .switcher-list {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .switcher-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-align: left;
-    background: none;
-    border: 1px solid transparent;
-    padding: 5px 8px;
-    border-radius: 4px;
-    font-size: 0.78rem;
-    color: var(--color-slate-light);
-    cursor: pointer;
-  }
-
-  .switcher-item:hover {
-    background: rgba(0, 0, 0, 0.04);
-    color: var(--color-slate-bright);
-  }
-
-  .switcher-item.active {
-    background: rgba(2, 132, 199, 0.08);
-    border-color: rgba(2, 132, 199, 0.2);
-    color: var(--color-aurora);
-    font-weight: 500;
-  }
-
-  .switcher-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-aurora);
-    flex-shrink: 0;
-  }
-
-  .switcher-dot.responded {
-    background: var(--color-signal-green);
-  }
 </style>
