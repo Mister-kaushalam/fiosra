@@ -79,14 +79,7 @@
     }
   }
 
-  function toggleSocraticDrawer() {
-    if (!isGutterCollapsed && activeGutterTab === 'agent') {
-      isGutterCollapsed = true;
-    } else {
-      activeGutterTab = 'agent';
-      isGutterCollapsed = false;
-    }
-  }
+
 
   let allDocumentBlocks = $derived.by(() => {
     if (liveBlocks && liveBlocks.length > 0) return liveBlocks;
@@ -968,24 +961,6 @@
       </nav>
 
       <div class="topbar-right">
-        <!-- Single entry point for learner-controlled writing help. -->
-        <button 
-          type="button" 
-          class="socratic-enquirer-btn" 
-          class:active={!isGutterCollapsed && activeGutterTab === 'agent'}
-          onclick={toggleSocraticDrawer}
-          title="Open Socratic Copilot (Macro Discussion)"
-          aria-label="Open Socratic Copilot"
-        >
-          <span class="enquirer-icon-wrap">
-            <span class="enquirer-symbol">🤖</span>
-            {#if probes.length > 0 && isGutterCollapsed}
-              <span class="enquirer-pulse-dot"></span>
-            {/if}
-          </span>
-          <span class="enquirer-label">{!isGutterCollapsed && activeGutterTab === 'agent' ? 'Close Copilot' : 'Socratic Copilot'}</span>
-        </button>
-
         <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
       </div>
     </header>
@@ -1859,6 +1834,11 @@
     transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
+  /* Standard sources with gutter collapsed */
+  .in-situ-workbench-grid.gutter-collapsed {
+    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) 44px;
+  }
+
   /* Sources Collapsed (slim 48px sidebar): Canvas is completely visible */
   .in-situ-workbench-grid.sources-collapsed {
     grid-template-columns: 48px minmax(0, 1fr) minmax(320px, 360px);
@@ -1868,18 +1848,18 @@
     grid-template-columns: 48px minmax(0, 1fr) 44px;
   }
 
-  /* Sources Expanded: Doc reader expands to max width, gutter collapses to right */
-  .in-situ-workbench-grid.sources-expanded {
-    grid-template-columns: minmax(0, 1.35fr) minmax(360px, 1fr) 44px;
+  /* Sources Expanded: Doc reader expands fully to the right to reveal full PDF */
+  .in-situ-workbench-grid.sources-expanded,
+  .in-situ-workbench-grid.sources-expanded.gutter-collapsed {
+    grid-template-columns: 1fr 44px;
   }
 
   .in-situ-workbench-grid.sources-expanded.gutter-open {
-    grid-template-columns: minmax(0, 1.15fr) minmax(320px, 1fr) minmax(300px, 340px);
+    grid-template-columns: 1fr minmax(320px, 360px);
   }
 
-  /* Standard sources with gutter collapsed */
-  .in-situ-workbench-grid.gutter-collapsed {
-    grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) 44px;
+  .in-situ-workbench-grid.sources-expanded .workbench-col-canvas {
+    display: none !important;
   }
 
   .workbench-col-sources {
