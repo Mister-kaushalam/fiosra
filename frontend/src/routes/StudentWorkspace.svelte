@@ -905,64 +905,18 @@
   </main>
 {:else}
   <div class="workspace-viewport">
-    <!-- Top Control Bar with Segmented Horizontal Navigation -->
-    <header class="workspace-topbar">
-      <div class="topbar-left">
-        <div class="assignment-headline">
-          <span class="eyebrow">{published?.domain || 'Reasoning Milestone'}</span>
-          <h1>{published?.title || 'Assignment'}</h1>
-        </div>
-      </div>
-
-      <!-- Center: Workspace Horizontal Tabs -->
-      <nav class="workspace-horizontal-tabs" role="tablist" aria-label="Workspace Navigation">
-        <button 
-          type="button"
-          class="tab-btn" 
-          class:active={activeWorkspaceTab === 'canvas'}
-          onclick={() => activeWorkspaceTab = 'canvas'}
-          role="tab"
-          aria-selected={activeWorkspaceTab === 'canvas'}
-        >
-          <span class="tab-icon">✍️</span>
-          <span class="tab-label">Reasoning Canvas</span>
-          <span class="tab-pill canvas-pill">{allDocumentBlocks.length > 0 ? `${allDocumentBlocks.length} blocks` : 'Draft'}</span>
-        </button>
-
-        <button 
-          type="button"
-          class="tab-btn" 
-          class:active={activeWorkspaceTab === 'trace'}
-          onclick={() => activeWorkspaceTab = 'trace'}
-          role="tab"
-          aria-selected={activeWorkspaceTab === 'trace'}
-        >
-          <span class="tab-icon">🎓</span>
-          <span class="tab-label">Engagement Trace</span>
-          {#if probes.length > 0}
-            <span class="tab-pill alert-pill">{probes.length} probes</span>
-          {:else}
-            <span class="tab-pill">Portfolio</span>
-          {/if}
-        </button>
-      </nav>
-
-      <div class="topbar-right">
-        <span class:submitted={sessionStatus !== 'active'} class="session-badge">{sessionStatus}</span>
-      </div>
-    </header>
-
     <!-- Workspace Content Body -->
     <div class="workspace-content-body">
       <!-- ============================================================ -->
       <!-- REASONING CANVAS & INTEGRATED DOC READER (Always preserved)  -->
       <!-- ============================================================ -->
-      <div class="canvas-tab-wrapper" class:tab-hidden={activeWorkspaceTab !== 'canvas'}>
+      <div class="canvas-tab-wrapper">
         <div
           class="in-situ-workbench-grid"
           class:sources-collapsed={isSourcesCollapsed}
           class:sources-expanded={isSourcesExpanded && !isSourcesCollapsed}
           class:gutter-collapsed={isGutterCollapsed}
+          class:gutter-wide={activeGutterTab === 'trace' && !isGutterCollapsed}
           class:gutter-open={!isGutterCollapsed}
         >
           <!-- Zone 1: Primary Source Exhibits / Evidentiary Well -->
@@ -1026,10 +980,11 @@
             {/if}
           </main>
 
-          <!-- Zone 3: Socratic Gutter (Marginalia + Agent Tabs) -->
+          <!-- Zone 3: Socratic Gutter (Marginalia + Agent + Engagement Trace Tabs) -->
           <div
             class="workbench-col-gutter"
             class:collapsed={isGutterCollapsed}
+            class:wide={activeGutterTab === 'trace' && !isGutterCollapsed}
           >
             <RightWorkbenchGutter
               {probes}
@@ -1053,269 +1008,38 @@
               isCollapsed={isGutterCollapsed}
               onToggleCollapse={(val) => isGutterCollapsed = (val !== undefined ? val : !isGutterCollapsed)}
               onSelectTab={(tab) => { activeGutterTab = tab; isGutterCollapsed = false; }}
+              traceProps={{
+                graphMetrics,
+                graphSections,
+                probes,
+                readinessItems,
+                readinessSummary,
+                sessionStatus,
+                submittedRevision,
+                submittedAt,
+                submissionNotice,
+                submissionError,
+                isSubmitting,
+                onSubmitMilestone: submitSession,
+                sessionEvents,
+                sourceLookupResults,
+                sourceActionBusy,
+                sourceReferenceForBlock,
+                openAssignedSource,
+                findAssignedEvidence,
+                useLocatedEvidenceForClaim,
+                onJumpToBlock: (id) => {
+                  if (editorRef?.scrollToBlock) editorRef.scrollToBlock(id);
+                },
+                onExamineProbe: (id) => {
+                  if (editorRef?.expandBlockProbe) editorRef.expandBlockProbe(id);
+                },
+                promptTitle: published?.task?.prompt || published?.title || 'Thesis',
+              }}
             />
           </div>
         </div>
       </div>
-
-      <!-- ============================================================ -->
-      <!-- TAB 3: ENGAGEMENT TRACE & REASONING PORTFOLIO               -->
-      <!-- ============================================================ -->
-      {#if activeWorkspaceTab === 'trace'}
-        <div class="trace-tab-viewport">
-          <div class="trace-dashboard-container">
-            <!-- Top Metric Banner -->
-            <div class="trace-metrics-banner">
-              <div class="trace-stat-tile">
-                <span class="stat-num claims">{graphMetrics.claims}</span>
-                <span class="stat-lbl">Claims Drafted</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num evidence">{graphMetrics.evidence}</span>
-                <span class="stat-lbl">Evidence Grounded</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num warrants">{graphMetrics.warrants}</span>
-                <span class="stat-lbl">Causal Warrants</span>
-              </div>
-              <div class="trace-stat-tile">
-                <span class="stat-num assumptions">{graphMetrics.assumptions}</span>
-                <span class="stat-lbl">Implicit Assumptions</span>
-              </div>
-            </div>
-
-            <!-- Two-Column Trace Grid -->
-            <div class="trace-two-col-grid">
-              <!-- Left Column: Living Reasoning Graph Tree -->
-              <div class="trace-panel-card graph-map-card">
-                <header class="panel-card-header">
-                  <div>
-                    <span class="card-eyebrow">Living Argument Architecture</span>
-                    <h3>Reasoning Graph & Claim Tree</h3>
-                  </div>
-                </header>
-
-                <div class="trace-graph-tree-body">
-                  {#if graphSections.length === 0}
-                    <div class="empty-trace-state">
-                      <p>Start writing in the Reasoning Canvas to see your living argument tree assemble in real time.</p>
-                      <button type="button" class="btn btn-secondary" onclick={() => activeWorkspaceTab = 'canvas'}>
-                        Open Canvas ✍️
-                      </button>
-                    </div>
-                  {:else}
-                    <div class="graph-root-node">
-                      <div class="node-badge-chip root">Central Thesis</div>
-                      <h5>{published?.task?.prompt || published?.title || 'Thesis'}</h5>
-                    </div>
-
-                    {#each graphSections as section, sIdx}
-                      <div class="graph-section-group">
-                        <div class="section-branch-header">
-                          <span class="branch-connector">├─ Section {sIdx + 1}:</span>
-                          <span class="sec-title">{section.heading.text}</span>
-                        </div>
-                        <div class="section-children-tree">
-                          {#each section.blocks as item}
-                            <div class="graph-claim-node {item.semanticType}" class:has-probe={item.hasProbe}>
-                              <div class="claim-node-top">
-                                <span class="claim-badge-icon">{item.icon}</span>
-                                <span class="claim-type-label">{item.label}</span>
-                                {#if item.hasProbe}
-                                  <span class="claim-status-tag probe">◌ Socratic Tension</span>
-                                {:else if item.semanticType === 'evidence'}
-                                  <span class="claim-status-tag grounded">✓ Grounding</span>
-                                {:else if item.hasPremature}
-                                  <span class="claim-status-tag premature">🔴 Premature Leap</span>
-                                {:else if item.semanticType === 'claim'}
-                                  <span class="claim-status-tag ungrounded">? Needs Warrant</span>
-                                {/if}
-                              </div>
-                              <p class="claim-excerpt">"{item.text || 'Untitled block'}"</p>
-                              {#if sourceReferenceForBlock(item.block_id).length}
-                                <div class="claim-source-links" aria-label="Sources linked by the learner">
-                                  {#each sourceReferenceForBlock(item.block_id) as reference}
-                                    <button type="button" onclick={() => openAssignedSource(reference)}>
-                                      ↗ {reference.title}
-                                    </button>
-                                  {/each}
-                                </div>
-                              {/if}
-                              <div class="claim-node-actions">
-                                <button 
-                                  type="button" 
-                                  class="node-jump-btn"
-                                  onclick={() => {
-                                    activeWorkspaceTab = 'canvas';
-                                    setTimeout(() => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(item.block_id); }, 60);
-                                  }}
-                                  title="Jump to this block in canvas"
-                                >
-                                  Jump to Canvas ↗
-                                </button>
-                                <button 
-                                  type="button" 
-                                  class="node-probe-btn"
-                                  onclick={() => {
-                                    activeWorkspaceTab = 'canvas';
-                                    setTimeout(() => { if (editorRef?.expandBlockProbe) editorRef.expandBlockProbe(item.block_id); }, 60);
-                                  }}
-                                  title="Examine Socratic inquiry on this block"
-                                >
-                                  ◌ Examine ⚡
-                                </button>
-                                {#if sessionStatus === 'active'}
-                                  <button
-                                    type="button"
-                                    class="node-source-btn"
-                                    onclick={() => findAssignedEvidence(item.block_id, item.text)}
-                                    disabled={sourceActionBusy}
-                                    title="Find relevant passages from assigned materials"
-                                  >
-                                    Find assigned evidence
-                                  </button>
-                                {/if}
-                              </div>
-                              {#if sourceLookupResults[item.block_id]}
-                                <div class="assigned-evidence-results" role="status">
-                                  <p>{sourceLookupResults[item.block_id].message}</p>
-                                  {#each sourceLookupResults[item.block_id].candidates as candidate}
-                                    <article>
-                                      <strong>{candidate.title}</strong>
-                                      <p>{candidate.excerpt}</p>
-                                      {#if candidate.matched_terms?.length}
-                                        <small>Matched terms: {candidate.matched_terms.join(', ')}</small>
-                                      {/if}
-                                      <div>
-                                        <button type="button" onclick={() => openAssignedSource(candidate)}>Open source</button>
-                                        <button
-                                          type="button"
-                                          onclick={() => useLocatedEvidenceForClaim(candidate, item.block_id)}
-                                          disabled={sourceActionBusy}
-                                        >
-                                          Link beside this claim
-                                        </button>
-                                      </div>
-                                    </article>
-                                  {/each}
-                                </div>
-                              {/if}
-                            </div>
-                          {:else}
-                            <p class="empty-leaf-note">No claims drafted in this section yet.</p>
-                          {/each}
-                        </div>
-                      </div>
-                    {/each}
-                  {/if}
-                </div>
-              </div>
-
-              <!-- Right Column: Socratic Inquiry Dossier & Milestone Submission -->
-              <div class="trace-panel-card trace-dossier-card">
-                <header class="panel-card-header">
-                  <div>
-                    <span class="card-eyebrow">Epistemic Audit & Dossier</span>
-                    <h3>Socratic Inquiries & Justifications</h3>
-                  </div>
-                </header>
-
-                <div class="trace-dossier-body">
-                  <section class="readiness-self-review" aria-label="Rubric-linked self-review">
-                    <div class="readiness-header">
-                      <div>
-                        <span class="card-eyebrow">Before you submit</span>
-                        <h4>Rubric-linked self-review</h4>
-                      </div>
-                      <span>{readinessSummary.met}/{readinessSummary.total} signals present</span>
-                    </div>
-                    <p>This is not a grade. It only shows which public rubric signals are visible in the current saved draft.</p>
-                    <ul>
-                      {#each readinessItems as item}
-                        <li class:met={item.met}>
-                          <span>{item.met ? '✓' : '○'}</span>
-                          <div>
-                            <strong>{item.criterion.title}</strong>
-                            {#if !item.met}<small>{item.nextStep}</small>{/if}
-                          </div>
-                        </li>
-                      {/each}
-                    </ul>
-                  </section>
-
-                  <!-- Milestone Submission Action Tile -->
-                  <div class="milestone-submission-banner">
-                    <div class="submission-meta">
-                      <span class="sub-badge" class:submitted={sessionStatus === 'submitted'}>
-                        {sessionStatus === 'submitted' ? '✓ Submitted for Review' : '● In Progress (Draft)'}
-                      </span>
-                      <h4>Reasoning Milestone Verification</h4>
-                      <p>Once you are satisfied that your claims are grounded with warrants and evidence, submit this session for educator evaluation.</p>
-                    </div>
-                    {#if sessionStatus === 'submitted'}
-                      <div class="submission-complete-pill" role="status">
-                        <span>
-                          Milestone submitted for educator review
-                          {#if submittedRevision !== null} at revision {submittedRevision}{/if}
-                          {#if submittedAt} on {new Date(submittedAt).toLocaleString()}{/if}.
-                        </span>
-                      </div>
-                    {:else}
-                      <div class="submission-action-stack">
-                        {#if submissionNotice}
-                          <p class:submission-error={Boolean(submissionError)} class="submission-status-note" role="status">
-                            {submissionNotice}
-                            {#if submissionError?.correlationId}
-                              <span class="submission-correlation">Support ID: {submissionError.correlationId}</span>
-                            {/if}
-                          </p>
-                        {/if}
-                        <button
-                          type="button"
-                          class="btn-submit-milestone"
-                          onclick={submitSession}
-                          disabled={isSubmitting || sessionStatus !== 'active'}
-                        >
-                          {isSubmitting ? 'Submitting saved revision…' : submissionError?.retryable ? 'Retry Submission' : 'Submit Milestone for Evaluation'}
-                        </button>
-                      </div>
-                    {/if}
-                  </div>
-
-                  <!-- Dossier Events List -->
-                  <h4 class="dossier-section-title">Dialectic Inquiry History ({sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe')).length})</h4>
-                  
-                  <div class="dossier-events-stack">
-                    {#each sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe') || e.event_type === 'milestone_submitted') as evt}
-                      <div class="dossier-event-item">
-                        <div class="event-header-row">
-                          <span class="event-type-pill {evt.event_type}">{evt.event_type.replace(/_/g, ' ')}</span>
-                          <span class="event-time">{evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ''}</span>
-                        </div>
-                        {#if evt.payload?.text}
-                          <p class="event-text"><em>"{evt.payload.text}"</em></p>
-                        {/if}
-                        {#if evt.payload?.response_text}
-                          <div class="event-student-note">
-                            <strong>Student Note:</strong> {evt.payload.response_text}
-                          </div>
-                        {/if}
-                        {#if evt.payload?.move_type}
-                          <span class="event-move-tag">Move: {evt.payload.move_type}</span>
-                        {/if}
-                      </div>
-                    {:else}
-                      <div class="empty-dossier-state">
-                        <p>No Socratic inquiries recorded yet. As you engage with the Oracle and answer probes, your epistemic reasoning history will be collected here.</p>
-                      </div>
-                    {/each}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      {/if}
 
       <!-- Optional Flyout Support Panel (Toggleable from Top Bar) -->
       {#if isTutorPanelOpen}
@@ -1690,6 +1414,19 @@
 
   .in-situ-workbench-grid.sources-expanded.gutter-open {
     grid-template-columns: clamp(620px, 38vw, 740px) minmax(0, 1fr) minmax(320px, 360px);
+  }
+
+  /* Wide gutter mode (for Engagement Trace & Living Argument Tree) */
+  .in-situ-workbench-grid.gutter-wide {
+    grid-template-columns: minmax(320px, 380px) minmax(0, 1fr) minmax(420px, 480px);
+  }
+
+  .in-situ-workbench-grid.sources-collapsed.gutter-wide {
+    grid-template-columns: 48px minmax(0, 1fr) minmax(460px, 560px);
+  }
+
+  .in-situ-workbench-grid.sources-expanded.gutter-wide {
+    grid-template-columns: clamp(620px, 38vw, 740px) minmax(0, 1fr) minmax(420px, 480px);
   }
 
   .workbench-col-sources {

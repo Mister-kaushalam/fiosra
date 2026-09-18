@@ -1,6 +1,7 @@
 <script>
   import SocraticMarginaliaGutter from './SocraticMarginaliaGutter.svelte';
   import SocraticAgentGutter from './SocraticAgentGutter.svelte';
+  import EngagementTraceView from './EngagementTraceView.svelte';
 
   let {
     probes = [],
@@ -24,6 +25,7 @@
     isCollapsed = false,
     onToggleCollapse = () => null,
     onSelectTab = () => null,
+    traceProps = {},
   } = $props();
 
   let activeProbeCount = $derived(
@@ -34,7 +36,7 @@
 <aside
   class="workbench-gutter-container"
   class:collapsed={isCollapsed}
-  aria-label="Socratic Reasoning Gutter"
+  aria-label="Socratic Reasoning Gutter & Engagement Trace"
 >
   {#if isCollapsed}
     <!-- Collapsed vertical strip docked to the right -->
@@ -66,6 +68,17 @@
 
       <button
         type="button"
+        class="collapsed-tab-btn"
+        class:active={activeTab === 'trace'}
+        onclick={() => { onSelectTab('trace'); onToggleCollapse(false); }}
+        title="Open Engagement Trace & Argument Tree"
+        aria-label="Open Engagement Trace & Argument Tree"
+      >
+        <span class="collapsed-tab-icon">🎓</span>
+      </button>
+
+      <button
+        type="button"
         class="btn-expand-gutter"
         onclick={() => onToggleCollapse(false)}
         title="Expand Socratic Gutter"
@@ -85,7 +98,7 @@
       </div>
     </div>
   {:else}
-    <!-- Full Gutter Header with Two Tabs & Collapse Control -->
+    <!-- Full Gutter Header with Three Tabs & Collapse Control -->
     <div class="gutter-tab-header">
       <div class="gutter-tab-nav">
         <button
@@ -108,10 +121,20 @@
           onclick={() => onSelectTab('agent')}
         >
           <span class="tab-icon">🤖</span>
-          <span class="tab-label">Socratic Agent</span>
+          <span class="tab-label">Agent</span>
           {#if currentRung > 0}
             <span class="tab-pill-rung">Rung {currentRung}</span>
           {/if}
+        </button>
+
+        <button
+          type="button"
+          class="gutter-tab-btn"
+          class:active={activeTab === 'trace'}
+          onclick={() => onSelectTab('trace')}
+        >
+          <span class="tab-icon">🎓</span>
+          <span class="tab-label">Trace</span>
         </button>
       </div>
 
@@ -151,6 +174,8 @@
           {onRequestHint}
           isBusy={isAgentBusy}
         />
+      {:else if activeTab === 'trace'}
+        <EngagementTraceView {...traceProps} />
       {/if}
     </div>
   {/if}
