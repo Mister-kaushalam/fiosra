@@ -30,6 +30,7 @@
     onChallengeIdea = async () => null,
     onDrawerStateChange = () => null,
     onPressureChange = () => null,
+    onFocusedBlockChange = () => null,
   } = $props();
 
   const blockTypes = {
@@ -94,6 +95,37 @@
     }
   }
 
+  export function insertEvidenceBlock({ quoteText, sourceTitle = '', author = '', sourceId = '', sourceUrl = '' }) {
+    if (!editor) return;
+    const cleanQuote = (quoteText || '').trim().replace(/^["“']+|["”']+$/g, '');
+    const citation = author && sourceTitle && author !== sourceTitle
+      ? `${author}, ${sourceTitle}`
+      : (sourceTitle || author || 'Primary Source');
+
+    editor.chain().focus().insertContent([
+      {
+        type: 'blockquote',
+        attrs: { semanticType: 'evidence', authorType: 'student', sourceId, sourceUrl },
+        content: [
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', text: `“${cleanQuote}”` }]
+          },
+          {
+            type: 'paragraph',
+            content: [{ type: 'text', marks: [{ type: 'italic' }], text: `— ${citation}` }]
+          }
+        ]
+      },
+      {
+        type: 'paragraph',
+        attrs: { semanticType: 'reasoning', authorType: 'student' },
+        content: []
+      }
+    ]).run();
+    scheduleSync();
+  }
+
   function openGeneralInquiry() {
     const promptText = assignment?.published?.task?.prompt || assignment?.task?.prompt || 'This assignment';
     activeSentence = {
@@ -153,7 +185,7 @@
   let currentPageIndex = $state(1);
   let pagesMap = $state({ 1: [] });
   let totalPages = $derived(Math.max(1, Object.keys(pagesMap).length));
-  let isOutlineOpen = $state(true);
+  let isOutlineOpen = $state(false);
 
   // Canvas Width / Zoom State (narrow | wide | max) - strictly preserves A4 aspect ratio (210/297)
   let canvasWidthMode = $state(
@@ -597,7 +629,7 @@
                         Decoration.inline(s.from, s.to, {
                           class: `epistemic-sentence ${s.epistemic_type} ${isActive ? 'is-active-sentence' : ''}`,
                           'data-epistemic-type': s.epistemic_type,
-                          title: `${EPISTEMIC_CONFIG[s.epistemic_type]?.label || s.epistemic_type}: Click to engage Socratic Oracle`,
+                          title: `${EPISTEMIC_CONFIG[s.epistemic_type]?.label || s.epistemic_type}`,
                         })
                       );
                     }
@@ -609,10 +641,15 @@
             handleClick(view, pos, event) {
               const target = event.target.closest('.epistemic-sentence');
               if (target) {
-                const text = target.textContent.trim();
-                const classification = sentenceMap[text] || localSentenceClassify(text);
-                openSentenceChat({ text, ...classification }, target);
-                return true;
+                const blockEl = target.closest('[data-block-id]');
+                if (blockEl && onFocusedBlockChange) {
+                  const blockId = blockEl.getAttribute('data-block-id');
+                  onFocusedBlockChange({
+                    blockId,
+                    offsetTop: blockEl.offsetTop,
+                  });
+                }
+                return false; // Allow standard cursor positioning
               }
               return false;
             },
@@ -783,14 +820,14 @@
     const blockEl = editorElement.querySelector(`[data-block-id="${blockId}"]`);
     if (blockEl) {
       blockEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      const sentenceEl = blockEl.querySelector('.epistemic-sentence') || blockEl;
-      const text = (sentenceEl.textContent || blockEl.textContent || '').trim();
-      const classification = sentenceMap[text] || {
-        epistemic_type: 'claim',
-        oracle_probe: 'What foundational evidence grounds this claim?',
-        socratic_moves: ['Cite source evidence', 'State causal mechanism', 'Identify counter-thesis'],
-      };
-      openSentenceChat({ text, ...classification }, sentenceEl);
+      blockEl.classList.add('sentence-pulse-highlight');
+      setTimeout(() => blockEl.classList.remove('sentence-pulse-highlight'), 1800);
+      if (onFocusedBlockChange) {
+        onFocusedBlockChange({
+          blockId,
+          offsetTop: blockEl.offsetTop,
+        });
+      }
     }
   }
 
@@ -1565,6 +1602,29 @@
         editorState = { editor };
         extractHeadings();
       },
+      onSelectionUpdate: ({ editor: ed }) => {
+        if (!ed || !editorElement) return;
+        const { from } = ed.state.selection;
+        const resolved = ed.state.doc.resolve(from);
+        const blockNode = resolved.node(1);
+        if (blockNode) {
+          const blockId = blockNode.attrs?.blockId || null;
+          const semanticType = blockNode.attrs?.semanticType || blockNode.type.name;
+          const text = blockNode.textContent || '';
+          let offsetTop = 0;
+          try {
+            const domPos = ed.view.nodeDOM(resolved.before(1));
+            if (domPos && domPos.getBoundingClientRect && editorElement) {
+              const editorRect = editorElement.getBoundingClientRect();
+              const blockRect = domPos.getBoundingClientRect();
+              offsetTop = Math.max(0, blockRect.top - editorRect.top);
+            }
+          } catch (err) {
+            // Ignore DOM measurement errors during rapid edits
+          }
+          onFocusedBlockChange?.({ blockId, semanticType, text, offsetTop });
+        }
+      },
     });
     editorState = { editor };
     if (learningDocument) initialiseEditor(learningDocument);
@@ -1918,8 +1978,8 @@
     </section>
   </main>
 
-  <!-- Assistant drawer pushes the editor left. -->
-  {#if activeSentence}
+  <!-- Assistant drawer replaced by Zone 3 Socratic Marginalia Gutter & Top Bar Copilot -->
+  {#if false && activeSentence}
     <aside class="socratic-chat-drawer" aria-label="Writing help">
       <div class="drawer-header">
         <div class="drawer-header-title">
@@ -3055,19 +3115,23 @@
   }
 
   /* -------------------------------------------------------------
-     Socratic Oracle Dialectic Chat Drawer
+     Socratic Oracle Dialectic Chat Drawer (Overlay Drawer)
      ------------------------------------------------------------- */
   .socratic-chat-drawer {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
     width: 440px;
-    min-width: 400px;
-    max-width: 480px;
+    min-width: 380px;
+    max-width: 90vw;
     height: 100%;
     background: var(--color-graphite, #ffffff);
     border-left: 1px solid var(--color-graphite-border, rgba(0, 0, 0, 0.08));
     display: flex;
     flex-direction: column;
-    z-index: 25;
-    box-shadow: -4px 0 24px rgba(0, 0, 0, 0.08);
+    z-index: 50;
+    box-shadow: -8px 0 28px rgba(0, 0, 0, 0.12);
     animation: slideInRight 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 

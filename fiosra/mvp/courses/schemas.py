@@ -57,6 +57,7 @@ class SyllabusChunkResponse(BaseModel):
     chunk_id: UUID
     course_id: UUID
     module_id: UUID | None = None
+    document_id: UUID | None = None
     title: str | None = None
     content: str
     kc_id: str | None = None
@@ -64,6 +65,23 @@ class SyllabusChunkResponse(BaseModel):
     source_url: str | None = None
     created_at: datetime
     similarity: float | None = None
+
+
+class CourseDocumentResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    document_id: UUID
+    course_id: UUID
+    module_id: UUID | None = None
+    title: str
+    filename: str
+    file_size: int
+    mime_type: str
+    resource_type: str = "pdf"
+    source_url: str | None = None
+    download_url: str
+    chunks_count: int = 0
+    created_at: datetime
 
 
 class ResourceCreateRequest(BaseModel):

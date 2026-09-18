@@ -145,7 +145,7 @@
       {#if parsed.isStudentView}
         <span class="context-badge student">STUDENT</span>
       {:else}
-        <span class="context-badge">LMS</span>
+        <span class="context-badge">EDUCATOR</span>
       {/if}
 
       {#if activeCourseLabel && !parsed.isGlobalView && !parsed.isStudentGlobal}
@@ -276,8 +276,13 @@
     </button>
 
     {#if parsed.isStudentView}
-      <a href="#/modules{parsed.courseQuery}" class="role-switch-btn" title="Switch to Educator LMS">
-        <span>Educator LMS</span>
+      <a
+        href="#/courses"
+        class="role-switch-btn"
+        title="Switch to Educator View (Portfolio)"
+        onclick={(e) => { e.preventDefault(); navigateTo('/courses'); }}
+      >
+        <span>Educator View</span>
         <span class="switch-icon">↗</span>
       </a>
       <div class="user-chip" title="Active Student Session: Julian Hayes">
@@ -285,7 +290,12 @@
         <span class="user-name">Julian Hayes</span>
       </div>
     {:else}
-      <a href="#/student/portal" class="role-switch-btn" title="Preview as Student">
+      <a
+        href="#/student/portal"
+        class="role-switch-btn"
+        title="Preview as Student"
+        onclick={(e) => { e.preventDefault(); navigateTo('/student/portal'); }}
+      >
         <span>Student View</span>
         <span class="switch-icon">↗</span>
       </a>

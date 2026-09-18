@@ -495,14 +495,179 @@ class CourseService:
     async def delete_course(cls, course_id: UUID | str) -> bool:
         """
         Completely deletes a course workspace and all associated records:
-        1. PostgreSQL: deletes assignments for course modules, then deletes course record
-           (which cascades to modules, syllabus_chunks, enrollments).
+        1. PostgreSQL: deletes dependent session records, canvas drafts, documents,
+           student sessions, assignments, and the course record (which cascades to
+           modules, syllabus_chunks, course_documents, enrollments).
         2. Neo4j: detaches and deletes all nodes linked by course_id.
+        3. Storage: removes course source files from disk.
         """
         from fiosra.mvp.neo4j_client import neo4j_client
+        from fiosra.mvp.storage import document_storage
 
         c_id = str(course_id)
         async with AsyncSessionLocal() as session:
+            # Query stored file paths for disk cleanup
+            docs_res = await session.execute(
+                text("SELECT file_path FROM course_documents WHERE course_id = CAST(:course_id AS UUID)"),
+                {"course_id": c_id},
+            )
+            file_paths = [r[0] for r in docs_res.fetchall() if r[0]]
+
+            # 1. Claim links
+            await session.execute(
+                text("""
+                    DELETE FROM learning_document_source_claim_links
+                    WHERE reference_id IN (
+                        SELECT r.reference_id FROM learning_document_source_references r
+                        JOIN learning_documents d ON r.document_id = d.document_id
+                        JOIN assignments a ON d.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 2. Source references
+            await session.execute(
+                text("""
+                    DELETE FROM learning_document_source_references
+                    WHERE document_id IN (
+                        SELECT d.document_id FROM learning_documents d
+                        JOIN assignments a ON d.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 3. Socratic probe responses
+            await session.execute(
+                text("""
+                    DELETE FROM socratic_probe_responses
+                    WHERE probe_id IN (
+                        SELECT p.probe_id FROM socratic_probes p
+                        JOIN student_sessions s ON p.session_id = s.session_id
+                        JOIN assignments a ON s.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 4. Socratic probes
+            await session.execute(
+                text("""
+                    DELETE FROM socratic_probes
+                    WHERE session_id IN (
+                        SELECT s.session_id FROM student_sessions s
+                        JOIN assignments a ON s.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 5. Session submissions
+            await session.execute(
+                text("""
+                    DELETE FROM student_session_submissions
+                    WHERE session_id IN (
+                        SELECT s.session_id FROM student_sessions s
+                        JOIN assignments a ON s.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 6. Document blocks
+            await session.execute(
+                text("""
+                    DELETE FROM learning_document_blocks
+                    WHERE document_id IN (
+                        SELECT d.document_id FROM learning_documents d
+                        JOIN assignments a ON d.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 7. Learning documents
+            await session.execute(
+                text("""
+                    DELETE FROM learning_documents
+                    WHERE assignment_id IN (
+                        SELECT a.assignment_id FROM assignments a
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 8. Canvas drafts
+            await session.execute(
+                text("""
+                    DELETE FROM canvas_section_drafts
+                    WHERE session_id IN (
+                        SELECT s.session_id FROM student_sessions s
+                        JOIN assignments a ON s.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 9. Canvas suggestions
+            await session.execute(
+                text("""
+                    DELETE FROM canvas_suggestions
+                    WHERE session_id IN (
+                        SELECT s.session_id FROM student_sessions s
+                        JOIN assignments a ON s.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 10. Session events
+            await session.execute(
+                text("""
+                    DELETE FROM session_events
+                    WHERE session_id IN (
+                        SELECT s.session_id FROM student_sessions s
+                        JOIN assignments a ON s.assignment_id = a.assignment_id
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 11. Student sessions
+            await session.execute(
+                text("""
+                    DELETE FROM student_sessions
+                    WHERE assignment_id IN (
+                        SELECT a.assignment_id FROM assignments a
+                        JOIN modules m ON a.module_id = m.module_id
+                        WHERE m.course_id = CAST(:course_id AS UUID)
+                    )
+                """),
+                {"course_id": c_id},
+            )
+
+            # 12. Assignments
             await session.execute(
                 text("""
                     DELETE FROM assignments 
@@ -510,12 +675,25 @@ class CourseService:
                 """),
                 {"course_id": c_id},
             )
+
+            # 13. Courses (cascades to modules, syllabus_chunks, course_documents, enrollments)
             result = await session.execute(
                 text("DELETE FROM courses WHERE course_id = CAST(:course_id AS UUID)"),
                 {"course_id": c_id},
             )
             await session.commit()
             deleted = result.rowcount > 0
+
+        # Remove stored files from disk
+        for fp in file_paths:
+            try:
+                document_storage.delete_file(fp)
+            except Exception as e:
+                logger.warning("Failed to delete course file %s: %s", fp, e)
+        try:
+            document_storage.delete_course_documents(c_id)
+        except Exception as e:
+            logger.warning("Failed to remove course directory: %s", e)
 
         try:
             async with neo4j_client.get_session() as graph_session:

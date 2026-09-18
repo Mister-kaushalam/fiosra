@@ -14,11 +14,12 @@ import httpx
 from neo4j.exceptions import Neo4jError
 from sqlalchemy import text
 
-from fiosra.mvp.courses.schemas import SyllabusChunkResponse
+from fiosra.mvp.courses.schemas import CourseDocumentResponse, SyllabusChunkResponse
 from fiosra.mvp.courses.source_queries import CANONICAL_CHUNKS
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.graph_service import graph_service
 from fiosra.mvp.seed_pipeline import generate_deterministic_embedding
+from fiosra.mvp.storage import document_storage
 
 logger = logging.getLogger(__name__)
 
@@ -237,6 +238,162 @@ class SyllabusParser:
         return best_kc if best_score > 0 else None
 
     @classmethod
+    async def create_course_document(
+        cls,
+        course_id: UUID | str,
+        title: str,
+        filename: str,
+        content: bytes,
+        module_id: UUID | str | None = None,
+        resource_type: str = "pdf",
+        mime_type: str = "application/pdf",
+        source_url: str | None = None,
+    ) -> CourseDocumentResponse:
+        """Saves raw file bytes into local storage and registers CourseDocument record."""
+        document_id = uuid.uuid4()
+        rel_path, file_size = document_storage.save_document(
+            course_id=course_id,
+            document_id=document_id,
+            filename=filename,
+            content=content,
+        )
+        insert_sql = text("""
+            INSERT INTO course_documents (
+                document_id, course_id, module_id, title, filename, file_path, file_size,
+                mime_type, resource_type, source_url, created_at
+            ) VALUES (
+                :document_id, :course_id, :module_id, :title, :filename, :file_path, :file_size,
+                :mime_type, :resource_type, :source_url, NOW()
+            )
+            RETURNING document_id, course_id, module_id, title, filename, file_path, file_size,
+                      mime_type, resource_type, source_url, created_at;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                insert_sql,
+                {
+                    "document_id": document_id,
+                    "course_id": str(course_id),
+                    "module_id": str(module_id) if module_id else None,
+                    "title": title,
+                    "filename": filename,
+                    "file_path": rel_path,
+                    "file_size": file_size,
+                    "mime_type": mime_type,
+                    "resource_type": resource_type,
+                    "source_url": source_url,
+                },
+            )
+            row = result.mappings().first()
+            await session.commit()
+
+        return CourseDocumentResponse(
+            document_id=row["document_id"],
+            course_id=row["course_id"],
+            module_id=row["module_id"],
+            title=row["title"],
+            filename=row["filename"],
+            file_size=row["file_size"],
+            mime_type=row["mime_type"],
+            resource_type=row["resource_type"],
+            source_url=row["source_url"],
+            download_url=f"/courses/{course_id}/documents/{document_id}/file",
+            chunks_count=0,
+            created_at=row["created_at"],
+        )
+
+    @classmethod
+    async def list_documents(
+        cls,
+        course_id: UUID | str,
+        module_id: UUID | str | None = None,
+    ) -> list[CourseDocumentResponse]:
+        """Lists all grounded course documents with their chunk counts and download links."""
+        query_sql = text("""
+            SELECT d.document_id, d.course_id, d.module_id, d.title, d.filename, d.file_path, d.file_size,
+                   d.mime_type, d.resource_type, d.source_url, d.created_at,
+                   COUNT(c.chunk_id) AS chunks_count
+            FROM course_documents d
+            LEFT JOIN syllabus_chunks c ON d.document_id = c.document_id
+            WHERE d.course_id = CAST(:course_id AS UUID)
+              AND (CAST(:module_id AS UUID) IS NULL OR d.module_id = CAST(:module_id AS UUID))
+            GROUP BY d.document_id, d.course_id, d.module_id, d.title, d.filename, d.file_path, d.file_size,
+                     d.mime_type, d.resource_type, d.source_url, d.created_at
+            ORDER BY d.created_at DESC;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                query_sql,
+                {
+                    "course_id": str(course_id),
+                    "module_id": str(module_id) if module_id else None,
+                },
+            )
+            rows = result.mappings().all()
+
+        return [
+            CourseDocumentResponse(
+                document_id=r["document_id"],
+                course_id=r["course_id"],
+                module_id=r["module_id"],
+                title=r["title"],
+                filename=r["filename"],
+                file_size=r["file_size"],
+                mime_type=r["mime_type"],
+                resource_type=r["resource_type"],
+                source_url=r["source_url"],
+                download_url=f"/courses/{course_id}/documents/{r['document_id']}/file",
+                chunks_count=int(r["chunks_count"] or 0),
+                created_at=r["created_at"],
+            )
+            for r in rows
+        ]
+
+    @classmethod
+    async def get_document(
+        cls,
+        course_id: UUID | str,
+        document_id: UUID | str,
+    ) -> dict | None:
+        """Retrieves single CourseDocument by ID."""
+        query_sql = text("""
+            SELECT document_id, course_id, module_id, title, filename, file_path, file_size,
+                   mime_type, resource_type, source_url, created_at
+            FROM course_documents
+            WHERE course_id = CAST(:course_id AS UUID) AND document_id = CAST(:document_id AS UUID);
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                query_sql,
+                {"course_id": str(course_id), "document_id": str(document_id)},
+            )
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    @classmethod
+    async def delete_document(
+        cls,
+        course_id: UUID | str,
+        document_id: UUID | str,
+    ) -> bool:
+        """Deletes raw document file from storage and database (cascades chunks)."""
+        doc = await cls.get_document(course_id, document_id)
+        if not doc:
+            return False
+        document_storage.delete_document(doc["file_path"])
+        delete_sql = text("""
+            DELETE FROM course_documents
+            WHERE course_id = CAST(:course_id AS UUID) AND document_id = CAST(:document_id AS UUID);
+        """)
+        async with AsyncSessionLocal() as session:
+            await session.execute(
+                delete_sql,
+                {"course_id": str(course_id), "document_id": str(document_id)},
+            )
+            await session.commit()
+        return True
+
+    @classmethod
     async def ingest_syllabus(
         cls,
         course_id: UUID | str,
@@ -247,6 +404,7 @@ class SyllabusParser:
         is_pdf: bool = False,
         resource_type: str = "document",
         source_url: str | None = None,
+        document_id: UUID | str | None = None,
     ) -> list[SyllabusChunkResponse]:
         """
         Parses, chunks, embeds, grounds, and stores syllabus chunks in PostgreSQL with pgvector.
@@ -258,11 +416,11 @@ class SyllabusParser:
 
         insert_sql = text("""
             INSERT INTO syllabus_chunks (
-                chunk_id, course_id, module_id, title, content, kc_id, embedding, resource_type, source_url, created_at
+                chunk_id, course_id, module_id, document_id, title, content, kc_id, embedding, resource_type, source_url, created_at
             ) VALUES (
-                :chunk_id, :course_id, :module_id, :title, :content, :kc_id, :embedding, :resource_type, :source_url, NOW()
+                :chunk_id, :course_id, :module_id, :document_id, :title, :content, :kc_id, :embedding, :resource_type, :source_url, NOW()
             )
-            RETURNING chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at;
+            RETURNING chunk_id, course_id, module_id, document_id, title, content, kc_id, resource_type, source_url, created_at;
         """)
 
         async with AsyncSessionLocal() as session:
@@ -271,7 +429,7 @@ class SyllabusParser:
                 {'key': f'{course_id}|{module_id}|{title}|{resource_type}|{source_url}'})
             for item in raw_chunks:
                 existing = await session.execute(text("""
-                    SELECT chunk_id, course_id, module_id, title, content, kc_id,
+                    SELECT chunk_id, course_id, module_id, document_id, title, content, kc_id,
                            resource_type, source_url, created_at
                     FROM syllabus_chunks
                     WHERE course_id=:course_id AND module_id IS NOT DISTINCT FROM CAST(:module_id AS UUID)
@@ -297,6 +455,7 @@ class SyllabusParser:
                         "chunk_id": chunk_id,
                         "course_id": str(course_id),
                         "module_id": str(module_id) if module_id else None,
+                        "document_id": str(document_id) if document_id else None,
                         "title": c_title,
                         "content": c_text,
                         "kc_id": kc_id,
@@ -312,6 +471,7 @@ class SyllabusParser:
                             chunk_id=row["chunk_id"],
                             course_id=row["course_id"],
                             module_id=row["module_id"],
+                            document_id=row.get("document_id"),
                             title=row["title"],
                             content=row["content"],
                             kc_id=row["kc_id"],
@@ -342,7 +502,7 @@ class SyllabusParser:
         query_vector = generate_deterministic_embedding(query)
 
         query_sql = text(f"""
-            SELECT chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at,
+            SELECT chunk_id, course_id, module_id, document_id, title, content, kc_id, resource_type, source_url, created_at,
                    1.0 - (embedding <=> CAST(:query_vec AS vector)) AS similarity
             FROM {CANONICAL_CHUNKS}
             WHERE course_id = :course_id
@@ -368,6 +528,7 @@ class SyllabusParser:
                 chunk_id=r["chunk_id"],
                 course_id=r["course_id"],
                 module_id=r["module_id"],
+                document_id=r.get("document_id"),
                 title=r["title"],
                 content=r["content"],
                 kc_id=r["kc_id"],
@@ -389,7 +550,7 @@ class SyllabusParser:
         Lists all ingested syllabus and primary source reading chunks for a course.
         """
         query_sql = text(f"""
-            SELECT chunk_id, course_id, module_id, title, content, kc_id, resource_type, source_url, created_at
+            SELECT chunk_id, course_id, module_id, document_id, title, content, kc_id, resource_type, source_url, created_at
             FROM {CANONICAL_CHUNKS}
             WHERE course_id = :course_id
               AND (CAST(:module_id AS UUID) IS NULL OR module_id = CAST(:module_id AS UUID))
@@ -411,6 +572,7 @@ class SyllabusParser:
                 chunk_id=r["chunk_id"],
                 course_id=r["course_id"],
                 module_id=r["module_id"],
+                document_id=r.get("document_id"),
                 title=r["title"],
                 content=r["content"],
                 kc_id=r["kc_id"],

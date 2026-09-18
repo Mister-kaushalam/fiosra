@@ -134,3 +134,12 @@ class ConceptGraphProposalApprovalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     proposal: ConceptGraphProposal
+
+
+class ConceptGraphHydrateRequest(BaseModel):
+    """Teacher request to hydrate curriculum concept graph for a module or whole course."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    module_id: str | None = Field(default=None, max_length=96)
+    instruction: str | None = Field(default=None, max_length=1200)

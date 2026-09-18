@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     NEO4J_USER: str = "neo4j"
     NEO4J_PASSWORD: str = "fiosra_neo4j_password"
 
+    # Local document and asset storage directory
+    STORAGE_DIR: str = "storage"
+
 
     # Live language-model provider. "deterministic" is deliberately the default so
     # the core teaching workflow works with no external service or secret.

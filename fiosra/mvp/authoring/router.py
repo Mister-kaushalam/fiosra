@@ -15,6 +15,8 @@ from fiosra.mvp.authoring.schemas import (
     CourseDraftSpec,
     PublishAssignmentDraftRequest,
     PublishCourseDraftRequest,
+    RubricSynthesisRequest,
+    RubricSynthesisResponse,
 )
 from fiosra.mvp.authoring.service import (
     assignment_authoring_service,
@@ -100,6 +102,23 @@ async def propose_assignment(payload: AssignmentDraftRequest) -> AssignmentDraft
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Assignment proposal generation failed: {e!s}",
+        )
+
+
+@router.post(
+    "/assignments/synthesize-rubric",
+    response_model=RubricSynthesisResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Synthesize domain- and topic-grounded rubric criteria with 3-level performance descriptors",
+)
+async def synthesize_rubric(payload: RubricSynthesisRequest) -> RubricSynthesisResponse:
+    try:
+        return await assignment_authoring_service.synthesize_assignment_rubric(payload)
+    except Exception as e:
+        logger.exception("Failed to synthesize assignment rubric")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Rubric synthesis failed: {e!s}",
         )
 
 

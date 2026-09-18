@@ -19,9 +19,10 @@
   let assistantOpen = $state(false);
 
   const routes = {
-    '/': Modules,
-    '/modules': Modules,
+    '/': Courses,
+    '/portfolio': Courses,
     '/courses': Courses,
+    '/modules': Modules,
     '/knowledge-graph': KnowledgeGraph,
     '/concept-graph': KnowledgeGraph,
     '/graph': KnowledgeGraph,
@@ -34,7 +35,7 @@
     '/student/sources': StudentSources,
     '/student/timeline': StudentTimeline,
     '/student/trace': StudentTrace,
-    '*': Modules,
+    '*': Courses,
   };
 </script>
 
