@@ -15,7 +15,7 @@ SessionToken = Annotated[str | None, Header(alias="X-Fiosra-Session-Token")]
 class DialogueMessageRequest(BaseModel):
     session_id: UUID = Field(..., description="Active session ID")
     student_id: str = Field(..., description="Student ID")
-    question_id: str = Field(default="q1", description="Current question ID")
+    question_id: str | None = Field(default=None, description="Current question ID")
     student_input: str = Field(..., min_length=1, max_length=12000, description="Student reasoning attempt")
     question_prompt: str = Field(..., min_length=3, description="Original question prompt")
     domain: str = Field(default="history", description="Curriculum domain")
@@ -38,6 +38,9 @@ class DialogueMessageResponse(BaseModel):
     is_adversarial: bool
     matched_misconception_id: str | None = None
     generation_metadata: dict[str, Any] | None = None
+    action_capsules: list[dict[str, Any]] | None = None
+    prompt_launchers: list[dict[str, Any]] | None = None
+    learner_radar: dict[str, Any] | None = None
 
 
 @router.post("/message", response_model=DialogueMessageResponse)
@@ -58,8 +61,12 @@ async def handle_dialogue_turn(
         raise HTTPException(status_code=409, detail="This session is no longer accepting student responses.")
     if request.student_id != session_info["student_id"]:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Student identity does not match this session.")
-    if request.question_id != session_info["current_question_id"]:
-        raise HTTPException(status_code=409, detail="Question context does not match the active session.")
+    
+    authoritative_question_id = session_info.get("current_question_id") or "q1"
+    if request.question_id and request.question_id not in (authoritative_question_id, "q1"):
+        if request.question_id.lower() != authoritative_question_id.lower():
+            raise HTTPException(status_code=409, detail="Question context does not match the active session.")
+    active_question_id = authoritative_question_id
 
     authoritative_assignment_id = session_info.get("assignment_id")
     assignment_context = None
@@ -93,7 +100,7 @@ async def handle_dialogue_turn(
     await event_store.log_event(
         session_id=request.session_id,
         student_id=request.student_id,
-        question_id=request.question_id,
+        question_id=active_question_id,
         event_type="student_prompt_submitted",
         payload={"student_input": request.student_input, "hint_requested": request.hint_requested},
         assignment_id=request.assignment_id or session_info.get("assignment_id"),
@@ -123,6 +130,27 @@ async def handle_dialogue_turn(
     else:
         event_type = "tutor_turn_completed"
 
+    # Attach Epistemic Action Capsules & Progress Radar to turn
+    try:
+        from fiosra.mvp.agents.socratic_tutor_agent import SocraticTutorAgent
+        tutor_agent = SocraticTutorAgent()
+        toulmin_data = tutor_agent.decompose_toulmin({
+            "focused_block_text": request.student_input,
+            "student_input": request.student_input,
+        })
+        packed = tutor_agent.pack_epistemic_actions({
+            "focused_block_id": "current-block",
+            "toulmin_structure": toulmin_data.get("toulmin_structure"),
+            "final_verified_response": result["response_text"],
+        })
+        result["action_capsules"] = packed.get("action_capsules", [])
+        result["prompt_launchers"] = packed.get("prompt_launchers", [])
+        result["learner_radar"] = packed.get("learner_radar", {})
+    except Exception:
+        result["action_capsules"] = []
+        result["prompt_launchers"] = []
+        result["learner_radar"] = None
+
     event_payload = {
         "response_text": result["response_text"],
         "thoughts_of_tutorbot": result["thoughts_of_tutorbot"],
@@ -132,11 +160,13 @@ async def handle_dialogue_turn(
         "matched_misconception_id": result.get("matched_misconception_id"),
         "probe_id": result.get("matched_probe_id"),
         "generation_metadata": result.get("generation_metadata"),
+        "action_capsules": result.get("action_capsules"),
+        "learner_radar": result.get("learner_radar"),
     }
     await event_store.log_event(
         session_id=request.session_id,
         student_id=request.student_id,
-        question_id=request.question_id,
+        question_id=active_question_id,
         event_type=event_type,
         payload=event_payload,
         assignment_id=request.assignment_id or session_info.get("assignment_id"),
@@ -145,7 +175,7 @@ async def handle_dialogue_turn(
         await event_store.log_event(
             session_id=request.session_id,
             student_id=request.student_id,
-            question_id=request.question_id,
+            question_id=active_question_id,
             event_type="misconception_flagged",
             payload={
                 "code": result["matched_misconception_id"],

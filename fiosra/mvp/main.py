@@ -177,18 +177,22 @@ app.add_middleware(
 )
 
 
-# Include Routers
-app.include_router(knowledge_router)
-app.include_router(events_router)
-app.include_router(learning_canvas_router)
-app.include_router(learning_document_router)
-app.include_router(socratic_probe_router)
-app.include_router(dialogue_router)
-app.include_router(evidence_router)
-app.include_router(assignment_router)
-app.include_router(courses_router)
-app.include_router(concept_graph_router)
-app.include_router(authoring_router)
+# Include Routers with standard routes and /api aliases
+for router_instance in [
+    knowledge_router,
+    events_router,
+    learning_canvas_router,
+    learning_document_router,
+    socratic_probe_router,
+    dialogue_router,
+    evidence_router,
+    assignment_router,
+    courses_router,
+    concept_graph_router,
+    authoring_router,
+]:
+    app.include_router(router_instance)
+    app.include_router(router_instance, prefix="/api")
 
 # Mount Static UI Frontend (Svelte production build or legacy fallback)
 DIST_DIR = Path(__file__).resolve().parent.parent.parent / "ui-ux" / "frontend-dist"
@@ -208,3 +212,9 @@ async def root_redirect() -> RedirectResponse:
 async def health_check() -> dict[str, str]:
     """Basic health check endpoint."""
     return {"status": "ok", "app": settings.APP_NAME}
+
+
+@app.get("/health", tags=["System"], include_in_schema=False)
+async def health_check_alias() -> dict[str, str]:
+    """Alias for /healthz to satisfy standard system health probes."""
+    return await health_check()

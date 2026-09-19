@@ -203,3 +203,64 @@ async def test_socratic_graph_state_persistence_across_turns(mock_mcp_client):
     assert state_after_turn2["penalty_score"] == 0.25
     # The student_id and question_id should have persisted in thread
     assert state_after_turn2["student_id"] == "student-delta"
+
+
+@pytest.mark.asyncio
+async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_client):
+    """
+    Tests the 8-node LangGraph pipeline consuming the Pentagonal Context:
+    co-presence ingestion, Toulmin decomposition, cognitive work allocation,
+    and action packing into Action Capsules and Seminar Starters.
+    """
+    tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
+    critic = AnswerIsolationCriticAgent()
+    checkpointer = MemorySaver()
+    graph = create_socratic_tutor_graph(tutor_agent=tutor, critic_agent=critic, checkpointer=checkpointer)
+
+    initial_state: TutorSessionState = {
+        "session_id": "sess-pentagon-1",
+        "student_id": "student-epsilon",
+        "question_id": "q-pentagon",
+        "canvas_blocks": [
+            {
+                "id": "block-para-1",
+                "text": "The royal bankruptcy occurred because of the American War debt according to Necker's account.",
+            }
+        ],
+        "focused_block_id": "block-para-1",
+        "student_input": "Why did the crown go bankrupt in 1788?",
+        "open_exhibit_id": "doc-necker-budget",
+        "open_exhibit_page": 12,
+        "current_rung": 0,
+        "hint_requested": False,
+        "verification_attempts": 0,
+    }
+
+    config = {"configurable": {"thread_id": "sess-pentagon-1"}}
+    final_state = await graph.ainvoke(initial_state, config=config)
+
+    # 1. Verify Co-presence Ingestion
+    assert final_state["focused_block_id"] == "block-para-1"
+    assert "American War debt" in final_state["focused_block_text"]
+
+    # 2. Verify Toulmin Decomposition
+    toulmin = final_state.get("toulmin_structure", {})
+    assert toulmin.get("has_warrant") is True
+    assert toulmin.get("has_evidence") is True
+    assert toulmin.get("stance") == "Grounded"
+
+    # 3. Verify Cognitive Work Allocation
+    assert "intellectual_operation" in final_state
+
+    # 4. Verify Epistemic Action Packing
+    capsules = final_state.get("action_capsules", [])
+    assert len(capsules) > 0
+    assert capsules[0]["target_block_id"] == "block-para-1"
+    assert capsules[0]["provenance"] == "action_capsule"
+
+    launchers = final_state.get("prompt_launchers", [])
+    assert len(launchers) >= 2
+
+    radar = final_state.get("learner_radar", {})
+    assert "stance" in radar
+    assert "Causal Grounding" in radar.get("dimension", "")

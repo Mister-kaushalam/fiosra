@@ -22,6 +22,7 @@
     onJumpToBlock = () => null,
     onExamineProbe = () => null,
     promptTitle = '',
+    cognitivePivots = [],
   } = $props();
 
   let activeTraceSubTab = $state('tree'); // 'tree' | 'dossier'
@@ -125,27 +126,31 @@
                         </div>
                       {/if}
 
-                      <div class="claim-node-actions">
+                      <div class="scholastic-node-nav">
                         <button 
                           type="button" 
-                          class="node-jump-btn"
+                          class="scholastic-nav-link jump"
                           onclick={() => onJumpToBlock(item.block_id)}
                           title="Jump to this block in canvas"
                         >
-                          Jump ↗
+                          Jump to draft ↗
                         </button>
-                        <button 
-                          type="button" 
-                          class="node-probe-btn"
-                          onclick={() => onExamineProbe(item.block_id)}
-                          title="Examine Socratic inquiry on this block"
-                        >
-                          ◌ Examine ⚡
-                        </button>
+                        {#if item.hasProbe}
+                          <span class="nav-sep">·</span>
+                          <button 
+                            type="button" 
+                            class="scholastic-nav-link probe"
+                            onclick={() => onExamineProbe(item.block_id)}
+                            title="Examine Socratic inquiry on this block"
+                          >
+                            Examine inquiry ⚡
+                          </button>
+                        {/if}
                         {#if sessionStatus === 'active'}
+                          <span class="nav-sep">·</span>
                           <button
                             type="button"
-                            class="node-source-btn"
+                            class="scholastic-nav-link evidence"
                             onclick={() => findAssignedEvidence(item.block_id, item.text)}
                             disabled={sourceActionBusy}
                             title="Find relevant passages from assigned materials"
@@ -253,6 +258,51 @@
               >
                 {isSubmitting ? 'Submitting saved revision…' : submissionError?.retryable ? 'Retry Submission' : 'Submit Milestone for Evaluation'}
               </button>
+            </div>
+          {/if}
+        </div>
+
+        <!-- Cognitive Pivot Diff Section (Scholastic Before / After Grounding) -->
+        <div class="scholastic-pivots-section">
+          <div class="pivots-section-header">
+            <span class="card-eyebrow">Cognitive Evolution &amp; Self-Correction</span>
+            <h5>Verified Conceptual Leaps ({cognitivePivots.length})</h5>
+          </div>
+
+          {#if cognitivePivots.length > 0}
+            <div class="pivot-cards-list">
+              {#each cognitivePivots as pivot}
+                <div class="scholastic-pivot-diff">
+                  <div class="pivot-meta-row">
+                    <span class="pivot-badge-dot">●</span>
+                    <span class="pivot-concept-name">{pivot.kc_label || 'Conceptual Grounding'}</span>
+                    {#if pivot.timestamp}
+                      <span class="pivot-timestamp">{new Date(pivot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    {/if}
+                  </div>
+                  <div class="pivot-diff-body">
+                    <div class="diff-branch prior">
+                      <span class="diff-eyebrow">Initial Intuition:</span>
+                      <p class="diff-quote">“{pivot.before_text}”</p>
+                    </div>
+                    <div class="diff-arrow-connector">→</div>
+                    <div class="diff-branch grounded">
+                      <span class="diff-eyebrow">Grounded Claim:</span>
+                      <p class="diff-quote">“{pivot.after_text}”</p>
+                      {#if pivot.grounding_source}
+                        <span class="diff-evidence-cite">Grounded in: <em>{pivot.grounding_source}</em></span>
+                      {/if}
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {:else}
+            <div class="empty-pivots-card">
+              <span class="empty-pivots-symbol">§</span>
+              <p class="empty-pivots-text">
+                When you refute unexamined assumptions by anchoring primary source evidence, your verified conceptual pivots will record here into your permanent reasoning dossier.
+              </p>
             </div>
           {/if}
         </div>
@@ -876,5 +926,183 @@
   .event-move-tag {
     font-size: 0.62rem;
     color: #64748b;
+  }
+
+  /* Subtle Scholastic Additions */
+  .scholastic-node-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--color-graphite-border);
+    font-size: 0.72rem;
+    font-family: var(--font-ui);
+  }
+
+  .scholastic-nav-link {
+    background: none;
+    border: none;
+    padding: 0;
+    font-size: inherit;
+    font-family: inherit;
+    color: var(--color-slate-muted);
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .scholastic-nav-link:hover {
+    color: var(--color-heading);
+    text-decoration: underline;
+  }
+
+  .scholastic-nav-link.jump {
+    color: var(--color-horizon-blue, #d97706);
+  }
+
+  .scholastic-nav-link.probe {
+    color: var(--color-aurora, #0284c7);
+  }
+
+  .nav-sep {
+    color: var(--color-graphite-border);
+    font-size: 0.65rem;
+  }
+
+  .scholastic-pivots-section {
+    margin-top: 20px;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-graphite-border);
+  }
+
+  .pivots-section-header {
+    margin-bottom: 12px;
+  }
+
+  .pivots-section-header h5 {
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: var(--color-heading);
+    margin: 4px 0 0 0;
+    font-family: var(--font-brand);
+  }
+
+  .pivot-cards-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .scholastic-pivot-diff {
+    background: var(--color-graphite-card);
+    border: 1px solid var(--color-graphite-border);
+    border-left: 3px solid var(--color-signal-green, #059669);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .pivot-meta-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 8px;
+    font-size: 0.7rem;
+    font-family: var(--font-mono);
+  }
+
+  .pivot-badge-dot {
+    font-size: 6px;
+    color: var(--color-signal-green, #059669);
+  }
+
+  .pivot-concept-name {
+    font-weight: 600;
+    color: var(--color-heading);
+  }
+
+  .pivot-timestamp {
+    color: var(--color-slate-subtle);
+    margin-left: auto;
+  }
+
+  .pivot-diff-body {
+    display: flex;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .diff-branch {
+    flex: 1;
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 0.76rem;
+    line-height: 1.4;
+  }
+
+  .diff-branch.prior {
+    background: rgba(220, 38, 38, 0.04);
+    border: 1px solid rgba(220, 38, 38, 0.15);
+  }
+
+  .diff-branch.grounded {
+    background: rgba(5, 150, 105, 0.04);
+    border: 1px solid rgba(5, 150, 105, 0.15);
+  }
+
+  .diff-eyebrow {
+    display: block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+  }
+
+  .diff-branch.prior .diff-eyebrow { color: var(--color-rose-text, #991b1b); }
+  .diff-branch.grounded .diff-eyebrow { color: var(--color-signal-green-text, #065f46); }
+
+  .diff-quote {
+    margin: 0;
+    font-style: italic;
+    color: var(--color-slate-light);
+  }
+
+  .diff-arrow-connector {
+    display: flex;
+    align-items: center;
+    color: var(--color-slate-subtle);
+    font-weight: 600;
+  }
+
+  .diff-evidence-cite {
+    display: block;
+    margin-top: 6px;
+    font-size: 0.68rem;
+    color: var(--color-signal-green-dark, #047857);
+  }
+
+  .empty-pivots-card {
+    padding: 16px 12px;
+    text-align: center;
+    background: rgba(0, 0, 0, 0.02);
+    border: 1px dashed var(--color-graphite-border);
+    border-radius: 6px;
+  }
+
+  .empty-pivots-symbol {
+    font-size: 1.2rem;
+    color: var(--color-slate-subtle);
+    display: block;
+    margin-bottom: 4px;
+    font-family: var(--font-mono);
+  }
+
+  .empty-pivots-text {
+    font-size: 0.76rem;
+    color: var(--color-slate-muted);
+    line-height: 1.45;
+    max-width: 320px;
+    margin: 0 auto;
   }
 </style>

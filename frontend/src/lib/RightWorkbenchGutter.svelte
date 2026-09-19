@@ -18,8 +18,13 @@
     assignment = null,
     currentRung = 0,
     turns = [],
+    focusedBlockTitle = '',
+    openExhibitTitle = '',
     onSendMessage = async () => null,
     onRequestHint = async () => null,
+    onCommitCapsule = async () => null,
+    onEscalateToAgent = () => null,
+    onAssumptionAction = async () => null,
     isAgentBusy = false,
     activeTab = 'marginalia',
     isCollapsed = false,
@@ -161,6 +166,11 @@
           {onDismiss}
           {onDefer}
           {onSelectBlock}
+          onEscalateToAgent={(probe) => {
+            onSelectTab('agent');
+            onEscalateToAgent(probe);
+          }}
+          {onAssumptionAction}
           isBusy={isProbeBusy}
           notice={probeNotice}
         />
@@ -170,8 +180,12 @@
           {assignment}
           {currentRung}
           {turns}
+          {focusedBlockId}
+          {focusedBlockTitle}
+          {openExhibitTitle}
           {onSendMessage}
           {onRequestHint}
+          {onCommitCapsule}
           isBusy={isAgentBusy}
         />
       {:else if activeTab === 'trace'}

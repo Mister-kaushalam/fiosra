@@ -202,9 +202,9 @@ class SocraticDialogueEngine:
                 "How would you re-examine this claim?"
             )
         else:
-            # General Socratic Scaffolding based on Rung
+            # Contextual Socratic Scaffolding based on student input and active rung
             assignment_hint = None
-            if hint_ladder:
+            if hint_ladder and hint_requested:
                 for hint in hint_ladder:
                     hint_level = hint.get("level") if isinstance(hint, dict) else getattr(hint, "level", None)
                     if hint_level == active_rung:
@@ -212,25 +212,44 @@ class SocraticDialogueEngine:
                         if not is_locked:
                             assignment_hint = hint.get("content") if isinstance(hint, dict) else getattr(hint, "content", None)
                         break
-            rung_strategies = {
-                0: (
-                    "Metacognitive probe: Prompt student to inspect their assumptions.",
-                    "Take a moment to reflect on your explanation: what evidence or reason led you to this conclusion?",
-                ),
-                1: (
-                    "Conceptual nudge: Highlight foundational concepts without giving away steps.",
-                    "Which distinction in the prompt or assigned source would make your claim more precise?",
-                ),
-                2: (
-                    "Procedural guide: Point to concrete next analytical step.",
-                    "Name the observation, the inference, and one alternative explanation in three connected sentences.",
-                ),
-                3: (
-                    "Worked analogy: Provide isomorphic model with different context.",
-                    "Imagine a map shows two places connected by a road: it supports a claim about connection, but not by itself a claim about why leaders built it. Apply that distinction here.",
-                ),
-            }
-            strat, resp = rung_strategies.get(active_rung, rung_strategies[0])
+
+            text_lower = student_input.lower()
+            if any(w in text_lower for w in ["counter", "challenge", "alternative", "against"]):
+                strat = "Challenge claim with historical counter-evidence"
+                resp = "If we test your claim against the assigned exhibits, what contradictory evidence or alternative institutional explanation presents the strongest challenge?"
+            elif any(w in text_lower for w in ["premise", "assumption", "presuppose", "unstated"]):
+                strat = "Unpack unstated premise and causal assumption"
+                resp = "What implicit premise are you taking for granted regarding the causal mechanisms connecting these institutional changes to the economic outcomes?"
+            elif any(w in text_lower for w in ["evidence", "ground", "source", "document", "exhibit", "citation"]):
+                strat = "Guide evidence grounding in assigned exhibits"
+                resp = "Which specific passage, fiscal table, or administrative record in the assigned exhibit best substantiates this interpretation over an alternative?"
+            elif any(w in text_lower for w in ["mughal", "delhi", "sultanate", "colonial", "british"]):
+                strat = "Targeted historical epoch inquiry"
+                resp = f"Focusing on this specific period in your analysis: what primary documentation or institutional reform best justifies your interpretation?"
+            elif len(student_input.split()) <= 4:
+                strat = "Elaborate conceptual focus"
+                resp = f"How would you connect your focus on '{student_input.strip()}' to the central prompt regarding institutional adaptations and economic networks?"
+            else:
+                rung_strategies = {
+                    0: (
+                        "Metacognitive probe: Prompt student to inspect their assumptions.",
+                        f"Take a moment to reflect on your explanation: what evidence or reason led you to this conclusion regarding '{student_input[:60]}'?",
+                    ),
+                    1: (
+                        "Conceptual nudge: Highlight foundational concepts without giving away steps.",
+                        f"Which specific primary evidence or historical distinction in the assigned exhibits supports this interpretation?",
+                    ),
+                    2: (
+                        "Procedural guide: Point to concrete next analytical step.",
+                        "Name the observation, the inference, and one alternative explanation in three connected sentences.",
+                    ),
+                    3: (
+                        "Worked analogy: Provide isomorphic model with different context.",
+                        "How can you synthesize these points into a qualified thesis that addresses alternative historical interpretations?",
+                    ),
+                }
+                strat, resp = rung_strategies.get(active_rung, rung_strategies[0])
+
             tutor_thoughts = {
                 "student_claim_analyzed": student_input,
                 "identified_error": "No specific catalogued misconception trap triggered.",
@@ -238,7 +257,7 @@ class SocraticDialogueEngine:
                 "strategy_selected": strat,
                 "affective_adjustment": "Inquisitive and guided reflection.",
             }
-            response_text = assignment_hint or resp
+            response_text = assignment_hint if (hint_requested and assignment_hint) else resp
 
         # Pedagogical Knowledge Graph: Fetch student's active cognitive traps & mastered components
         historical_context = ""
@@ -260,25 +279,28 @@ class SocraticDialogueEngine:
                 logger.warning(f"Pedagogical state retrieval failed: {e}")
 
         generation = await llm_orchestrator.enhance(
-            purpose="socratic_hint_rephrase",
+            purpose="socratic_dialogue_turn",
             system_prompt=(
-                "You are a concise Socratic tutor. Output exactly one supportive question ending in a question "
-                "mark, with no preface, answer, explanation, list, or quotation. Rewrite only the supplied bounded "
-                "hint. Preserve its instructional intent and stay within the public assignment context. Never provide "
-                "an answer, thesis, solution, grading judgment, rubric, or reference material. Do not introduce people, "
-                "events, evidence, or concepts absent from the input.\n\n"
-                f"Student's past learning context:\n{historical_context}"
+                "You are an expert Socratic tutor in a university history seminar. "
+                "Your pedagogical mission is to guide the student toward independent critical thinking and evidence-grounded historical analysis. "
+                "Engage directly and specifically with the student's message, claim, or question. "
+                "Output exactly one focused, intellectually rigorous Socratic inquiry ending in a question mark. "
+                "Never give away the final thesis, direct answers, or do the writing for the student. "
+                "Push the student to interrogate their assumptions, substantiate their claims with specific primary sources, "
+                "or explain the causal links between historical events."
+                + (f"\n\nStudent's learning context:\n{historical_context}" if historical_context else "")
             ),
             user_prompt=(
-                f"Public assignment context:\n{question_prompt}\n\n"
-                f"Active student-owned canvas section:\n{active_section_context or 'General reasoning'}\n\n"
-                f"Server-selected hint at rung {active_rung}:\n{response_text}"
+                f"Course Assignment Prompt:\n{question_prompt}\n\n"
+                f"Student's Message / Inquiry:\n{student_input}\n\n"
+                f"Active Canvas Draft Context:\n{active_section_context or 'General reasoning'}\n\n"
+                f"Tutor Guidance Objective (Rung {active_rung}):\n{response_text}"
             ),
             deterministic_fallback=response_text,
-            pseudonymous_seed=f"dialogue:{question_prompt}:{active_rung}",
-            max_characters=420,
-            max_tokens=100,
-            allow_live=is_course_grounded,
+            pseudonymous_seed=f"dialogue:{student_id}:{student_input[:64]}:{active_rung}",
+            max_characters=450,
+            max_tokens=120,
+            allow_live=True,
         )
         response_text = generation.content
 

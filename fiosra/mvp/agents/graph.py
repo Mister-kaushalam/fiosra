@@ -35,17 +35,29 @@ def create_socratic_tutor_graph(
     critic = critic_agent or AnswerIsolationCriticAgent()
 
     # 1. Define Node Callables
+    async def ingest_co_presence_node(state: TutorSessionState) -> dict[str, Any]:
+        return tutor.ingest_co_presence(state)
+
+    async def toulmin_decomposition_node(state: TutorSessionState) -> dict[str, Any]:
+        return tutor.decompose_toulmin(state)
+
     async def adversarial_guard_node(state: TutorSessionState) -> dict[str, Any]:
         return tutor.check_adversarial_input(state)
 
     async def deflection_node(state: TutorSessionState) -> dict[str, Any]:
         return tutor.build_deflection(state)
 
+    async def cognitive_work_allocator_node(state: TutorSessionState) -> dict[str, Any]:
+        return tutor.allocate_cognitive_work(state)
+
     async def socratic_generation_node(state: TutorSessionState) -> dict[str, Any]:
         return await tutor.generate_socratic_turn(state)
 
     async def answer_isolation_critic_node(state: TutorSessionState) -> dict[str, Any]:
         return critic.verify_response(state)
+
+    async def epistemic_action_packer_node(state: TutorSessionState) -> dict[str, Any]:
+        return tutor.pack_epistemic_actions(state)
 
     async def safe_fallback_node(state: TutorSessionState) -> dict[str, Any]:
         logger.warning(
@@ -76,41 +88,49 @@ def create_socratic_tutor_graph(
             return "remediate"
         return "fallback"
 
-    # 3. Assemble StateGraph
+    # 3. Assemble StateGraph (8-Node Epistemic Learning Loop Pipeline)
     builder = StateGraph(TutorSessionState)
 
+    builder.add_node("ingest_co_presence", ingest_co_presence_node)
+    builder.add_node("toulmin_decomposition", toulmin_decomposition_node)
     builder.add_node("adversarial_guard", adversarial_guard_node)
     builder.add_node("deflection_node", deflection_node)
+    builder.add_node("cognitive_work_allocator", cognitive_work_allocator_node)
     builder.add_node("socratic_generation", socratic_generation_node)
     builder.add_node("answer_isolation_critic", answer_isolation_critic_node)
+    builder.add_node("epistemic_action_packer", epistemic_action_packer_node)
     builder.add_node("safe_fallback", safe_fallback_node)
 
     # 4. Wire Edges and Branching
-    builder.add_edge(START, "adversarial_guard")
+    builder.add_edge(START, "ingest_co_presence")
+    builder.add_edge("ingest_co_presence", "toulmin_decomposition")
+    builder.add_edge("toulmin_decomposition", "adversarial_guard")
 
     builder.add_conditional_edges(
         "adversarial_guard",
         route_adversarial,
         {
             "deflection": "deflection_node",
-            "socratic": "socratic_generation",
+            "socratic": "cognitive_work_allocator",
         },
     )
 
-    builder.add_edge("deflection_node", END)
+    builder.add_edge("deflection_node", "epistemic_action_packer")
+    builder.add_edge("cognitive_work_allocator", "socratic_generation")
     builder.add_edge("socratic_generation", "answer_isolation_critic")
 
     builder.add_conditional_edges(
         "answer_isolation_critic",
         route_critic_verdict,
         {
-            "approved": END,
+            "approved": "epistemic_action_packer",
             "remediate": "socratic_generation",
             "fallback": "safe_fallback",
         },
     )
 
-    builder.add_edge("safe_fallback", END)
+    builder.add_edge("safe_fallback", "epistemic_action_packer")
+    builder.add_edge("epistemic_action_packer", END)
 
     # 5. Compile with Checkpointer
     active_checkpointer = checkpointer if checkpointer is not None else MemorySaver()

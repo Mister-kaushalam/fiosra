@@ -8,12 +8,24 @@
     onDismiss = async () => null,
     onDefer = async () => null,
     onSelectBlock = () => null,
+    onEscalateToAgent = () => null,
+    onAssumptionAction = async () => null,
     isBusy = false,
     notice = '',
   } = $props();
 
   let replyInputs = $state({});
+  let expandedAssumptions = $state({});
   let containerEl = $state(null);
+
+  function toggleAssumptionOptions(probeId) {
+    expandedAssumptions[probeId] = !expandedAssumptions[probeId];
+  }
+
+  async function handleAssumptionClick(probe, action) {
+    expandedAssumptions[probe.probe_id] = false;
+    await onAssumptionAction(probe, action);
+  }
 
   const focusTypeLabels = {
     direct_observation: { label: 'Direct Observation', icon: '🔍', color: 'var(--color-aurora, #0284c7)' },
@@ -128,6 +140,14 @@
               </span>
             {/if}
 
+            {#if probe.confidence_stance}
+              <span class="scholastic-stance-tag">{probe.confidence_stance}</span>
+            {/if}
+
+            {#if probe.scaffolding_rung !== undefined && probe.scaffolding_rung > 0}
+              <span class="scholastic-rung-tag">Rung {probe.scaffolding_rung}</span>
+            {/if}
+
             {#if isTargeted}
               <span class="current-block-tag">
                 <span class="dot-pulse"></span>
@@ -150,6 +170,37 @@
               </span>
               <span class="anchor-jump">Jump ↗</span>
             </button>
+          {/if}
+
+          <!-- Subtle Scholarly Assumption Note (Quiet, text-first affordance) -->
+          {#if probe.assumption || probe.implicit_premise}
+            {@const assumptionText = probe.assumption || probe.implicit_premise}
+            <div class="scholarly-assumption-note">
+              <span class="assumption-lead">Assumes:</span>
+              <button
+                type="button"
+                class="assumption-toggle"
+                onclick={() => toggleAssumptionOptions(probe.probe_id)}
+                title="Click to examine assumption"
+              >
+                “{assumptionText}”
+                <span class="assumption-affordance">· examine ▾</span>
+              </button>
+
+              {#if expandedAssumptions[probe.probe_id]}
+                <div class="assumption-options-row">
+                  <button type="button" class="btn-assumption-opt" onclick={() => handleAssumptionClick(probe, 'defend')}>
+                    Defend premise
+                  </button>
+                  <button type="button" class="btn-assumption-opt" onclick={() => handleAssumptionClick(probe, 'test_sources')}>
+                    Test in sources
+                  </button>
+                  <button type="button" class="btn-assumption-opt" onclick={() => handleAssumptionClick(probe, 'concede')}>
+                    Concede &amp; revise
+                  </button>
+                </div>
+              {/if}
+            </div>
           {/if}
 
           <!-- Inquiry Question -->
@@ -230,6 +281,18 @@
               </div>
             </form>
           {/if}
+
+          <!-- Scholarly Card Footer: Subtle Footnote Escalation -->
+          <div class="card-scholastic-footer">
+            <button
+              type="button"
+              class="escalation-footnote-btn"
+              onclick={() => onEscalateToAgent(probe)}
+              title="Discuss this paragraph in depth with the Socratic Tutor"
+            >
+              Discuss in depth with tutor ↗
+            </button>
+          </div>
         </div>
       {/each}
     {:else}
@@ -670,4 +733,128 @@
   .empty-icon { font-size: 1.8rem; margin-bottom: 8px; }
   .empty-text { font-size: 0.88rem; font-weight: 600; color: var(--color-slate-bright); margin: 0 0 6px 0; }
   .empty-subtext { font-size: 0.78rem; color: var(--color-slate-subtle); line-height: 1.4; display: block; }
+
+  /* Subtle Scholastic Additions */
+  .scholastic-stance-tag {
+    font-size: 10px;
+    font-family: var(--font-mono, monospace);
+    color: var(--color-slate-muted);
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid var(--color-graphite-border);
+    padding: 1px 6px;
+    border-radius: 4px;
+    letter-spacing: 0.02em;
+  }
+
+  :global([data-theme="dark"]) .scholastic-stance-tag {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .scholastic-rung-tag {
+    font-size: 10px;
+    font-family: var(--font-mono, monospace);
+    color: var(--color-horizon-blue, #d97706);
+    background: rgba(217, 119, 6, 0.08);
+    border: 1px solid rgba(217, 119, 6, 0.2);
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
+  .scholarly-assumption-note {
+    margin: 8px 0;
+    padding: 6px 10px;
+    background: rgba(217, 119, 6, 0.04);
+    border-left: 2px solid var(--color-horizon-blue, #d97706);
+    border-radius: 0 4px 4px 0;
+    font-size: 0.78rem;
+    line-height: 1.4;
+  }
+
+  .assumption-lead {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    color: var(--color-slate-muted);
+    margin-right: 4px;
+  }
+
+  .assumption-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
+    font-size: inherit;
+    font-style: italic;
+    color: var(--color-slate-light);
+    cursor: pointer;
+    text-align: left;
+    display: inline;
+  }
+
+  .assumption-toggle:hover {
+    color: var(--color-heading);
+    text-decoration: underline;
+  }
+
+  .assumption-affordance {
+    font-style: normal;
+    font-size: 0.7rem;
+    color: var(--color-horizon-blue, #d97706);
+    margin-left: 4px;
+  }
+
+  .assumption-options-row {
+    display: flex;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+    border-top: 1px dashed var(--color-graphite-border);
+  }
+
+  .btn-assumption-opt {
+    background: none;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: 4px;
+    padding: 2px 7px;
+    font-size: 0.7rem;
+    font-family: var(--font-ui);
+    color: var(--color-slate-light);
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-assumption-opt:hover {
+    background: var(--color-graphite-hover);
+    color: var(--color-heading);
+    border-color: var(--color-horizon-blue, #d97706);
+  }
+
+  .card-scholastic-footer {
+    margin-top: 8px;
+    padding-top: 6px;
+    border-top: 1px solid rgba(0, 0, 0, 0.04);
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  :global([data-theme="dark"]) .card-scholastic-footer {
+    border-top-color: rgba(255, 255, 255, 0.04);
+  }
+
+  .escalation-footnote-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: var(--font-ui);
+    font-size: 0.72rem;
+    color: var(--color-slate-muted);
+    cursor: pointer;
+    transition: color 0.15s ease;
+  }
+
+  .escalation-footnote-btn:hover {
+    color: var(--color-horizon-blue, #d97706);
+    text-decoration: underline;
+  }
 </style>

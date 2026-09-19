@@ -41,7 +41,9 @@ class LearnerEvidenceAgent:
         typing_wpm = float(telemetry.get("typing_cadence_wpm", 40.0))
         revisions_count = int(telemetry.get("revisions_count", 0))
         hints_consumed = int(telemetry.get("hints_consumed", 0))
-        paste_events = int(telemetry.get("paste_events_count", 0))
+        action_capsules = int(telemetry.get("action_capsule_events_count", 0))
+        raw_pastes = int(telemetry.get("paste_events_count", 0))
+        unauthorized_pastes = max(0, raw_pastes - action_capsules)
 
         # 1. Base cognitive effort score
         score = 0.70
@@ -61,9 +63,9 @@ class LearnerEvidenceAgent:
             score += 0.08
 
         # 4. Copy-Paste / Ghostwriting Burst Penalty:
-        # If paste events detected or typing cadence exceeds plausible human drafting (>140 WPM)
-        if paste_events > 0:
-            score -= min(0.15 * paste_events, 0.35)
+        # Action capsules are verified student transfers and are exempt from paste deduction.
+        if unauthorized_pastes > 0:
+            score -= min(0.15 * unauthorized_pastes, 0.35)
         if typing_wpm > 130.0:
             score -= 0.20
 

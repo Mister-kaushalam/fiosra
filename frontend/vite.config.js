@@ -24,6 +24,8 @@ export default defineConfig({
       '/knowledge': 'http://localhost:8000',
       '/concept-graph': 'http://localhost:8000',
       '/healthz': 'http://localhost:8000',
+      '/health': 'http://localhost:8000',
+      '/api': 'http://localhost:8000',
     },
   },
 })
