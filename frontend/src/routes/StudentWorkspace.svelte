@@ -216,6 +216,9 @@
       || references.at(-1)
       || null;
   });
+  let activeSourceExhibit = $derived(
+    assignmentSources.find((s) => s.source_id === selectedSourceId) || assignmentSources[0] || null
+  );
   let readinessItems = $derived.by(() => {
     const allText = canonicalBlocks.map((block) => block.text).join(' ');
     const linkedClaims = new Set(
@@ -863,6 +866,63 @@
     }
   }
 
+  let cognitivePivots = $derived(
+    sessionEvents
+      .filter((e) => e.event_type === 'epistemic_pivot_captured' || e.payload?.before_text)
+      .map((e) => ({
+        timestamp: e.created_at,
+        kc_label: e.payload?.kc_label || e.payload?.kc_id || 'Conceptual Pivot',
+        before_text: e.payload?.before_text || e.payload?.prior_claim || 'Previous premise',
+        after_text: e.payload?.after_text || e.payload?.grounded_claim || e.payload?.text || 'Grounded claim',
+        grounding_source: e.payload?.grounding_source || e.payload?.source_title || '',
+      }))
+  );
+
+  async function handleCommitActionCapsule(capsule) {
+    if (!capsule) return;
+    const textToInsert = capsule.suggested_student_text || capsule.text_payload || '';
+    if (editorRef?.insertEvidenceBlock && capsule.role === 'evidence') {
+      editorRef.insertEvidenceBlock({
+        quoteText: textToInsert,
+        sourceTitle: capsule.source_title || 'Assigned Exhibit',
+      });
+    } else if (editorRef?.insertWritingFrame) {
+      editorRef.insertWritingFrame(capsule.role || 'claim');
+    }
+    try {
+      await fetch('/events/log', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...sessionHeaders(),
+        },
+        body: JSON.stringify({
+          session_id: sessionId,
+          student_id: studentId,
+          question_id: activeQuestionId || 'Q1',
+          event_type: 'action_capsule_committed',
+          payload: {
+            capsule_id: capsule.capsule_id,
+            target_block_id: capsule.target_block_id,
+            text: textToInsert,
+            provenance: 'action_capsule',
+            role: capsule.role || 'claim',
+          }
+        })
+      });
+    } catch (err) {
+      console.warn('Failed to log action capsule commit event:', err);
+    }
+  }
+
+  function handleEscalateToAgent(probe) {
+    activeGutterTab = 'agent';
+    if (isGutterCollapsed) isGutterCollapsed = false;
+    if (probe?.question) {
+      handleMacroSendMessage(`Regarding paragraph "${probe.claim_text || 'my claim'}": ${probe.question}. How can I best ground this in the evidence?`);
+    }
+  }
+
   let filteredSources = $derived(
     publicSources.filter((s) => {
       if (!sourceSearchQuery) return true;
@@ -1008,10 +1068,14 @@
               activeProbeId={activeProbeId}
               focusedBlockId={fiosraContext.activeBlockId}
               focusedBlockOffsetTop={fiosraContext.activeBlockOffsetTop}
+              focusedBlockTitle={fiosraContext.activeBlockText ? (fiosraContext.activeBlockText.slice(0, 45) + '…') : ''}
+              openExhibitTitle={activeSourceExhibit?.title || ''}
               onRespond={(probeId, text) => submitProbeExplanation(probeId, text)}
               onDismiss={(probeId) => changeProbe(probeId, 'dismiss')}
               onDefer={(probeId) => changeProbe(probeId, 'defer')}
               onSelectBlock={(blockId) => { if (editorRef?.scrollToBlock) editorRef.scrollToBlock(blockId); }}
+              onEscalateToAgent={handleEscalateToAgent}
+              onCommitCapsule={handleCommitActionCapsule}
               isProbeBusy={isProbeBusy}
               probeNotice={probeNotice}
               sessionId={sessionId}
@@ -1039,6 +1103,7 @@
                 isSubmitting,
                 onSubmitMilestone: submitSession,
                 sessionEvents,
+                cognitivePivots,
                 sourceLookupResults,
                 sourceActionBusy,
                 sourceReferenceForBlock,

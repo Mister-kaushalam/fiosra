@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 import re
 from typing import Any
+from uuid import uuid4
 
 from fiosra.mvp.agents.contracts import TutorSessionState
 from fiosra.mvp.agents.mcp_client import agent_mcp_client
@@ -40,6 +41,139 @@ class SocraticTutorAgent:
 
     def __init__(self, mcp_client=None) -> None:
         self.mcp = mcp_client or agent_mcp_client
+
+    def ingest_co_presence(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Layer 5 Co-Presence Ingestion: Synchronizes live ProseMirror paragraph context,
+        cursor dwell, and open primary document exhibit.
+        """
+        blocks = state.get("canvas_blocks") or []
+        focused_id = state.get("focused_block_id")
+        focused_text = state.get("focused_block_text")
+
+        if not focused_text and focused_id and blocks:
+            for b in blocks:
+                if b.get("id") == focused_id or b.get("block_id") == focused_id:
+                    focused_text = b.get("text", "")
+                    break
+
+        if not focused_text and blocks:
+            for b in blocks:
+                if b.get("text"):
+                    focused_id = b.get("id") or b.get("block_id")
+                    focused_text = b.get("text", "")
+                    break
+
+        return {
+            "focused_block_id": focused_id,
+            "focused_block_text": focused_text or state.get("student_input", ""),
+        }
+
+    def decompose_toulmin(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Toulmin Argumentation Decomposition:
+        Extracts claim, warrant, evidence, and implicit assumptions from active student text.
+        """
+        text = state.get("focused_block_text") or state.get("student_input", "")
+        existing = state.get("toulmin_structure") or {}
+
+        sentences = [s.strip() for s in re.split(r"[.!?]\s+", text) if s.strip()]
+        claim = sentences[0] if sentences else text
+
+        has_warrant = bool(re.search(r"\b(?:because|since|therefore|thus|which implies|demonstrates that)\b", text, re.I))
+        has_evidence = bool(re.search(r"\b(?:according to|source|document|figure|exhibit|page|quotes?)\b", text, re.I) or '"' in text)
+        has_qualification = bool(re.search(r"\b(?:however|although|unless|might|may|provisional|partially)\b", text, re.I))
+
+        assumptions = []
+        if "feudal" in text.lower() or "serf" in text.lower():
+            assumptions.append("Assumes legal serfdom was uniform across all royal manors")
+        elif "bankrupt" in text.lower() or "debt" in text.lower() or "necker" in text.lower():
+            assumptions.append("Assumes crown finances were solely drained by foreign war rather than structural exemptions")
+        elif len(sentences) > 0 and not has_warrant:
+            assumptions.append("Assumes direct correlation without articulating underlying causal mechanism")
+
+        stance = "Grounded" if (has_evidence and has_warrant) else ("Provisional" if has_warrant or has_evidence else "Intuitive")
+
+        toulmin = {
+            "claim": existing.get("claim") or claim,
+            "warrant": existing.get("warrant") or ("Identified in text" if has_warrant else None),
+            "evidence": existing.get("evidence") or ("Cited in draft" if has_evidence else None),
+            "implicit_assumptions": existing.get("implicit_assumptions") or assumptions,
+            "has_warrant": has_warrant,
+            "has_evidence": has_evidence,
+            "has_qualification": has_qualification,
+            "stance": stance,
+        }
+
+        return {"toulmin_structure": toulmin}
+
+    def allocate_cognitive_work(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Epistemic Work Allocator (Desirable Difficulties / Bjork & Sweller):
+        Determines the next unresolved intellectual operation and sets the minimum AI assistance rung.
+        Preserves student synthesis while removing mechanical lookup friction.
+        """
+        toulmin = state.get("toulmin_structure") or {}
+        current_rung = state.get("current_rung", 0)
+        hint_requested = state.get("hint_requested", False)
+
+        if not toulmin.get("has_warrant"):
+            intellectual_operation = "Missing Causal Warrant"
+        elif not toulmin.get("has_evidence"):
+            intellectual_operation = "Missing Primary Grounding"
+        elif toulmin.get("implicit_assumptions") and not toulmin.get("has_qualification"):
+            intellectual_operation = "Unexamined Implicit Assumption"
+        else:
+            intellectual_operation = "Synthesis & Qualification"
+
+        effective_rung = min(current_rung + (1 if hint_requested else 0), 2)
+
+        return {
+            "intellectual_operation": intellectual_operation,
+            "current_rung": effective_rung,
+        }
+
+    def pack_epistemic_actions(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Action Capsule & Discussion Starter Packer:
+        Assembles 1-click text-first transfer capsules, subtle scholastic seminar starters,
+        and 2-line metacognitive progress radar.
+        """
+        focused_id = state.get("focused_block_id")
+        toulmin = state.get("toulmin_structure") or {}
+
+        launchers = [
+            {"title": "Examine structural assumptions", "prompt": "What unstated premise underlies this historical interpretation?"},
+            {"title": "Test against primary exhibit", "prompt": "How does the primary document challenge this causal explanation?"},
+            {"title": "Refine causal warrant", "prompt": "Can you articulate the exact mechanism connecting the debt to the collapse?"},
+        ]
+
+        capsules = []
+        if focused_id:
+            capsules.append({
+                "capsule_id": f"cap-{uuid4().hex[:8]}",
+                "label": "Transfer qualification to draft",
+                "suggested_student_text": "However, this interpretation must be qualified by primary accounting evidence...",
+                "text_payload": "However, this interpretation must be qualified by primary accounting evidence...",
+                "target_block_id": focused_id,
+                "role": "qualification",
+                "rationale": "Add essential qualification to provisional claim",
+                "provenance": "action_capsule",
+            })
+
+        stance = toulmin.get("stance", "Provisional")
+        learner_radar = {
+            "dimension": "Causal Grounding & Toulmin Structure",
+            "stance": stance,
+            "summary": f"Stance: {stance} · Warrant: {'Articulated' if toulmin.get('has_warrant') else 'Needs development'}",
+            "next_step": "Ground claim against primary exhibit source",
+        }
+
+        return {
+            "prompt_launchers": launchers,
+            "action_capsules": capsules,
+            "learner_radar": learner_radar,
+        }
 
     def check_adversarial_input(self, state: TutorSessionState) -> dict[str, Any]:
         """

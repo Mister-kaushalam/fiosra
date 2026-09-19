@@ -12,7 +12,7 @@
   } = $props();
 
   let inputMessage = $state('');
-  let messagesContainer;
+  let messagesContainer = $state();
 
   async function handleSend(e) {
     e?.preventDefault();
