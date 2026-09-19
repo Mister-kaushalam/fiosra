@@ -109,6 +109,15 @@ class LLMOrchestrator:
                 re.IGNORECASE,
             ):
                 raise LLMProviderError("Provider response attempted to disclose a conclusion instead of a probe.")
+        elif purpose == "socratic_dialogue_turn":
+            if "?" not in cleaned:
+                raise LLMProviderError("Provider response did not include a Socratic inquiry question.")
+            if re.search(
+                r"\b(?:the answer is|the correct option is|you should conclude that)\b",
+                cleaned,
+                re.IGNORECASE,
+            ):
+                raise LLMProviderError("Provider response leaked a direct conclusion.")
         return cleaned
 
     @staticmethod
