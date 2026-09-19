@@ -1,9 +1,24 @@
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { defineConfig } from 'vite'
 
+function stripWorkerSourcemap() {
+  return {
+    name: 'strip-worker-sourcemap',
+    generateBundle(options, bundle) {
+      for (const [fileName, file] of Object.entries(bundle)) {
+        if (fileName.includes('pdf.worker') && file.type === 'asset') {
+          file.source = file.source
+            .toString()
+            .replace(/\/\/# sourceMappingURL=pdf\.worker\.mjs\.map/g, '');
+        }
+      }
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [svelte()],
+  plugins: [svelte(), stripWorkerSourcemap()],
   base: './',
   build: {
     outDir: '../ui-ux/frontend-dist',

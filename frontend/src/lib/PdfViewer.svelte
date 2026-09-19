@@ -1,7 +1,7 @@
 <script>
   import { onMount, tick } from 'svelte';
   import * as pdfjsLib from 'pdfjs-dist';
-  import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+  import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
   import 'pdfjs-dist/web/pdf_viewer.css';
 
   if (typeof Promise.try !== 'function') {
@@ -27,6 +27,9 @@
   }
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+  if (pdfjsLib.VerbosityLevel) {
+    pdfjsLib.GlobalWorkerOptions.verbosity = pdfjsLib.VerbosityLevel.ERRORS;
+  }
 
   let {
     url = '',
@@ -91,7 +94,10 @@
     currentMatchIndex = 0;
 
     try {
-      const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
+      const loadingTask = pdfjsLib.getDocument({
+        url: pdfUrl,
+        verbosity: pdfjsLib.VerbosityLevel?.ERRORS ?? 0,
+      });
       pdfDoc = await loadingTask.promise;
       numPages = pdfDoc.numPages;
       currentPage = 1;
