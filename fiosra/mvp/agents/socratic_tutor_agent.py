@@ -149,25 +149,47 @@ class SocraticTutorAgent:
         ]
 
         capsules = []
-        if focused_id:
+        student_input = (state.get("student_input") or "").strip()
+        is_hint = state.get("is_hint_requested", False)
+
+        # Action capsules must be earned: only formulate a transfer capsule when the
+        # student has articulated substantive reasoning (enforcing Zero AI Ghostwriting).
+        if focused_id and not is_hint and len(student_input) > 20 and not student_input.endswith("?"):
+            claim_fragment = toulmin.get("claim") or student_input
+            snippet = claim_fragment if len(claim_fragment) <= 180 else claim_fragment[:177] + "..."
             capsules.append({
                 "capsule_id": f"cap-{uuid4().hex[:8]}",
-                "label": "Transfer qualification to draft",
-                "suggested_student_text": "However, this interpretation must be qualified by primary accounting evidence...",
-                "text_payload": "However, this interpretation must be qualified by primary accounting evidence...",
+                "label": "Transfer formulated insight to draft",
+                "suggested_student_text": snippet,
+                "text_payload": snippet,
                 "target_block_id": focused_id,
-                "role": "qualification",
-                "rationale": "Add essential qualification to provisional claim",
+                "role": "claim" if not toulmin.get("has_warrant") else "warrant",
+                "rationale": "Transfer your formulated reasoning into your active canvas draft",
                 "provenance": "action_capsule",
             })
 
-        stance = toulmin.get("stance", "Provisional")
-        learner_radar = {
-            "dimension": "Causal Grounding & Toulmin Structure",
-            "stance": stance,
-            "summary": f"Stance: {stance} · Warrant: {'Articulated' if toulmin.get('has_warrant') else 'Needs development'}",
-            "next_step": "Ground claim against primary exhibit source",
-        }
+        rung = state.get("current_rung", 1)
+        if is_hint:
+            rung_phases = {
+                1: ("Orienting Inquiry", "Orientation", "Formulate provisional scope"),
+                2: ("Warrant Inquest", "Inquiring", "Clarify unstated causal assumptions"),
+                3: ("Procedural Decomposition", "Scaffolding", "Synthesize primary exhibit evidence"),
+            }
+            phase, stance, next_step = rung_phases.get(rung, ("Orienting Inquiry", "Orientation", "Ground claim"))
+            learner_radar = {
+                "dimension": "Socratic Scaffold & Causal Grounding",
+                "stance": stance,
+                "summary": f"Rung {rung} · {phase}",
+                "next_step": next_step,
+            }
+        else:
+            stance = toulmin.get("stance", "Provisional")
+            learner_radar = {
+                "dimension": "Causal Grounding & Toulmin Structure",
+                "stance": stance,
+                "summary": f"Stance: {stance} · Warrant: {'Articulated' if toulmin.get('has_warrant') else 'Needs development'}",
+                "next_step": "Ground claim against primary exhibit source",
+            }
 
         return {
             "prompt_launchers": launchers,

@@ -885,7 +885,13 @@
   async function handleCommitActionCapsule(capsule) {
     if (!capsule) return;
     const textToInsert = capsule.suggested_student_text || capsule.text_payload || '';
-    if (editorRef?.insertEvidenceBlock && capsule.role === 'evidence') {
+    if (editorRef?.insertCapsuleText) {
+      editorRef.insertCapsuleText({
+        text: textToInsert,
+        role: capsule.role || 'qualification',
+        sourceTitle: capsule.source_title || 'Assigned Exhibit',
+      });
+    } else if (editorRef?.insertEvidenceBlock && capsule.role === 'evidence') {
       editorRef.insertEvidenceBlock({
         quoteText: textToInsert,
         sourceTitle: capsule.source_title || 'Assigned Exhibit',
@@ -903,7 +909,7 @@
         body: JSON.stringify({
           session_id: sessionId,
           student_id: studentId,
-          question_id: activeQuestionId || 'Q1',
+          question_id: assignment?.question_id || 'q1',
           event_type: 'action_capsule_committed',
           payload: {
             capsule_id: capsule.capsule_id,

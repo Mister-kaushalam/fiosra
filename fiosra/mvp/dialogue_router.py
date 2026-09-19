@@ -140,10 +140,13 @@ async def handle_dialogue_turn(
         })
         packed = tutor_agent.pack_epistemic_actions({
             "focused_block_id": "current-block",
+            "student_input": request.student_input,
+            "is_hint_requested": request.hint_requested,
+            "current_rung": result["hint_rung"],
             "toulmin_structure": toulmin_data.get("toulmin_structure"),
             "final_verified_response": result["response_text"],
         })
-        result["action_capsules"] = packed.get("action_capsules", [])
+        result["action_capsules"] = [] if request.hint_requested else packed.get("action_capsules", [])
         result["prompt_launchers"] = packed.get("prompt_launchers", [])
         result["learner_radar"] = packed.get("learner_radar", {})
     except Exception:

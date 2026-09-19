@@ -126,6 +126,77 @@
     scheduleSync();
   }
 
+  export function insertCapsuleText({ text = '', role = 'qualification', sourceTitle = '' } = {}) {
+    if (!editor) return;
+    const cleanText = (text || '').trim();
+    if (!cleanText) return;
+
+    if (role === 'evidence') {
+      insertEvidenceBlock({ quoteText: cleanText, sourceTitle: sourceTitle || 'Primary Source' });
+      return;
+    }
+
+    editor.chain().focus().insertContent([
+      {
+        type: 'paragraph',
+        attrs: { semanticType: role || 'qualification', authorType: 'assisted' },
+        content: [{ type: 'text', text: cleanText }],
+      },
+      {
+        type: 'paragraph',
+        attrs: { semanticType: 'reasoning', authorType: 'student' },
+        content: [],
+      },
+    ]).run();
+    scheduleSync();
+  }
+
+  export function insertWritingFrame(frameType = 'claim') {
+    if (!editor) return;
+    const frameScaffolds = {
+      claim: {
+        placeholder: '[State your bounded historical claim or provisional thesis here...]',
+        semanticType: 'claim',
+      },
+      evidence: {
+        placeholder: '[Cite primary accounting data or exhibit excerpt supporting this assertion...]',
+        semanticType: 'evidence',
+      },
+      warrant: {
+        placeholder: '[Articulate the causal mechanism connecting the evidence to the claim...]',
+        semanticType: 'reasoning',
+      },
+      qualification: {
+        placeholder: '[State the necessary qualification, exception, or counter-condition to this claim...]',
+        semanticType: 'qualification',
+      },
+      counterargument: {
+        placeholder: '[Examine an opposing historical interpretation or counter-hypothesis...]',
+        semanticType: 'counterargument',
+      },
+    };
+    const scaffold = frameScaffolds[frameType] || frameScaffolds.claim;
+    editor.chain().focus().insertContent([
+      {
+        type: 'paragraph',
+        attrs: { semanticType: scaffold.semanticType, authorType: 'student' },
+        content: [{ type: 'text', text: scaffold.placeholder }],
+      },
+    ]).run();
+    scheduleSync();
+  }
+
+  export function insertSourceQuote(source) {
+    if (!source) return;
+    insertEvidenceBlock({
+      quoteText: source.excerpt || source.quote || source.text || '',
+      sourceTitle: source.title || source.source_title || 'Assigned Exhibit',
+      author: source.author || '',
+      sourceId: source.id || source.source_id || '',
+      sourceUrl: source.url || '',
+    });
+  }
+
   function openGeneralInquiry() {
     const promptText = assignment?.published?.task?.prompt || assignment?.task?.prompt || 'This assignment';
     activeSentence = {
