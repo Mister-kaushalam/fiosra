@@ -56,6 +56,7 @@ The specifications directly translate the **whiteboard pedagogical blueprint** i
 | **[`08_teacher_intervention_view.md`](./08_teacher_intervention_view.md)** | **Intervention Station** | Teacher | Action console: grade finalization, live Socratic probe injection, and Neo4j prerequisite bridge assignments (`#/studio/interventions`). |
 | **[`09_deterministic_epistemic_policy.md`](./09_deterministic_epistemic_policy.md)** | **Deterministic Policy Engine** | Cognitive FSM | Formal cognitive state machine: Initial State (misconception/bias) $\to$ Ideal State (evidence-grounded mastery), Graphiti bi-temporal invalidation, and loop limits ($N=2$). |
 | **[`10_epistemic_learning_loop_and_marginalia.md`](./10_epistemic_learning_loop_and_marginalia.md)** | **Epistemic Learning Loop & Marginalia** | Pedagogical FSM | The 7-step closed learning loop, Socratic Marginalia cognitive work allocation, Toulmin decomposition, and desirable difficulty slider. |
+| **[`11_epistemic_trace_student_and_teacher_architecture.md`](./11_epistemic_trace_student_and_teacher_architecture.md)** | **Epistemic Trace Architecture** | Flight Recorder & Radar | Full trace lifecycle: in-situ Living Argument Tree, post-submission reflection dossier, student-level 60s scrubber, and cohort 4-quadrant radar. |
 
 ---
 
