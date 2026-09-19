@@ -277,6 +277,83 @@ Computes derived telemetry metrics on every snapshot:
 3. **Epistemic Leap Count**:
    Total number of verified transitions where an active misconception in Graphiti was successfully invalidated by cited primary evidence.
 
+### D. Temporal State Authority: Who Reads & Who Updates Graphiti?
+
+A foundational architectural invariant in Fiosra is the separation between **epistemic observation** (reading state) and **epistemic mutation** (updating state). Both the **Socratic Agent** and the **Learner Evidence Agent** have access to the student's temporal state, but their access modes, permissions, and responsibilities are strictly decoupled.
+
+#### 1. Read vs. Write Access Matrix
+
+| Dimension | Socratic Agent (`socratic_agent.py`) | Learner Evidence Agent (`learner_evidence_agent.py`) | Educator Intervention Station (`studio/`) |
+| :--- | :--- | :--- | :--- |
+| **Read Access** | **Active Epistemic State** (`invalidated_at IS NULL`). Reads current beliefs, misconceptions, and anchored claims before generating a dialogue turn or in-situ probe. | **Full Temporal History** (`valid_at` through `invalidated_at`). Traverses the entire evolution tree to measure epistemic leaps, dwell distribution, and self-correction pivots. | **Cohort & Individual Aggregates**. Reads clustered misconceptions, quadrant placement, and flight recorder telemetry. |
+| **Write Authority** | **NONE (Read-Only)**. The Socratic Agent cannot self-certify student mastery or directly mutate Graphiti edges. AI cannot grade or validate its own dialogue. | **EXCLUSIVE AUTOMATED MUTATOR**. Mutates Graphiti only after verifying authentic, qualified student-authored changes via the entailment pipeline. | **MANUAL OVERRIDE**. Teachers can explicitly certify mastery, clear persistent misconception flags, or insert pedagogical notes. |
+| **Primary Purpose** | Prevent conversational amnesia; adapt challenge levels dynamically to the student's real-time ZPD. | Deterministically detect cognitive pivots, compute authenticity scores, and maintain the immutable epistemic trace. | High-leverage targeted interventions; orchestrating group socratic seminars. |
+
+#### 2. Why the Socratic Agent Never Updates Belief State Directly (Zero AI Ghostwriting)
+
+If the Socratic Agent were permitted to update belief states, a conversational turn where the AI offers an explanation or asks a leading question could prematurely register a misconception as "resolved." 
+
+To preserve epistemic integrity:
+1. **No Self-Attribution**: An AI agent cannot attest to a human's understanding simply because the AI articulated the correct reasoning.
+2. **Action-Grounded Evidence**: Belief transitions in Graphiti require empirical proof in the student's primary work product (their thesis, paragraph revisions, or cited primary exhibits).
+3. **Auditability**: Every mutated edge in Graphiti points back to an immutable `event_id` in the PostgreSQL event store representing an authentic student action.
+
+#### 3. Mutation Pipeline: How Student Action Drives State Updates
+
+Only student-authored actions can trigger Graphiti temporal mutations through the following asynchronous verification loop:
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Student as Student (Canvas)
+    participant Client as Web App (ProseMirror)
+    participant PG as PostgreSQL (EventStore)
+    participant LEA as Learner Evidence Agent
+    participant Verifier as AutoSCORE Entailment Verifier
+    participant Graphiti as Graphiti (Temporal KG)
+    participant Socratic as Socratic Agent
+
+    Student->>Client: Edits paragraph & cites Document Exhibit
+    Client->>PG: POST /events (claim_revised, revision=k, text_delta)
+    PG-->>Client: 201 Created (event_id: ev_9912)
+    
+    Note over PG,LEA: Asynchronous Telemetry Ingestion
+    LEA->>PG: Poll new revision events for session
+    LEA->>LEA: Calculate clamped dwell, paste ratio, & semantic delta
+    
+    LEA->>Verifier: Check Entailment (claim_revised vs prior_misconception)
+    alt Entailment Fails (Surface rewrite, no epistemic leap)
+        Verifier-->>LEA: Not Entailed / Unresolved
+        Note over LEA: No Graphiti belief mutation occurs
+    else Entailment Succeeds (Authentic Conceptual Pivot)
+        Verifier-->>LEA: Entailed (Confidence: 0.94, Evidence: chunk_necker_1781)
+        LEA->>Graphiti: Invalidate prior belief (invalidated_at = NOW, event_id: ev_9912)
+        LEA->>Graphiti: Assert new proposition (valid_at = NOW, evidence = chunk_necker_1781)
+        Graphiti-->>LEA: Mutation Acknowledged (edge: bel_8820)
+    end
+
+    Note over Socratic,Graphiti: Next Dialogue Turn
+    Student->>Socratic: Asks follow-up question in margin
+    Socratic->>Graphiti: Query active beliefs (invalidated_at IS NULL)
+    Graphiti-->>Socratic: Returns updated belief state (bel_8820 active)
+    Socratic->>Student: Responds targeted to new epistemic level (No amnesia)
+```
+
+#### 4. The Authorized Mutation Pathways
+
+1. **Canvas Prose & Citation Revision (Primary Pathway)**:
+   - When a student modifies their text in ProseMirror or attaches an exhibit excerpt, `LearnerEvidenceAgent` analyzes Revision $R_k$ against Revision $R_{k-1}$.
+   - If the student incorporates contradictory evidence that refutes an active misconception, the previous belief edge is closed (`invalidated_at = NOW`) and the refined proposition is instantiated.
+2. **In-Situ Probe Defense (Secondary Pathway)**:
+   - When a student responds to a marginalia probe (e.g., answering *"How do you reconcile Necker's 1781 ordinary surplus with royal extravagance?"*), the defense is scored against rubric criteria.
+   - A logically sound defense with exhibit linkage triggers a transition from `STATE_2_INQUIRY` to `STATE_4_DEFENSE` in Graphiti.
+3. **Epistemic Action Capsule Commit (Macro-Dialogue Pathway)**:
+   - During sidebar Socratic dialogue, when a breakthrough occurs, the agent presents a single-action capsule: `[Transfer Refined Claim to Paragraph 2]`.
+   - Clicking the capsule pastes the student's formulated reasoning into the document canvas as a student-stamped edit, which then flows through the standard Canvas Revision pipeline.
+4. **Educator Studio Intervention (Administrative Override Pathway)**:
+   - In `#/studio/interventions`, an instructor observing a live session can click `[Mark Concept Mastered]` or `[Re-open Inquiry]`.
+   - This records an `educator_intervention` event in PostgreSQL and updates Graphiti with `asserted_by: "educator:<id>"`.
+
 ---
 
 ## 6. 📡 API Endpoints & Request / Response Contracts
