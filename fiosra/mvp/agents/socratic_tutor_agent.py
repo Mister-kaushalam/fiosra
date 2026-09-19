@@ -13,6 +13,7 @@ from uuid import uuid4
 
 from fiosra.mvp.agents.contracts import TutorSessionState
 from fiosra.mvp.agents.mcp_client import agent_mcp_client
+from fiosra.mvp.llm.orchestrator import llm_orchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,60 @@ class SocraticTutorAgent:
         return {
             "focused_block_id": focused_id,
             "focused_block_text": focused_text or state.get("student_input", ""),
+        }
+
+    def analyze_epistemic_discourse(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Discourse Phase Router:
+        Classifies incoming interaction into distinct epistemic modes:
+        - hint_scaffold: Explicit hint ladder requested
+        - adversarial: Direct answer begging or prompt injection attempt
+        - orientation: Greetings, check-ins, polite openings
+        - structural_scaffold: Structuring, outlining, and brainstorming requests
+        - substantive_inquiry: Actual claims, warrants, arguments, or domain questions
+        """
+        student_input = (state.get("student_input") or "").strip()
+        is_hint = bool(state.get("hint_requested") or state.get("is_hint_requested"))
+
+        if is_hint:
+            return {
+                "discourse_phase": "hint_scaffold",
+                "adversarial_flag": False,
+            }
+
+        if bool(ADVERSARIAL_REGEX.search(student_input)):
+            return {
+                "discourse_phase": "adversarial",
+                "adversarial_flag": True,
+                "adversarial_reason": "Direct solution solicitation or guardrail evasion attempt.",
+            }
+
+        text_lower = student_input.lower()
+
+        # Orientation / Greeting
+        greeting_pattern = r"^\s*(?:hi|hello|hey|good\s+(?:morning|afternoon|evening)|greetings|howdy)(?:[!,.\s]|$)"
+        if re.match(greeting_pattern, text_lower) and len(student_input.split()) <= 4:
+            return {
+                "discourse_phase": "orientation",
+                "adversarial_flag": False,
+            }
+
+        # Structural Scaffolding & Brainstorming
+        structural_keywords = [
+            "structure", "brainstorm", "outline", "organize",
+            "how to start", "where do i begin", "help me structure",
+            "help with the assignment", "how should i structure",
+            "how do i organize", "come up with a structure"
+        ]
+        if any(k in text_lower for k in structural_keywords):
+            return {
+                "discourse_phase": "structural_scaffold",
+                "adversarial_flag": False,
+            }
+
+        return {
+            "discourse_phase": "substantive_inquiry",
+            "adversarial_flag": False,
         }
 
     def decompose_toulmin(self, state: TutorSessionState) -> dict[str, Any]:
@@ -233,30 +288,111 @@ class SocraticTutorAgent:
             },
         }
 
+    async def generate_orientation_turn(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Generates a warm, collegial seminar carrel welcome without adversarial pedantry.
+        """
+        response_text = (
+            "Hello! Welcome to your seminar carrel. I'm here to help you examine the assigned exhibits "
+            "and develop your own evidence-grounded arguments on medieval and early modern Indian institutions. "
+            "What aspect of the assignment prompt or sources would you like to explore first?"
+        )
+        return {
+            "final_verified_response": response_text,
+            "draft_response": response_text,
+            "is_approved": True,
+            "hint_rung": None,
+            "penalty_score": 0.0,
+            "thoughts_of_tutorbot": {
+                "strategy_selected": "Seminar orientation & entry facilitation",
+                "affective_adjustment": "Warm, encouraging, scholarly collegiality.",
+            },
+        }
+
+    async def generate_structural_scaffold_turn(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Provides Socratic structural scaffolding: outlines the 3 historical analytical pillars
+        and invites the student to choose an anchor.
+        """
+        response_text = (
+            "Certainly. A rigorous historical analysis for this assignment typically rests on three structural pillars:\n\n"
+            "1. Central Thesis: How administrative and economic institutions evolved across dynastic transitions (continuity vs. disruption).\n"
+            "2. Causal & Fiscal Mechanisms: Grounding your claims in specific reforms from the exhibits (e.g., Todar Mal's Zabt revenue system, silver currency monetization, or regional market integration).\n"
+            "3. Limits & Counter-Evidence: Analyzing where imperial centralization met local autonomy or resistance.\n\n"
+            "To begin building your outline, which of these pillars or assigned exhibits would you like to anchor your first section around?"
+        )
+        return {
+            "final_verified_response": response_text,
+            "draft_response": response_text,
+            "is_approved": True,
+            "hint_rung": None,
+            "penalty_score": 0.0,
+            "thoughts_of_tutorbot": {
+                "strategy_selected": "Socratic structural decomposition into 3 analytical pillars",
+                "affective_adjustment": "Supportive academic scaffolding.",
+            },
+        }
+
+    async def generate_hint_scaffold_turn(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Handles the 3-rung scaffolded hint ladder explicitly requested by the student.
+        """
+        current_rung = state.get("current_rung", 0)
+        active_rung = min(current_rung + 1, 3)
+        hint_ladder = state.get("hint_ladder") or []
+
+        assignment_hint = None
+        for hint in hint_ladder:
+            lvl = hint.get("level") if isinstance(hint, dict) else getattr(hint, "level", None)
+            if lvl == active_rung:
+                is_locked = hint.get("is_locked", False) if isinstance(hint, dict) else getattr(hint, "is_locked", False)
+                if not is_locked:
+                    assignment_hint = hint.get("content") if isinstance(hint, dict) else getattr(hint, "content", None)
+                break
+
+        if assignment_hint:
+            probe_text = assignment_hint
+        else:
+            rung_ladders = {
+                1: "What were the key institutional and economic transformations that occurred across medieval and early modern India, and how did dynastic transitions shape regional networks?",
+                2: "Looking at your working claim, what specific causal mechanism connects these administrative reforms to changes in agricultural productivity or rural credit?",
+                3: "Let's decompose this into three analytical steps: 1) Identify one specific reform from the assigned exhibits, 2) Note how primary accounts quantify its revenue impact, and 3) Contrast this with an alternative regional interpretation.",
+            }
+            probe_text = rung_ladders.get(active_rung, rung_ladders[1])
+
+        return {
+            "current_rung": active_rung,
+            "hint_rung": active_rung,
+            "penalty_score": active_rung * 0.25,
+            "final_verified_response": probe_text,
+            "draft_response": probe_text,
+            "is_approved": True,
+            "thoughts_of_tutorbot": {
+                "strategy_selected": f"Rung {active_rung} Scaffolded Pedagogical Hint",
+                "active_rung": active_rung,
+                "affective_adjustment": "Calibrated cognitive support.",
+            },
+        }
+
     async def generate_socratic_turn(self, state: TutorSessionState) -> dict[str, Any]:
         """
-        Generates a scaffolded Socratic probe by calling FastMCP tools for misconception lookup,
-        source chunk grounding, and episodic recording.
+        Generates a scaffolded Socratic probe for substantive claims by querying
+        misconceptions, analyzing Toulmin warrants, and engaging LLM enhancement.
         """
         student_id = state.get("student_id", "anonymous_student")
         student_input = state.get("student_input", "")
         active_kc_id = state.get("active_kc_id", "*")
         current_rung = state.get("current_rung", 0)
-        hint_requested = state.get("hint_requested", False)
         attempts = state.get("verification_attempts", 0)
         remediation = state.get("remediation_instructions")
 
-        # 1. Advance rung if requested
-        active_rung = min(current_rung + 1, 3) if hint_requested else current_rung
-        penalty_score = active_rung * 0.25
-
-        # 2. Query Graphiti MCP for past student claims (temporal context)
+        # 1. Query Graphiti MCP for past student claims (temporal context)
         temporal_context = await self.mcp.call_tool(
             "query_student_belief_trajectory",
             {"student_id": student_id, "concept_query": student_input[:100]},
         ) or []
 
-        # 3. Query Neo4j MCP for matching Misconception & Socratic Probes
+        # 2. Query Neo4j MCP for matching Misconception & Socratic Probes
         misconceptions = await self.mcp.call_tool(
             "search_misconceptions",
             {"student_claim": student_input, "kc_id": active_kc_id, "limit": 2},
@@ -267,50 +403,66 @@ class SocraticTutorAgent:
 
         if matched_trap:
             probes = matched_trap.get("probes", [])
-            # Find probe matching active_rung (0, 1, or 2)
-            matching = [p for p in probes if p.get("rung") == min(active_rung, 2)]
+            matching = [p for p in probes if p.get("rung") == min(current_rung, 2)]
             if matching:
                 probe_text = matching[0].get("probe_text")
             elif probes:
                 probe_text = probes[0].get("probe_text")
 
-        # 4. Fallback generic Socratic scaffold if no specific probe matched
+        # 3. Fallback generic Socratic inquiry if no specific catalogued probe matched
         if not probe_text:
-            generic_ladders = [
-                "What initial assumption are you making about the actors or causes in this scenario?",
-                "Which specific primary document or piece of evidence supports this interpretation over an alternative?",
-                "How might you restate your argument so that it accounts for the contradictory details mentioned in the text?",
-                "Consider the broader institutional context: what underlying policy directly produced these outcomes?",
-            ]
-            probe_text = generic_ladders[min(active_rung, len(generic_ladders) - 1)]
+            text_lower = student_input.lower()
+            if any(w in text_lower for w in ["counter", "challenge", "alternative", "against"]):
+                probe_text = "If we test your claim against the assigned exhibits, what contradictory evidence or alternative institutional explanation presents the strongest challenge?"
+            elif any(w in text_lower for w in ["premise", "assumption", "presuppose"]):
+                probe_text = "What implicit premise are you taking for granted regarding the causal mechanisms connecting these institutional changes to economic outcomes?"
+            elif any(w in text_lower for w in ["evidence", "ground", "source", "document", "exhibit"]):
+                probe_text = "Which specific passage, fiscal table, or administrative record in the assigned exhibit best substantiates this interpretation over an alternative?"
+            else:
+                probe_text = f"Taking your argument regarding '{student_input[:60]}': what specific primary evidence or historical mechanism connects this assertion to the prompt's central themes?"
 
-        # If this is a re-prompt due to critic rejection, ensure it ends with an explicit guiding question
         if attempts > 0 and remediation:
             probe_text = f"{probe_text} In your own words, what is the most significant evidence here?"
 
-        # 5. Build thoughts_of_tutorbot
+        # 4. LLM Enhancement with Answer Isolation guardrails
+        try:
+            gen = await llm_orchestrator.enhance(
+                purpose="socratic_dialogue_turn",
+                system_prompt=(
+                    "You are an expert Socratic tutor in a university history seminar. "
+                    "Guide the student toward independent critical thinking and evidence-grounded analysis. "
+                    "Engage directly with the student's historical reasoning. "
+                    "Output exactly one focused, intellectually rigorous inquiry ending in a question mark. "
+                    "Never ghostwrite the student's essay, give direct answers, or provide pre-written thesis statements."
+                ),
+                user_prompt=(
+                    f"Student's Claim / Argument:\n{student_input}\n\n"
+                    f"Focused Context:\n{state.get('focused_block_text') or 'Draft paragraph'}\n\n"
+                    f"Socratic Probe Target:\n{probe_text}"
+                ),
+                deterministic_fallback=probe_text,
+                pseudonymous_seed=f"socratic:{student_id}:{student_input[:64]}",
+                max_characters=450,
+                max_tokens=120,
+                allow_live=True,
+            )
+            probe_text = gen.content
+        except Exception as err:
+            logger.warning(f"LLM enhancement failed, falling back to deterministic probe: {err}")
+
         thoughts = {
             "student_claim_analyzed": student_input[:120],
             "identified_error": matched_trap.get("name") if matched_trap else "Under-evidenced premise",
-            "active_rung": active_rung,
+            "active_rung": current_rung,
             "flawed_rule_detected": matched_trap.get("flawed_rule") if matched_trap else None,
-            "strategy_selected": f"Rung {active_rung} Socratic guidance targeting evidence grounding.",
+            "strategy_selected": "Substantive Socratic inquiry targeting causal warrant & exhibit grounding.",
             "affective_adjustment": "Intellectually rigorous, supportive, encouraging.",
         }
 
-        # 6. Record turn into Graphiti temporal memory via MCP
-        await self.mcp.call_tool(
-            "record_learning_episode",
-            {
-                "student_id": student_id,
-                "turn_type": "socratic_turn",
-                "text_content": f"Student claimed: '{student_input}' | Socratic guide asked: '{probe_text}'",
-            },
-        )
-
         return {
-            "current_rung": active_rung,
-            "penalty_score": penalty_score,
+            "current_rung": current_rung,
+            "hint_rung": None,  # Substantive turns must never emit a hint_rung
+            "penalty_score": 0.0,
             "temporal_context": temporal_context,
             "diagnosed_misconception": matched_trap,
             "thoughts_of_tutorbot": thoughts,

@@ -75,6 +75,9 @@ class TutorSessionState(TypedDict, total=False):
     hint_requested: bool
     student_input: str
     domain: str
+    discourse_phase: str                        # "orientation", "structural_scaffold", "substantive_inquiry", "hint_scaffold", "adversarial"
+    hint_ladder: list[dict[str, Any]] | None    # Configured pedagogical hint rungs
+    hint_rung: int | None                       # Only present on explicit hint scaffold turns
     
     # 1. Assignment Context
     assignment_meta: dict[str, Any]

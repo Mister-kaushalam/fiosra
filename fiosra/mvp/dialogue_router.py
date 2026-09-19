@@ -33,7 +33,8 @@ class DialogueMessageRequest(BaseModel):
 class DialogueMessageResponse(BaseModel):
     response_text: str
     thoughts_of_tutorbot: dict[str, Any]
-    hint_rung: int
+    hint_rung: int | None = None
+    rung: int | None = None
     penalty_score: float
     is_adversarial: bool
     matched_misconception_id: str | None = None
@@ -107,64 +108,90 @@ async def handle_dialogue_turn(
     )
 
     stored_rung = await event_store.get_current_hint_rung(request.session_id)
-    # Adversarial prompts never receive the accumulated hint context. This preserves
-    # the existing ladder for the next legitimate turn while returning a base redirect.
-    engine_rung = 0 if dialogue_engine.is_adversarial_attempt(request.student_input) else stored_rung
-    result = await dialogue_engine.generate_response(
-        student_input=request.student_input,
-        question_prompt=active_prompt,
-        domain=active_domain,
-        current_rung=engine_rung,
-        hint_requested=request.hint_requested,
-        hint_ladder=active_hint_ladder,
-        target_kcs=active_target_kcs,
-        is_course_grounded=is_course_grounded,
-        active_section_context=active_section_context,
-        student_id=request.student_id,
+    engine_rung = stored_rung or 0
+
+    from fiosra.mvp.agents.graph import socratic_tutor_graph
+
+    initial_state = {
+        "session_id": str(request.session_id),
+        "student_id": request.student_id,
+        "assignment_id": str(request.assignment_id or session_info.get("assignment_id") or ""),
+        "question_id": active_question_id,
+        "current_rung": engine_rung,
+        "hint_requested": request.hint_requested,
+        "is_hint_requested": request.hint_requested,
+        "student_input": request.student_input,
+        "domain": active_domain,
+        "assignment_meta": {"question_prompt": active_prompt},
+        "target_bloom_level": "Analyze",
+        "rubric_criteria": [],
+        "active_beliefs": [],
+        "historical_pivots": [],
+        "in_flight_revisions": [],
+        "open_exhibit_id": None,
+        "open_exhibit_page": None,
+        "selected_source_quote": None,
+        "retrieved_source_chunks": [],
+        "target_kcs": active_target_kcs or [],
+        "active_misconceptions": [],
+        "prerequisite_status": {},
+        "canvas_blocks": [],
+        "focused_block_id": "current-block",
+        "focused_block_text": active_section_context or "",
+        "toulmin_structure": {},
+        "adversarial_flag": False,
+        "adversarial_reason": None,
+        "temporal_context": [],
+        "diagnosed_misconception": None,
+        "thoughts_of_tutorbot": {},
+        "draft_response": "",
+        "verification_attempts": 0,
+        "is_approved": False,
+        "critic_violation": None,
+        "remediation_instructions": None,
+        "final_verified_response": "",
+        "action_capsules": [],
+        "prompt_launchers": [],
+        "learner_radar": {},
+        "penalty_score": 0.0,
+        "discourse_phase": "substantive_inquiry",
+        "hint_ladder": active_hint_ladder,
+        "hint_rung": None,
+    }
+
+    graph_result = await socratic_tutor_graph.ainvoke(
+        initial_state,
+        config={"configurable": {"thread_id": f"session-{request.session_id}"}},
     )
 
-    if result["is_adversarial"]:
+    discourse_phase = graph_result.get("discourse_phase", "substantive_inquiry")
+    response_text = graph_result.get("final_verified_response") or graph_result.get("draft_response") or ""
+    is_adversarial = discourse_phase == "adversarial"
+    hint_rung = graph_result.get("hint_rung") if (request.hint_requested and discourse_phase == "hint_scaffold") else None
+    action_capsules = graph_result.get("action_capsules", []) if not request.hint_requested else []
+    prompt_launchers = graph_result.get("prompt_launchers", [])
+    learner_radar = graph_result.get("learner_radar")
+    thoughts = graph_result.get("thoughts_of_tutorbot", {})
+    penalty = graph_result.get("penalty_score", 0.0)
+
+    if is_adversarial:
         event_type = "adversarial_probe_defended"
     elif request.hint_requested:
         event_type = "hint_delivered"
     else:
         event_type = "tutor_turn_completed"
 
-    # Attach Epistemic Action Capsules & Progress Radar to turn
-    try:
-        from fiosra.mvp.agents.socratic_tutor_agent import SocraticTutorAgent
-        tutor_agent = SocraticTutorAgent()
-        toulmin_data = tutor_agent.decompose_toulmin({
-            "focused_block_text": request.student_input,
-            "student_input": request.student_input,
-        })
-        packed = tutor_agent.pack_epistemic_actions({
-            "focused_block_id": "current-block",
-            "student_input": request.student_input,
-            "is_hint_requested": request.hint_requested,
-            "current_rung": result["hint_rung"],
-            "toulmin_structure": toulmin_data.get("toulmin_structure"),
-            "final_verified_response": result["response_text"],
-        })
-        result["action_capsules"] = [] if request.hint_requested else packed.get("action_capsules", [])
-        result["prompt_launchers"] = packed.get("prompt_launchers", [])
-        result["learner_radar"] = packed.get("learner_radar", {})
-    except Exception:
-        result["action_capsules"] = []
-        result["prompt_launchers"] = []
-        result["learner_radar"] = None
-
     event_payload = {
-        "response_text": result["response_text"],
-        "thoughts_of_tutorbot": result["thoughts_of_tutorbot"],
-        "hint_rung": result["hint_rung"],
-        "rung": result["hint_rung"],
-        "penalty_score": result["penalty_score"],
-        "matched_misconception_id": result.get("matched_misconception_id"),
-        "probe_id": result.get("matched_probe_id"),
-        "generation_metadata": result.get("generation_metadata"),
-        "action_capsules": result.get("action_capsules"),
-        "learner_radar": result.get("learner_radar"),
+        "response_text": response_text,
+        "thoughts_of_tutorbot": thoughts,
+        "hint_rung": hint_rung,
+        "rung": hint_rung,
+        "penalty_score": penalty,
+        "matched_misconception_id": None,
+        "probe_id": None,
+        "generation_metadata": {"discourse_phase": discourse_phase},
+        "action_capsules": action_capsules,
+        "learner_radar": learner_radar,
     }
     await event_store.log_event(
         session_id=request.session_id,
@@ -174,17 +201,17 @@ async def handle_dialogue_turn(
         payload=event_payload,
         assignment_id=request.assignment_id or session_info.get("assignment_id"),
     )
-    if result.get("matched_misconception_id"):
-        await event_store.log_event(
-            session_id=request.session_id,
-            student_id=request.student_id,
-            question_id=active_question_id,
-            event_type="misconception_flagged",
-            payload={
-                "code": result["matched_misconception_id"],
-                "kc_id": result.get("matched_kc_id") or "unmapped",
-                "hint_rung": result["hint_rung"],
-            },
-            assignment_id=request.assignment_id or session_info.get("assignment_id"),
-        )
-    return result
+
+    return {
+        "response_text": response_text,
+        "thoughts_of_tutorbot": thoughts,
+        "hint_rung": hint_rung,
+        "rung": hint_rung,
+        "penalty_score": penalty,
+        "matched_misconception_id": None,
+        "generation_metadata": {"discourse_phase": discourse_phase},
+        "action_capsules": action_capsules,
+        "prompt_launchers": prompt_launchers,
+        "learner_radar": learner_radar,
+        "is_adversarial": is_adversarial,
+    }
