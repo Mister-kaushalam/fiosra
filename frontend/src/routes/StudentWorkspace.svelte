@@ -731,12 +731,14 @@
     isMacroBusy = true;
     try {
       const prompt = assignment?.published?.task?.prompt || assignment?.task?.prompt || assignment?.prompt || 'Explore structural historical causation';
+      const qId = assignment?.question_id || 'q1';
       const res = await fetch('/dialogue/message', {
         method: 'POST',
         headers: sessionHeaders(),
         body: JSON.stringify({
           session_id: sessionId,
           student_id: studentId,
+          question_id: qId,
           student_input: studentInput,
           question_prompt: prompt,
           domain: assignment?.domain || 'history',
@@ -755,6 +757,8 @@
           thoughts: data.thoughts_of_tutorbot,
           hint_rung: data.hint_rung,
           is_adversarial: data.is_adversarial,
+          action_capsules: data.action_capsules || [],
+          radar: data.learner_radar || null,
         }
       ];
       fiosraContext.setEpistemicState(null, data.hint_rung);

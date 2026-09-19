@@ -45,12 +45,23 @@ export function recoveryKey(sessionId, documentId) {
 
 export async function saveDocumentRecovery(snapshot) {
   if (!snapshot?.sessionId || !snapshot?.documentId || !Array.isArray(snapshot.blocks)) return;
+  let cleanBlocks;
+  try {
+    cleanBlocks = JSON.parse(JSON.stringify(snapshot.blocks));
+  } catch {
+    cleanBlocks = snapshot.blocks.map((b) => ({
+      block_id: b.block_id || b.id,
+      text: b.text || '',
+      type: b.type || 'paragraph',
+      role: b.role || 'claim',
+    }));
+  }
   const record = {
     key: recoveryKey(snapshot.sessionId, snapshot.documentId),
     sessionId: snapshot.sessionId,
     documentId: snapshot.documentId,
     baseRevision: Number(snapshot.baseRevision || 0),
-    blocks: snapshot.blocks,
+    blocks: cleanBlocks,
     savedAt: new Date().toISOString(),
   };
   await withStore('readwrite', (store) => store.put(record));
