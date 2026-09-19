@@ -10,7 +10,7 @@ help:
 	@echo "  make clean     - Remove python caches and build artifacts"
 
 dev:
-	uv run uvicorn fiosra.mvp.main:app --reload --port 8000
+	uv run uvicorn fiosra.mvp.main:app --reload --port 8080
 
 test:
 	uv run pytest tests/ -v

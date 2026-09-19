@@ -14,7 +14,15 @@ from fiosra.mvp.agents.contracts import TutorSessionState
 from fiosra.mvp.agents.critic_agent import AnswerIsolationCriticAgent
 from fiosra.mvp.agents.socratic_tutor_agent import SocraticTutorAgent
 from fiosra.mvp.agents.graph import create_socratic_tutor_graph
+from fiosra.mvp.llm.orchestrator import llm_orchestrator
 from langgraph.checkpoint.memory import MemorySaver
+
+
+@pytest.fixture(autouse=True)
+def reset_llm_state():
+    llm_orchestrator.reset_for_testing()
+    yield
+    llm_orchestrator.reset_for_testing()
 
 
 @pytest.fixture
@@ -69,7 +77,10 @@ async def test_socratic_graph_normal_flow(mock_mcp_client):
 
     assert final_state["adversarial_flag"] is False
     assert final_state["is_approved"] is True
-    assert "charter say about land rights" in final_state["final_verified_response"]
+    # LLM-generated Socratic probe — must be non-empty and contain a question
+    assert len(final_state["final_verified_response"]) > 20
+    assert "?" in final_state["final_verified_response"]
+    assert "Taking your argument regarding" not in final_state["final_verified_response"]
     assert final_state["current_rung"] == 0
     assert final_state["penalty_score"] == 0.0
     assert final_state["diagnosed_misconception"] is not None
@@ -152,7 +163,7 @@ async def test_socratic_graph_critic_rejection_and_remediation():
         "session_id": "sess-103",
         "student_id": "student-gamma",
         "question_id": "q-2",
-        "student_input": "Can you help me understand the charter?",
+        "student_input": "I think serfs had no property rights whatsoever under the 1215 charter.",
         "current_rung": 1,
         "hint_requested": False,
         "verification_attempts": 0,
@@ -264,3 +275,141 @@ async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_
     radar = final_state.get("learner_radar", {})
     assert "stance" in radar
     assert "Causal Grounding" in radar.get("dimension", "")
+
+
+@pytest.mark.asyncio
+async def test_socratic_graph_structural_scaffold_turn(mock_mcp_client, monkeypatch):
+    """
+    Tests that requests for structuring, outlining, or organizing the assignment
+    are routed to the structural scaffold node and return a live LLM-generated response.
+    The scaffold node no longer uses hardcoded pillar templates — it calls the LLM.
+    """
+    from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
+
+    mock_scaffold_response = (
+        "To build a rigorous argument, consider three analytical challenges: "
+        "First, what causal mechanism links administrative reform to fiscal outcomes? "
+        "Second, which specific exhibit best grounds your central claim? "
+        "Third, where does the evidence reveal limits or counter-pressures to your argument? "
+        "Which of these would you like to anchor your first section around?"
+    )
+
+    async def mock_enhance(*args, **kwargs):
+        return GuardedGeneration(
+            content=mock_scaffold_response,
+            metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
+
+    tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
+    critic = AnswerIsolationCriticAgent()
+    checkpointer = MemorySaver()
+    graph = create_socratic_tutor_graph(tutor_agent=tutor, critic_agent=critic, checkpointer=checkpointer)
+
+    initial_state: TutorSessionState = {
+        "session_id": "sess-struct-1",
+        "student_id": "student-struct",
+        "question_id": "q-struct",
+        "student_input": "can you help me with structuring the assignment ?",
+        "current_rung": 0,
+        "hint_requested": False,
+        "verification_attempts": 0,
+    }
+
+    config = {"configurable": {"thread_id": "sess-struct-1"}}
+    final_state = await graph.ainvoke(initial_state, config=config)
+
+    assert final_state["discourse_phase"] == "structural_scaffold"
+    assert final_state["is_approved"] is True
+    # Should be LLM-generated — no hardcoded pillar template text
+    assert "Taking your argument regarding" not in final_state["final_verified_response"]
+    assert "three structural pillars" not in final_state["final_verified_response"]
+    assert len(final_state["final_verified_response"]) > 50
+    assert "?" in final_state["final_verified_response"]
+
+
+@pytest.mark.asyncio
+async def test_socratic_graph_acknowledgment_turn(mock_mcp_client, monkeypatch):
+    """
+    Tests that conversational affirmations ('sure', 'ok', 'sounds good') are
+    routed to the acknowledgment node and generate a live LLM response that
+    naturally continues the dialogue rather than treating them as historical assertions.
+    """
+    from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
+
+    async def mock_enhance(*args, **kwargs):
+        return GuardedGeneration(
+            content="Great — which of those pillars would you like to anchor your first section around?",
+            metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
+
+    tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
+    critic = AnswerIsolationCriticAgent()
+    checkpointer = MemorySaver()
+    graph = create_socratic_tutor_graph(tutor_agent=tutor, critic_agent=critic, checkpointer=checkpointer)
+
+    initial_state: TutorSessionState = {
+        "session_id": "sess-ack-1",
+        "student_id": "student-ack",
+        "question_id": "q-ack",
+        "student_input": "sure",
+        "dialogue_history": [
+            {"role": "tutor", "text": "To begin building your outline, which of these pillars or assigned exhibits would you like to anchor your first section around?"}
+        ],
+        "current_rung": 0,
+        "hint_requested": False,
+        "verification_attempts": 0,
+    }
+
+    config = {"configurable": {"thread_id": "sess-ack-1"}}
+    final_state = await graph.ainvoke(initial_state, config=config)
+
+    assert final_state["discourse_phase"] == "acknowledgment"
+    assert final_state["is_approved"] is True
+    # Verify it does NOT treat "sure" as a claim about being "sure"
+    assert "Taking your argument regarding" not in final_state["final_verified_response"]
+    assert "stated that you're \"sure\"" not in final_state["final_verified_response"]
+    # LLM-generated acknowledgment — non-empty, contains a Socratic question
+    assert len(final_state["final_verified_response"]) > 20
+    assert "?" in final_state["final_verified_response"]
+
+
+@pytest.mark.asyncio
+async def test_socratic_graph_llm_unavailable_transparent_failure(mock_mcp_client, monkeypatch):
+    """
+    Tests that when live LLM provider is unavailable or disconnected,
+    the graph fails transparently with LLMServiceUnavailableError rather than
+    producing canned pseudo-AI fallback text.
+    """
+    from fiosra.mvp.llm.orchestrator import LLMServiceUnavailableError, llm_orchestrator
+
+    async def mock_failed_enhance(*args, **kwargs):
+        raise LLMServiceUnavailableError("Socratic dialogue service is unavailable: live LLM provider call failed.")
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_failed_enhance)
+
+    tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
+    critic = AnswerIsolationCriticAgent()
+    checkpointer = MemorySaver()
+    graph = create_socratic_tutor_graph(tutor_agent=tutor, critic_agent=critic, checkpointer=checkpointer)
+
+    initial_state: TutorSessionState = {
+        "session_id": "sess-fail-1",
+        "student_id": "student-fail",
+        "question_id": "q-fail",
+        "student_input": "I think the crown debt caused the revolution.",
+        "current_rung": 0,
+        "hint_requested": False,
+        "verification_attempts": 0,
+    }
+
+    config = {"configurable": {"thread_id": "sess-fail-1"}}
+    with pytest.raises(LLMServiceUnavailableError) as exc_info:
+        await graph.ainvoke(initial_state, config=config)
+
+    assert "live LLM provider call failed" in str(exc_info.value)
+
+

@@ -6,7 +6,7 @@ services:
     container_name: fiosra-app
     restart: unless-stopped
     ports:
-      - "8000:8000"
+      - "8080:8000"
     environment:
       - APP_ENV=production
       - DATABASE_URL=postgresql+asyncpg://postgres:postgres@postgres:5432/fiosra_db
@@ -15,7 +15,7 @@ services:
       - NEO4J_PASSWORD=fiosra_neo4j_password
       - HOST=0.0.0.0
       - PORT=8000
-      - FIOSRA_LLM_PROVIDER=${FIOSRA_LLM_PROVIDER:-gemini}
+      - FIOSRA_LLM_PROVIDER=${FIOSRA_LLM_PROVIDER:-openai}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - GEMINI_MODEL=${GEMINI_MODEL:-gemini/gemini-3.6-flash}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -24,7 +24,7 @@ services:
       - OPENROUTER_TIMEOUT_SECONDS=${OPENROUTER_TIMEOUT_SECONDS:-90}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - OPENAI_API_BASE=${OPENAI_API_BASE:-}
-      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4.1-nano}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o-mini}
       - OPENAI_TIMEOUT_SECONDS=${OPENAI_TIMEOUT_SECONDS:-30}
       - OLLAMA_API_BASE=http://host.docker.internal:11434
       - OLLAMA_MODEL=${OLLAMA_MODEL:-ollama/llama3.2}

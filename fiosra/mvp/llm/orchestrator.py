@@ -9,6 +9,12 @@ from fiosra.mvp.config import settings
 from fiosra.mvp.llm.contracts import CompletionRequest, LLMProviderError
 from fiosra.mvp.llm.litellm_provider import LiteLLMProvider
 
+
+class LLMServiceUnavailableError(LLMProviderError):
+    """Raised when an operation requires a live LLM connection, but none is available or the provider call failed."""
+    pass
+
+
 logger = logging.getLogger(__name__)
 
 ANSWER_LEAK_PATTERNS = re.compile(
@@ -159,22 +165,26 @@ class LLMOrchestrator:
         purpose: str,
         system_prompt: str,
         user_prompt: str,
-        deterministic_fallback: str,
+        deterministic_fallback: str = "",
         pseudonymous_seed: str,
         max_characters: int,
         max_tokens: int,
         allow_live: bool = True,
+        require_live: bool = False,
         request_timeout_seconds: float | None = None,
         response_format: dict[str, object] | None = None,
     ) -> GuardedGeneration:
-        """Return a validated live response or the supplied deterministic fallback.
+        """Return a validated live response or raise/fall back based on require_live.
 
-        This method never raises for provider availability failures. It deliberately avoids
-        LiteLLM's provider-level fallback setting: Fiosra's deterministic fallback is the
-        safe final authority and works without any external account or network access.
+        When require_live is True, this method fails transparently with LLMServiceUnavailableError
+        instead of returning synthetic deterministic text.
         """
         configured_provider = settings.FIOSRA_LLM_PROVIDER.strip().lower()
         if configured_provider == "deterministic":
+            if require_live:
+                raise LLMServiceUnavailableError(
+                    "Socratic dialogue service is unavailable: live LLM provider is not configured."
+                )
             return GuardedGeneration(
                 content=deterministic_fallback,
                 metadata=GenerationMetadata(
@@ -184,6 +194,8 @@ class LLMOrchestrator:
                 ),
             )
         if not allow_live:
+            if require_live:
+                raise LLMServiceUnavailableError("Live LLM generation is disallowed for this request.")
             return GuardedGeneration(
                 content=deterministic_fallback,
                 metadata=GenerationMetadata(
@@ -194,6 +206,10 @@ class LLMOrchestrator:
                 ),
             )
         if self._is_in_cooldown():
+            if require_live:
+                raise LLMServiceUnavailableError(
+                    f"LLM provider is temporarily in cooldown until {self._cooldown_until}."
+                )
             return GuardedGeneration(
                 content=deterministic_fallback,
                 metadata=GenerationMetadata(
@@ -240,6 +256,8 @@ class LLMOrchestrator:
             reason = f"unexpected_provider_error:{type(exc).__name__}"
 
         self._record_failure(reason)
+        if require_live:
+            raise LLMServiceUnavailableError(f"Socratic dialogue service unavailable: {reason}")
         return GuardedGeneration(
             content=deterministic_fallback,
             metadata=GenerationMetadata(

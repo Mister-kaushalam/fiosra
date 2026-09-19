@@ -75,7 +75,8 @@ class TutorSessionState(TypedDict, total=False):
     hint_requested: bool
     student_input: str
     domain: str
-    discourse_phase: str                        # "orientation", "structural_scaffold", "substantive_inquiry", "hint_scaffold", "adversarial"
+    discourse_phase: str                        # "orientation", "structural_scaffold", "substantive_inquiry", "hint_scaffold", "adversarial", "acknowledgment"
+    dialogue_history: list[dict[str, str]]      # Prior turns [{"role": "student"|"tutor", "text": "..."}]
     hint_ladder: list[dict[str, Any]] | None    # Configured pedagogical hint rungs
     hint_rung: int | None                       # Only present on explicit hint scaffold turns
     
@@ -107,6 +108,7 @@ class TutorSessionState(TypedDict, total=False):
     toulmin_structure: dict[str, Any]           # Active claims, warrants, citations
     
     # Internal reasoning and diagnosis
+    intellectual_operation: str | None
     adversarial_flag: bool
     adversarial_reason: str | None
     temporal_context: list[dict[str, Any]]

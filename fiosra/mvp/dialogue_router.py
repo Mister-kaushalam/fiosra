@@ -110,6 +110,16 @@ async def handle_dialogue_turn(
     stored_rung = await event_store.get_current_hint_rung(request.session_id)
     engine_rung = stored_rung or 0
 
+    recent_events = await event_store.get_session_events(request.session_id, limit=50)
+    dialogue_history: list[dict[str, str]] = []
+    for ev in recent_events[:-1]:
+        etype = ev.get("event_type")
+        payload = ev.get("payload") or {}
+        if etype == "student_prompt_submitted" and payload.get("student_input"):
+            dialogue_history.append({"role": "student", "text": payload["student_input"]})
+        elif etype in ("tutor_turn_completed", "hint_delivered", "adversarial_probe_defended") and payload.get("response_text"):
+            dialogue_history.append({"role": "tutor", "text": payload["response_text"]})
+
     from fiosra.mvp.agents.graph import socratic_tutor_graph
 
     initial_state = {
@@ -121,6 +131,7 @@ async def handle_dialogue_turn(
         "hint_requested": request.hint_requested,
         "is_hint_requested": request.hint_requested,
         "student_input": request.student_input,
+        "dialogue_history": dialogue_history,
         "domain": active_domain,
         "assignment_meta": {"question_prompt": active_prompt},
         "target_bloom_level": "Analyze",
@@ -159,10 +170,26 @@ async def handle_dialogue_turn(
         "hint_rung": None,
     }
 
-    graph_result = await socratic_tutor_graph.ainvoke(
-        initial_state,
-        config={"configurable": {"thread_id": f"session-{request.session_id}"}},
-    )
+    from fiosra.mvp.llm.orchestrator import LLMServiceUnavailableError
+
+    try:
+        graph_result = await socratic_tutor_graph.ainvoke(
+            initial_state,
+            config={"configurable": {"thread_id": f"session-{request.session_id}"}},
+        )
+    except LLMServiceUnavailableError as exc:
+        await event_store.log_event(
+            session_id=request.session_id,
+            student_id=request.student_id,
+            question_id=active_question_id,
+            event_type="dialogue_service_unavailable",
+            payload={"error": str(exc)},
+            assignment_id=request.assignment_id or session_info.get("assignment_id"),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Socratic dialogue service is unavailable: {exc}",
+        ) from exc
 
     discourse_phase = graph_result.get("discourse_phase", "substantive_inquiry")
     response_text = graph_result.get("final_verified_response") or graph_result.get("draft_response") or ""

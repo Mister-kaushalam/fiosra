@@ -53,6 +53,9 @@ def create_socratic_tutor_graph(
     async def structural_scaffold_node(state: TutorSessionState) -> dict[str, Any]:
         return await tutor.generate_structural_scaffold_turn(state)
 
+    async def acknowledgment_node(state: TutorSessionState) -> dict[str, Any]:
+        return await tutor.generate_acknowledgment_turn(state)
+
     async def hint_scaffold_node(state: TutorSessionState) -> dict[str, Any]:
         return await tutor.generate_hint_scaffold_turn(state)
 
@@ -92,7 +95,7 @@ def create_socratic_tutor_graph(
     # 2. Define Conditional Routing Functions
     def route_discourse(state: TutorSessionState) -> str:
         phase = state.get("discourse_phase", "substantive_inquiry")
-        if phase in ("orientation", "structural_scaffold", "hint_scaffold", "adversarial"):
+        if phase in ("orientation", "structural_scaffold", "hint_scaffold", "adversarial", "acknowledgment"):
             return phase
         return "substantive_inquiry"
 
@@ -111,6 +114,7 @@ def create_socratic_tutor_graph(
     builder.add_node("analyze_epistemic_discourse", analyze_epistemic_discourse_node)
     builder.add_node("orientation_node", orientation_node)
     builder.add_node("structural_scaffold_node", structural_scaffold_node)
+    builder.add_node("acknowledgment_node", acknowledgment_node)
     builder.add_node("hint_scaffold_node", hint_scaffold_node)
     builder.add_node("deflection_node", deflection_node)
     builder.add_node("toulmin_decomposition", toulmin_decomposition_node)
@@ -130,6 +134,7 @@ def create_socratic_tutor_graph(
         {
             "orientation": "orientation_node",
             "structural_scaffold": "structural_scaffold_node",
+            "acknowledgment": "acknowledgment_node",
             "hint_scaffold": "hint_scaffold_node",
             "adversarial": "deflection_node",
             "substantive_inquiry": "toulmin_decomposition",
@@ -138,6 +143,7 @@ def create_socratic_tutor_graph(
 
     builder.add_edge("orientation_node", "epistemic_action_packer")
     builder.add_edge("structural_scaffold_node", "epistemic_action_packer")
+    builder.add_edge("acknowledgment_node", "epistemic_action_packer")
     builder.add_edge("hint_scaffold_node", "epistemic_action_packer")
     builder.add_edge("deflection_node", "epistemic_action_packer")
 

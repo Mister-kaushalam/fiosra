@@ -106,16 +106,50 @@ class SocraticTutorAgent:
                 "adversarial_flag": False,
             }
 
-        # Structural Scaffolding & Brainstorming
-        structural_keywords = [
-            "structure", "brainstorm", "outline", "organize",
-            "how to start", "where do i begin", "help me structure",
-            "help with the assignment", "how should i structure",
-            "how do i organize", "come up with a structure"
-        ]
-        if any(k in text_lower for k in structural_keywords):
+        # Conversational Acknowledgments / Affirmations ('sure', 'ok', 'sounds good', 'yes', etc.)
+        acknowledgment_pattern = r"^\s*(?:sure|ok|okay|yes|yeah|yep|sounds\s+good|sounds\s+great|cool!?|got\s+it|alright|fine|understood|makes\s+sense|right|let's\s+do\s+it|sure\s+thing)(?:[!,.\s]|$)"
+        if re.match(acknowledgment_pattern, text_lower) and len(student_input.split()) <= 4:
+            return {
+                "discourse_phase": "acknowledgment",
+                "adversarial_flag": False,
+            }
+
+        # Structural Scaffolding & Brainstorming (outlining, structuring, organizing, beginning)
+        structural_pattern = (
+            r"\b(?:"
+            r"structur(?:e|ing|ed|es)?|"
+            r"outlin(?:e|ing|ed|es)?|"
+            r"organiz(?:e|ing|ed|es|ation|ations)?|"
+            r"organis(?:e|ing|ed|es|ation|ations)?|"
+            r"brainstorm(?:ing)?|"
+            r"framework|"
+            r"layout|"
+            r"format(?:ting)?|"
+            r"how\s+to\s+start|where\s+(?:do|should|can)\s+i\s+begin|how\s+should\s+i\s+begin|"
+            r"how\s+(?:do|can|should|would)\s+i\s+(?:approach|tackle|proceed|write|structure|organize|outline)|"
+            r"help\s+(?:me\s+)?(?:with\s+)?(?:structuring|organizing|outlining|writing|the\s+assignment|my\s+essay|my\s+paper)"
+            r")\b"
+        )
+        if re.search(structural_pattern, text_lower):
             return {
                 "discourse_phase": "structural_scaffold",
+                "adversarial_flag": False,
+            }
+
+        # Meta-questions about the tutor itself (orientation-style, not substantive claims)
+        meta_pattern = (
+            r"^\s*(?:"
+            r"what(?:\s+(?:can|do|will|would))?\s+you\s+(?:do|help|assist|support|offer|cover|handle)|"
+            r"how\s+(?:can|do)\s+you\s+help|"
+            r"what\s+(?:are\s+you|is\s+this)|"
+            r"who\s+are\s+you|"
+            r"can\s+you\s+help\s+(?:me\s+)?(?:with\s+this|today|please)?|"
+            r"what\s+should\s+(?:i|we)\s+(?:do|start\s+with)"
+            r")"
+        )
+        if re.search(meta_pattern, text_lower) and len(student_input.split()) <= 10:
+            return {
+                "discourse_phase": "orientation",
                 "adversarial_flag": False,
             }
 
@@ -209,8 +243,12 @@ class SocraticTutorAgent:
 
         # Action capsules must be earned: only formulate a transfer capsule when the
         # student has articulated substantive reasoning (enforcing Zero AI Ghostwriting).
-        if focused_id and not is_hint and len(student_input) > 20 and not student_input.endswith("?"):
-            claim_fragment = toulmin.get("claim") or student_input
+        claim_candidate = toulmin.get("claim") or ""
+        has_substantive_input = len(student_input) > 20 and not student_input.endswith("?")
+        has_substantive_block = bool((toulmin.get("has_warrant") or toulmin.get("has_evidence")) and len(claim_candidate) > 20)
+
+        if focused_id and not is_hint and (has_substantive_input or has_substantive_block):
+            claim_fragment = claim_candidate if (has_substantive_block and student_input.endswith("?")) else (claim_candidate or student_input)
             snippet = claim_fragment if len(claim_fragment) <= 180 else claim_fragment[:177] + "..."
             capsules.append({
                 "capsule_id": f"cap-{uuid4().hex[:8]}",
@@ -290,13 +328,40 @@ class SocraticTutorAgent:
 
     async def generate_orientation_turn(self, state: TutorSessionState) -> dict[str, Any]:
         """
-        Generates a warm, collegial seminar carrel welcome without adversarial pedantry.
+        Generates a warm, context-aware welcome via live LLM generation.
+        Responds naturally to greetings and meta-questions about the tutor's capabilities,
+        grounded in the actual assignment prompt. Fails transparently if LLM is unavailable.
         """
-        response_text = (
-            "Hello! Welcome to your seminar carrel. I'm here to help you examine the assigned exhibits "
-            "and develop your own evidence-grounded arguments on medieval and early modern Indian institutions. "
-            "What aspect of the assignment prompt or sources would you like to explore first?"
+        student_id = state.get("student_id", "anonymous_student")
+        student_input = state.get("student_input", "")
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "A historical analysis assignment."
+
+        system_prompt = (
+            "You are an expert Socratic tutor in a university history seminar. "
+            "The student has just started a session or asked a meta-question about what you can help with. "
+            "Respond warmly and briefly. Introduce yourself as a Socratic tutor who helps students "
+            "develop their own evidence-grounded arguments — you do not write for them or give direct answers. "
+            "Mention the assignment topic briefly, and invite the student to pick a starting point. "
+            "Keep it to 2-3 sentences. Do not start with 'I' as the first word."
         )
+
+        user_prompt = (
+            f"Assignment Question Prompt:\n{assignment_prompt}\n\n"
+            f"Student's Opening Message:\n{student_input}"
+        )
+
+        gen = await llm_orchestrator.enhance(
+            purpose="socratic_orientation",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            pseudonymous_seed=f"orientation:{student_id}:{student_input[:32]}",
+            max_characters=600,
+            max_tokens=120,
+            allow_live=True,
+            require_live=True,
+        )
+        response_text = gen.content
+
         return {
             "final_verified_response": response_text,
             "draft_response": response_text,
@@ -304,23 +369,123 @@ class SocraticTutorAgent:
             "hint_rung": None,
             "penalty_score": 0.0,
             "thoughts_of_tutorbot": {
-                "strategy_selected": "Seminar orientation & entry facilitation",
+                "strategy_selected": "Live LLM seminar orientation",
                 "affective_adjustment": "Warm, encouraging, scholarly collegiality.",
+            },
+        }
+
+    async def generate_acknowledgment_turn(self, state: TutorSessionState) -> dict[str, Any]:
+        """
+        Handles brief conversational agreements or affirmations ('sure', 'ok', 'sounds good')
+        via live LLM generation, aware of the prior tutor message and assignment context.
+        Fails transparently if LLM is unavailable.
+        """
+        student_id = state.get("student_id", "anonymous_student")
+        student_input = state.get("student_input", "")
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "A historical analysis assignment."
+
+        # Surface the most recent tutor message as context
+        dialogue_history = state.get("dialogue_history") or []
+        last_tutor_msg = ""
+        for turn in reversed(dialogue_history):
+            if turn.get("role") == "tutor":
+                last_tutor_msg = turn.get("text", "")
+                break
+
+        system_prompt = (
+            "You are an expert Socratic tutor in a university history seminar. "
+            "The student has just responded with a brief conversational affirmation (e.g. 'sure', 'ok', 'sounds good'). "
+            "Acknowledge warmly and naturally, then move the seminar forward with a single focused question "
+            "that picks up exactly where your last message left off. "
+            "Do not repeat yourself or re-explain what you just said. "
+            "Keep it to 1-2 sentences ending in a question."
+        )
+
+        user_prompt = (
+            f"Assignment Prompt:\n{assignment_prompt}\n\n"
+            f"Your Previous Message:\n{last_tutor_msg or '(Start of conversation)'}\n\n"
+            f"Student's Affirmation:\n{student_input}"
+        )
+
+        gen = await llm_orchestrator.enhance(
+            purpose="socratic_acknowledgment",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            pseudonymous_seed=f"ack:{student_id}:{student_input[:32]}",
+            max_characters=600,
+            max_tokens=120,
+            allow_live=True,
+            require_live=True,
+        )
+        response_text = gen.content
+
+        return {
+            "final_verified_response": response_text,
+            "draft_response": response_text,
+            "is_approved": True,
+            "hint_rung": None,
+            "penalty_score": 0.0,
+            "thoughts_of_tutorbot": {
+                "strategy_selected": "Live LLM conversational affirmation & next-step Socratic invitation",
+                "affective_adjustment": "Warm, encouraging, action-oriented.",
             },
         }
 
     async def generate_structural_scaffold_turn(self, state: TutorSessionState) -> dict[str, Any]:
         """
-        Provides Socratic structural scaffolding: outlines the 3 historical analytical pillars
-        and invites the student to choose an anchor.
+        Handles structuring/brainstorming requests by beginning the Socratic inquiry —
+        NOT by delivering a structure. Structure emerges from dialogue as an artefact
+        of the student's developing reasoning. This method redirects the student's
+        desire to "get a structure" into the question that starts the reasoning process:
+        "What is your initial instinct about the assignment question?"
+        Fails transparently if the LLM is unavailable.
         """
-        response_text = (
-            "Certainly. A rigorous historical analysis for this assignment typically rests on three structural pillars:\n\n"
-            "1. Central Thesis: How administrative and economic institutions evolved across dynastic transitions (continuity vs. disruption).\n"
-            "2. Causal & Fiscal Mechanisms: Grounding your claims in specific reforms from the exhibits (e.g., Todar Mal's Zabt revenue system, silver currency monetization, or regional market integration).\n"
-            "3. Limits & Counter-Evidence: Analyzing where imperial centralization met local autonomy or resistance.\n\n"
-            "To begin building your outline, which of these pillars or assigned exhibits would you like to anchor your first section around?"
+        student_id = state.get("student_id", "anonymous_student")
+        student_input = state.get("student_input", "")
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the historical problem grounded in assigned exhibits."
+        focused_text = state.get("focused_block_text") or ""
+
+        # Build multi-turn context
+        history_snippet = ""
+        dialogue_history = state.get("dialogue_history") or []
+        if dialogue_history:
+            recent = dialogue_history[-6:]
+            formatted = []
+            for t in recent:
+                speaker = "Student" if t.get("role") == "student" else "Socratic Tutor"
+                formatted.append(f"{speaker}: {t.get('text', '')}")
+            history_snippet = "Recent Seminar Dialogue Context:\n" + "\n".join(formatted) + "\n\n"
+
+        system_prompt = (
+            "You are an expert Socratic tutor in a university history seminar. "
+            "The student has asked for help structuring or brainstorming their assignment. "
+            "Do NOT give them a structure, skeleton, list of sections, or outline. "
+            "The structure of a historical argument must emerge from the student's own reasoning — "
+            "it is not something to be handed to them. "
+            "In one sentence, warmly acknowledge that structure is built step by step through the argument itself. "
+            "Then ask one single focused question: what is their initial instinct or provisional answer "
+            "to the assignment question? Make clear that even a rough, uncertain answer is a valid starting point. "
+            "Maximum 2-3 sentences total. End on the question. No lists, no headings, no sections."
         )
+
+        user_prompt = (
+            f"Assignment Question Prompt:\n{assignment_prompt}\n\n"
+            f"{history_snippet}"
+            f"Student's Request:\n{student_input}"
+        )
+
+        gen = await llm_orchestrator.enhance(
+            purpose="socratic_structural_scaffold",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            pseudonymous_seed=f"scaffold:{student_id}:{student_input[:64]}",
+            max_characters=600,
+            max_tokens=120,
+            allow_live=True,
+            require_live=True,
+        )
+        response_text = gen.content
+
         return {
             "final_verified_response": response_text,
             "draft_response": response_text,
@@ -328,7 +493,7 @@ class SocraticTutorAgent:
             "hint_rung": None,
             "penalty_score": 0.0,
             "thoughts_of_tutorbot": {
-                "strategy_selected": "Socratic structural decomposition into 3 analytical pillars",
+                "strategy_selected": "Live LLM Socratic structural scaffolding",
                 "affective_adjustment": "Supportive academic scaffolding.",
             },
         }
@@ -376,8 +541,9 @@ class SocraticTutorAgent:
 
     async def generate_socratic_turn(self, state: TutorSessionState) -> dict[str, Any]:
         """
-        Generates a scaffolded Socratic probe for substantive claims by querying
-        misconceptions, analyzing Toulmin warrants, and engaging LLM enhancement.
+        Generates an adaptive Socratic probe using live LLM generation conditioned
+        on the student's reasoning, active canvas block, and assigned exhibits.
+        Fails transparently if live LLM generation is unavailable.
         """
         student_id = state.get("student_id", "anonymous_student")
         student_input = state.get("student_input", "")
@@ -399,63 +565,73 @@ class SocraticTutorAgent:
         ) or []
 
         matched_trap = misconceptions[0] if misconceptions else None
-        probe_text = None
-
+        target_guidance = ""
         if matched_trap:
             probes = matched_trap.get("probes", [])
             matching = [p for p in probes if p.get("rung") == min(current_rung, 2)]
-            if matching:
-                probe_text = matching[0].get("probe_text")
-            elif probes:
-                probe_text = probes[0].get("probe_text")
+            probe_hint = matching[0].get("probe_text") if matching else (probes[0].get("probe_text") if probes else None)
+            target_guidance = f"Identified Misconception: {matched_trap.get('name')}. Suggested pedagogical probe direction: {probe_hint}"
+        else:
+            target_guidance = "Pedagogical Target: Deepen causal grounding, evaluate counter-evidence, and connect claims to assigned exhibits."
 
-        # 3. Fallback generic Socratic inquiry if no specific catalogued probe matched
-        if not probe_text:
-            text_lower = student_input.lower()
-            if any(w in text_lower for w in ["counter", "challenge", "alternative", "against"]):
-                probe_text = "If we test your claim against the assigned exhibits, what contradictory evidence or alternative institutional explanation presents the strongest challenge?"
-            elif any(w in text_lower for w in ["premise", "assumption", "presuppose"]):
-                probe_text = "What implicit premise are you taking for granted regarding the causal mechanisms connecting these institutional changes to economic outcomes?"
-            elif any(w in text_lower for w in ["evidence", "ground", "source", "document", "exhibit"]):
-                probe_text = "Which specific passage, fiscal table, or administrative record in the assigned exhibit best substantiates this interpretation over an alternative?"
-            else:
-                probe_text = f"Taking your argument regarding '{student_input[:60]}': what specific primary evidence or historical mechanism connects this assertion to the prompt's central themes?"
+        # 3. Build multi-turn dialogue context
+        history_snippet = ""
+        dialogue_history = state.get("dialogue_history") or []
+        if dialogue_history:
+            recent = dialogue_history[-6:]
+            formatted = []
+            for t in recent:
+                speaker = "Student" if t.get("role") == "student" else "Socratic Tutor"
+                formatted.append(f"{speaker}: {t.get('text', '')}")
+            history_snippet = "Recent Seminar Dialogue Context:\n" + "\n".join(formatted) + "\n\n"
 
+        remediation_snippet = ""
         if attempts > 0 and remediation:
-            probe_text = f"{probe_text} In your own words, what is the most significant evidence here?"
+            remediation_snippet = f"\nCorrection Notice from Answer-Isolation Critic: {remediation}\n"
 
-        # 4. LLM Enhancement with Answer Isolation guardrails
-        try:
-            gen = await llm_orchestrator.enhance(
-                purpose="socratic_dialogue_turn",
-                system_prompt=(
-                    "You are an expert Socratic tutor in a university history seminar. "
-                    "Guide the student toward independent critical thinking and evidence-grounded analysis. "
-                    "Engage directly with the student's historical reasoning. "
-                    "Output exactly one focused, intellectually rigorous inquiry ending in a question mark. "
-                    "Never ghostwrite the student's essay, give direct answers, or provide pre-written thesis statements."
-                ),
-                user_prompt=(
-                    f"Student's Claim / Argument:\n{student_input}\n\n"
-                    f"Focused Context:\n{state.get('focused_block_text') or 'Draft paragraph'}\n\n"
-                    f"Socratic Probe Target:\n{probe_text}"
-                ),
-                deterministic_fallback=probe_text,
-                pseudonymous_seed=f"socratic:{student_id}:{student_input[:64]}",
-                max_characters=450,
-                max_tokens=120,
-                allow_live=True,
-            )
-            probe_text = gen.content
-        except Exception as err:
-            logger.warning(f"LLM enhancement failed, falling back to deterministic probe: {err}")
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the historical problem grounded in assigned exhibits."
+        focused_text = state.get("focused_block_text") or "Canvas draft area"
+
+        system_prompt = (
+            "You are an expert Socratic tutor in a university history seminar. "
+            "Your goal is to guide the student toward independent critical thinking, historical causation, and evidence-grounded analysis. "
+            "Engage conversationally and directly with the student's reasoning in the context of the ongoing dialogue. "
+            "If the student makes a claim, probe its causal warrant and evidentiary grounding against the assigned exhibits. "
+            "If the student asks a question, provides an informal idea, or proposes a strategy (such as combining recommended pillars), "
+            "respond naturally and constructively, connecting it back to the primary exhibits. "
+            "Never take casual or colloquial remarks literally (for instance, 'cool?' is an informal rhetorical check meaning 'sound good?', NOT a temperature reference). "
+            "Output exactly one focused, intellectually rigorous inquiry ending in a question mark. "
+            "Never ghostwrite the student's essay, give direct answers, or provide pre-written thesis statements."
+        )
+
+        user_prompt = (
+            f"Assignment Question Prompt:\n{assignment_prompt}\n\n"
+            f"{history_snippet}"
+            f"Active Canvas Block under Examination:\n{focused_text}\n\n"
+            f"Student's Latest Message:\n{student_input}\n\n"
+            f"{target_guidance}"
+            f"{remediation_snippet}"
+        )
+
+        # 4. Live LLM Generation (fails transparently if unavailable)
+        gen = await llm_orchestrator.enhance(
+            purpose="socratic_dialogue_turn",
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            pseudonymous_seed=f"socratic:{student_id}:{student_input[:64]}",
+            max_characters=1200,
+            max_tokens=250,
+            allow_live=True,
+            require_live=True,
+        )
+        response_text = gen.content
 
         thoughts = {
             "student_claim_analyzed": student_input[:120],
             "identified_error": matched_trap.get("name") if matched_trap else "Under-evidenced premise",
             "active_rung": current_rung,
             "flawed_rule_detected": matched_trap.get("flawed_rule") if matched_trap else None,
-            "strategy_selected": "Substantive Socratic inquiry targeting causal warrant & exhibit grounding.",
+            "strategy_selected": "Live LLM Socratic inquiry targeting causal warrant & exhibit grounding.",
             "affective_adjustment": "Intellectually rigorous, supportive, encouraging.",
         }
 
@@ -466,5 +642,5 @@ class SocraticTutorAgent:
             "temporal_context": temporal_context,
             "diagnosed_misconception": matched_trap,
             "thoughts_of_tutorbot": thoughts,
-            "draft_response": probe_text,
+            "draft_response": response_text,
         }

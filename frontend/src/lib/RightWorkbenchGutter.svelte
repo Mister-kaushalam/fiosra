@@ -18,6 +18,10 @@
     assignment = null,
     currentRung = 0,
     turns = [],
+    chatSessions = [],
+    activeChatSessionId = '',
+    onNewChatSession = () => null,
+    onSwitchChatSession = () => null,
     focusedBlockTitle = '',
     openExhibitTitle = '',
     onSendMessage = async () => null,
@@ -180,6 +184,10 @@
           {assignment}
           {currentRung}
           {turns}
+          {chatSessions}
+          {activeChatSessionId}
+          {onNewChatSession}
+          {onSwitchChatSession}
           {focusedBlockId}
           {focusedBlockTitle}
           {openExhibitTitle}

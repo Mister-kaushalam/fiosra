@@ -127,6 +127,7 @@
     currentlyMarkedPages.clear();
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      if (!pagesContainer) break;
       await renderPage(pageNum);
     }
 
@@ -140,6 +141,7 @@
 
     try {
       const page = await pdfDoc.getPage(pageNum);
+      if (!pagesContainer) return;
       const viewport = page.getViewport({ scale });
 
       const pageWrapper = document.createElement('div');
@@ -159,6 +161,7 @@
       await page.render({ canvasContext: context, viewport }).promise;
 
       // Always append the rendered canvas to DOM immediately
+      if (!pagesContainer) return;
       pagesContainer.appendChild(pageWrapper);
       renderedPages.add(pageNum);
 

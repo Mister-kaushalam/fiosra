@@ -20,8 +20,41 @@
   let isGutterCollapsed = $state(true);
   let activeGutterTab = $state('marginalia'); // 'marginalia' | 'agent'
   let isTutorChatDrawerOpen = $state(false);
-  let macroTurns = $state([]);
   let isMacroBusy = $state(false);
+
+  // Socratic Consultation Chat Threads
+  let chatSessions = $state([
+    {
+      id: 'chat_init',
+      title: 'Consultation 1',
+      startedAt: new Date().toISOString(),
+      turns: [],
+    }
+  ]);
+  let activeChatSessionId = $state('chat_init');
+
+  let currentChatSession = $derived(
+    chatSessions.find((cs) => cs.id === activeChatSessionId) || chatSessions[0]
+  );
+  let macroTurns = $derived(currentChatSession?.turns || []);
+
+  function handleStartNewChatSession() {
+    const nextNum = chatSessions.length + 1;
+    const newSession = {
+      id: `chat_${crypto.randomUUID().slice(0, 8)}`,
+      title: `Consultation ${nextNum}`,
+      startedAt: new Date().toISOString(),
+      turns: [],
+    };
+    chatSessions = [newSession, ...chatSessions];
+    activeChatSessionId = newSession.id;
+  }
+
+  function handleSwitchChatSession(id) {
+    if (chatSessions.some((cs) => cs.id === id)) {
+      activeChatSessionId = id;
+    }
+  }
 
   let courseId = $state('');
   let assignmentId = $state('');
@@ -30,14 +63,6 @@
   let sessionId = $state('');
   let sessionAccessToken = $state('');
   let sessionStatus = $state('active');
-  let sessionHistory = $state([]);
-  let isSessionRegisterOpen = $state(false);
-  let isStartingNewSession = $state(false);
-  let activeAttemptNumber = $derived.by(() => {
-    if (!sessionHistory || sessionHistory.length === 0) return 1;
-    const found = sessionHistory.find((s) => s.session_id === sessionId);
-    return found ? found.attempt_number : sessionHistory.length || 1;
-  });
   let learningDocument = $state(null);
   let probes = $state([]);
   let evidenceSummary = $state({ pending_questions: 0, evidence_submitted: 0 });
@@ -435,130 +460,6 @@
     await loadDocument();
     await loadProbes();
     await loadSessionEvents();
-    await fetchSessionHistory();
-  }
-
-  async function fetchSessionHistory() {
-    if (!studentId || !assignmentId) return;
-    try {
-      const res = await fetch(`/events/sessions?student_id=${encodeURIComponent(studentId)}&assignment_id=${encodeURIComponent(assignmentId)}`);
-      if (res.ok) {
-        const data = await res.json();
-        sessionHistory = data.sessions || [];
-      }
-    } catch (err) {
-      console.warn('Failed to fetch session history:', err);
-    }
-  }
-
-  async function handleCreateNewSession() {
-    if (!assignment || !studentId || isStartingNewSession) return;
-    try {
-      isStartingNewSession = true;
-      const response = await fetch('/events/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: studentId,
-          assignment_id: assignmentId,
-          current_question_id: assignment.question_id,
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await responseError(response, 'A new reasoning session could not be started.'));
-      }
-      const created = await response.json();
-      sessionId = created.session_id;
-      sessionAccessToken = created.access_token;
-      sessionStatus = created.status;
-      submittedRevision = null;
-      submittedAt = '';
-      submissionNotice = '';
-      submissionError = null;
-      macroTurns = [];
-
-      const key = sessionStorageKey(assignmentId, studentId);
-      localStorage.setItem(key, sessionId);
-      localStorage.setItem(sessionAccessTokenStorageKey(sessionId), sessionAccessToken);
-
-      fiosraContext.setSession(sessionId, sessionAccessToken, sessionStatus);
-
-      await loadDocument();
-      await loadProbes();
-      await loadSessionEvents();
-      await fetchSessionHistory();
-      isSessionRegisterOpen = false;
-    } catch (err) {
-      error = err.message || 'Could not start a new session.';
-    } finally {
-      isStartingNewSession = false;
-    }
-  }
-
-  async function switchSession(targetSession) {
-    if (!targetSession || targetSession.session_id === sessionId) {
-      isSessionRegisterOpen = false;
-      return;
-    }
-    try {
-      isLoading = true;
-      const targetSessionId = targetSession.session_id;
-      let targetToken = localStorage.getItem(sessionAccessTokenStorageKey(targetSessionId)) || '';
-
-      let hasAccess = false;
-      if (targetToken) {
-        const testRes = await fetch(`/events/session/${targetSessionId}`, {
-          headers: { 'X-Fiosra-Session-Token': targetToken },
-        });
-        if (testRes.ok) {
-          hasAccess = true;
-        }
-      }
-
-      if (!hasAccess) {
-        const reconnectRes = await fetch(`/events/session/${targetSessionId}/reconnect`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ student_id: studentId }),
-        });
-        if (reconnectRes.ok) {
-          const reconnected = await reconnectRes.json();
-          targetToken = reconnected.access_token;
-          localStorage.setItem(sessionAccessTokenStorageKey(targetSessionId), targetToken);
-          hasAccess = true;
-        }
-      }
-
-      if (!hasAccess) {
-        throw new Error('Unable to authorize access to this reasoning session.');
-      }
-
-      sessionId = targetSessionId;
-      sessionAccessToken = targetToken;
-      sessionStatus = targetSession.status || 'active';
-      submittedRevision = targetSession.submitted_document_revision ?? null;
-      submittedAt = targetSession.submitted_at || '';
-      submissionNotice = targetSession.status === 'submitted'
-        ? `Submitted ${formatDate(targetSession.submitted_at)}.`
-        : '';
-      submissionError = null;
-      macroTurns = [];
-
-      const key = sessionStorageKey(assignmentId, studentId);
-      localStorage.setItem(key, sessionId);
-
-      fiosraContext.setSession(sessionId, sessionAccessToken, sessionStatus);
-
-      await loadDocument();
-      await loadProbes();
-      await loadSessionEvents();
-      await fetchSessionHistory();
-      isSessionRegisterOpen = false;
-    } catch (err) {
-      error = err.message || 'Failed to switch reasoning session.';
-    } finally {
-      isLoading = false;
-    }
   }
 
   async function syncDocument(patch) {
@@ -881,8 +782,7 @@
       });
       if (!res.ok) throw new Error(await responseError(res, 'Dialogue service unavailable'));
       const data = await res.json();
-      macroTurns = [
-        ...macroTurns,
+      const newTurns = [
         { role: 'student', text: studentInput },
         {
           role: 'tutor',
@@ -894,10 +794,34 @@
           radar: data.learner_radar || null,
         }
       ];
+      const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
+      if (sessionIdx >= 0) {
+        chatSessions[sessionIdx].turns = [...chatSessions[sessionIdx].turns, ...newTurns];
+        if (chatSessions[sessionIdx].title.startsWith('Consultation') && chatSessions[sessionIdx].turns.length <= 2) {
+          const snippet = studentInput.slice(0, 30).trim();
+          if (snippet) chatSessions[sessionIdx].title = snippet.length >= 28 ? `${snippet}…` : snippet;
+        }
+      }
       fiosraContext.setEpistemicState(null, data.hint_rung);
       await loadSessionEvents();
     } catch (err) {
       console.error('Macro dialogue error:', err);
+      const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
+      if (sessionIdx >= 0) {
+        const errorTurn = {
+          role: 'tutor',
+          text: `⚠️ Socratic Tutor is currently unavailable: ${err.message || 'LLM service connection required'}. Please ensure your LLM provider is configured and running.`,
+          is_adversarial: false,
+          hint_rung: 0,
+          action_capsules: [],
+          radar: null,
+        };
+        chatSessions[sessionIdx].turns = [
+          ...chatSessions[sessionIdx].turns,
+          { role: 'student', text: studentInput },
+          errorTurn
+        ];
+      }
     } finally {
       isMacroBusy = false;
     }
@@ -991,7 +915,6 @@
         : `Submitted ${new Date(submitted.submitted_at).toLocaleString()}.`;
       pendingSubmissionKey = '';
       await loadSessionEvents();
-      await fetchSessionHistory();
     } catch (e) {
       submissionError = {
         code: 'NETWORK_UNAVAILABLE',
@@ -1127,138 +1050,6 @@
   </main>
 {:else}
   <div class="workspace-viewport">
-    <!-- Scholastic Session Register Header Bar -->
-    <header class="scholastic-session-bar" aria-label="Reasoning Session Bar">
-      <div class="session-bar-left">
-        <div class="session-context-breadcrumb">
-          <span class="context-course">{published?.domain || assignment?.course_title || 'Historical Studies'}</span>
-          <span class="context-divider">/</span>
-          <span class="context-assignment" title={published?.title || assignment?.title}>{published?.title || assignment?.title || 'Assignment'}</span>
-        </div>
-
-        <div class="session-register-anchor">
-          <button
-            type="button"
-            id="session-register-toggle-btn"
-            class="session-register-btn"
-            class:is-active={isSessionRegisterOpen}
-            onclick={() => isSessionRegisterOpen = !isSessionRegisterOpen}
-            title="View reasoning session history or switch attempts"
-            aria-expanded={isSessionRegisterOpen}
-            aria-haspopup="true"
-          >
-            <span class="register-icon" aria-hidden="true">📜</span>
-            <span class="attempt-title">Attempt #{activeAttemptNumber}</span>
-            <span class="attempt-status-pill" class:submitted={sessionStatus === 'submitted'}>
-              {sessionStatus === 'submitted' ? 'Submitted' : 'Draft In Progress'}
-            </span>
-            <span class="chevron-arrow" aria-hidden="true">{isSessionRegisterOpen ? '▴' : '▾'}</span>
-          </button>
-
-          {#if isSessionRegisterOpen}
-            <div class="session-register-backdrop" onclick={() => isSessionRegisterOpen = false}></div>
-            <div class="session-register-popover" role="dialog" aria-label="Scholastic Session Register">
-              <div class="register-popover-header">
-                <div>
-                  <div class="register-popover-title">Scholastic Session Register</div>
-                  <div class="register-popover-subtitle">
-                    {sessionHistory.length} recorded reasoning {sessionHistory.length === 1 ? 'attempt' : 'attempts'}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  class="register-close-btn"
-                  onclick={() => isSessionRegisterOpen = false}
-                  aria-label="Close session register"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div class="register-sessions-list">
-                {#each sessionHistory as s (s.session_id)}
-                  <div
-                    class="register-session-card"
-                    class:current-session={s.session_id === sessionId}
-                    onclick={() => switchSession(s)}
-                    role="button"
-                    tabindex="0"
-                    onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') switchSession(s); }}
-                  >
-                    <div class="session-card-header">
-                      <div class="session-card-title-row">
-                        <span class="session-card-attempt">Attempt #{s.attempt_number}</span>
-                        {#if s.session_id === sessionId}
-                          <span class="current-badge">Active</span>
-                        {/if}
-                      </div>
-                      <span class="session-card-status" class:submitted={s.status === 'submitted'}>
-                        {s.status === 'submitted' ? 'Submitted' : 'Draft'}
-                      </span>
-                    </div>
-
-                    <div class="session-card-meta">
-                      <span class="meta-date">
-                        {s.submitted_at ? `Submitted ${formatDate(s.submitted_at)}` : `Started ${formatDate(s.started_at)}`}
-                      </span>
-                      <span class="meta-dot">•</span>
-                      <span class="meta-blocks">
-                        {s.block_count || 0} {s.block_count === 1 ? 'block' : 'blocks'} (rev {s.submitted_document_revision ?? s.current_document_revision ?? 0})
-                      </span>
-                    </div>
-                  </div>
-                {/each}
-              </div>
-
-              <div class="register-popover-footer">
-                <button
-                  type="button"
-                  id="start-new-session-action-btn"
-                  class="new-session-action-btn"
-                  disabled={isStartingNewSession}
-                  onclick={handleCreateNewSession}
-                >
-                  <span class="plus-icon">＋</span>
-                  <span>{isStartingNewSession ? 'Starting Session…' : 'Start New Reasoning Session'}</span>
-                </button>
-              </div>
-            </div>
-          {/if}
-        </div>
-      </div>
-
-      <div class="session-bar-right">
-        {#if sessionStatus === 'submitted'}
-          <div class="submitted-notice-pill">
-            <span class="lock-icon" aria-hidden="true">🔒</span>
-            <span>Submitted for Review · Read-Only</span>
-          </div>
-          <button
-            type="button"
-            class="start-attempt-btn"
-            disabled={isStartingNewSession}
-            onclick={handleCreateNewSession}
-          >
-            ＋ New Attempt
-          </button>
-        {:else}
-          <div class="active-save-indicator">
-            <span class="status-pulse" aria-hidden="true"></span>
-            <span>Reasoning Draft Active</span>
-          </div>
-          <button
-            type="button"
-            id="submit-milestone-bar-btn"
-            class="submit-milestone-btn"
-            disabled={isSubmitting}
-            onclick={submitSession}
-          >
-            {isSubmitting ? 'Submitting…' : 'Submit for Review'}
-          </button>
-        {/if}
-      </div>
-    </header>
-
     <!-- Workspace Content Body -->
     <div class="workspace-content-body">
       <!-- ============================================================ -->
@@ -1359,6 +1150,10 @@
               assignment={assignment}
               currentRung={fiosraContext.currentHintRung}
               turns={macroTurns}
+              chatSessions={chatSessions}
+              activeChatSessionId={activeChatSessionId}
+              onNewChatSession={handleStartNewChatSession}
+              onSwitchChatSession={handleSwitchChatSession}
               onSendMessage={handleMacroSendMessage}
               onRequestHint={handleMacroRequestHint}
               isAgentBusy={isMacroBusy}
@@ -1492,378 +1287,6 @@
     overflow: hidden;
   }
 
-  /* Scholastic Session Register Bar */
-  .scholastic-session-bar {
-    height: 44px;
-    background: var(--color-graphite, #ffffff);
-    border-bottom: 1px solid var(--color-graphite-border, #e2e4dc);
-    padding: 0 16px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    flex-shrink: 0;
-    z-index: 25;
-    font-family: var(--font-ui, system-ui, sans-serif);
-  }
-
-  .session-bar-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    min-width: 0;
-  }
-
-  .session-context-breadcrumb {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--color-slate-muted, #646a78);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .context-course {
-    font-weight: 600;
-    color: var(--color-slate-light, #474d5a);
-  }
-
-  .context-divider {
-    color: var(--color-slate-subtle, #8a909d);
-    opacity: 0.6;
-  }
-
-  .context-assignment {
-    font-weight: 500;
-    color: var(--color-heading, #121418);
-    max-width: 260px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .session-register-anchor {
-    position: relative;
-  }
-
-  .session-register-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 4px 10px;
-    border-radius: 6px;
-    border: 1px solid var(--color-graphite-border, #e2e4dc);
-    background: var(--color-obsidian, #f8f8f5);
-    color: var(--color-heading, #121418);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .session-register-btn:hover,
-  .session-register-btn.is-active {
-    background: var(--color-graphite-hover, #f1f2ed);
-    border-color: var(--color-horizon-blue, #d97706);
-  }
-
-  .register-icon {
-    font-size: 13px;
-    line-height: 1;
-  }
-
-  .attempt-title {
-    font-family: var(--font-mono, monospace);
-    font-weight: 700;
-    letter-spacing: -0.2px;
-  }
-
-  .attempt-status-pill {
-    padding: 1px 6px;
-    border-radius: 4px;
-    font-size: 10px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.4px;
-    background: rgba(217, 119, 6, 0.1);
-    color: var(--color-horizon-blue, #d97706);
-  }
-
-  .attempt-status-pill.submitted {
-    background: var(--color-signal-green-bg, #ecfdf5);
-    color: var(--color-signal-green-dark, #047857);
-  }
-
-  .chevron-arrow {
-    font-size: 9px;
-    color: var(--color-slate-subtle, #8a909d);
-    margin-left: 2px;
-  }
-
-  /* Backdrop & Popover Menu */
-  .session-register-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 99;
-    background: transparent;
-  }
-
-  .session-register-popover {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    width: 340px;
-    background: var(--color-graphite, #ffffff);
-    border: 1px solid var(--color-graphite-border, #e2e4dc);
-    border-radius: 8px;
-    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.06);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-    animation: popoverFadeIn 0.12s ease-out;
-  }
-
-  @keyframes popoverFadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  .register-popover-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 14px;
-    border-bottom: 1px solid var(--color-graphite-border, #e2e4dc);
-    background: var(--color-obsidian, #f8f8f5);
-  }
-
-  .register-popover-title {
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--color-heading, #121418);
-  }
-
-  .register-popover-subtitle {
-    font-size: 11px;
-    color: var(--color-slate-muted, #646a78);
-    margin-top: 1px;
-  }
-
-  .register-close-btn {
-    border: none;
-    background: transparent;
-    color: var(--color-slate-subtle, #8a909d);
-    font-size: 14px;
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-  }
-
-  .register-close-btn:hover {
-    color: var(--color-heading, #121418);
-    background: var(--color-graphite-hover, #f1f2ed);
-  }
-
-  .register-sessions-list {
-    max-height: 280px;
-    overflow-y: auto;
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .register-session-card {
-    padding: 8px 10px;
-    border-radius: 6px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: all 0.12s ease;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    background: var(--color-graphite, #ffffff);
-    text-align: left;
-  }
-
-  .register-session-card:hover {
-    background: var(--color-graphite-hover, #f1f2ed);
-    border-color: var(--color-graphite-border, #e2e4dc);
-  }
-
-  .register-session-card.current-session {
-    background: rgba(217, 119, 6, 0.05);
-    border-color: rgba(217, 119, 6, 0.3);
-  }
-
-  .session-card-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .session-card-title-row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-
-  .session-card-attempt {
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--color-heading, #121418);
-  }
-
-  .current-badge {
-    font-size: 9px;
-    font-weight: 700;
-    text-transform: uppercase;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: var(--color-horizon-blue, #d97706);
-    color: #ffffff;
-    letter-spacing: 0.3px;
-  }
-
-  .session-card-status {
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 5px;
-    border-radius: 3px;
-    background: rgba(217, 119, 6, 0.1);
-    color: var(--color-horizon-blue, #d97706);
-  }
-
-  .session-card-status.submitted {
-    background: var(--color-signal-green-bg, #ecfdf5);
-    color: var(--color-signal-green-dark, #047857);
-  }
-
-  .session-card-meta {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--color-slate-muted, #646a78);
-  }
-
-  .meta-dot {
-    opacity: 0.5;
-  }
-
-  .register-popover-footer {
-    padding: 8px 10px;
-    border-top: 1px solid var(--color-graphite-border, #e2e4dc);
-    background: var(--color-obsidian, #f8f8f5);
-  }
-
-  .new-session-action-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    padding: 7px 12px;
-    border-radius: 6px;
-    border: 1px dashed var(--color-horizon-blue, #d97706);
-    background: rgba(217, 119, 6, 0.04);
-    color: var(--color-horizon-blue, #d97706);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .new-session-action-btn:hover:not(:disabled) {
-    background: rgba(217, 119, 6, 0.1);
-    border-style: solid;
-  }
-
-  .new-session-action-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  /* Right Side Indicators & Actions */
-  .session-bar-right {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-  }
-
-  .active-save-indicator {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    color: var(--color-slate-muted, #646a78);
-  }
-
-  .status-pulse {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    background: var(--color-signal-green, #059669);
-    box-shadow: 0 0 0 2px var(--color-signal-green-bg, #ecfdf5);
-  }
-
-  .submitted-notice-pill {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 3px 8px;
-    border-radius: 4px;
-    font-size: 11px;
-    font-weight: 600;
-    background: var(--color-signal-green-bg, #ecfdf5);
-    color: var(--color-signal-green-dark, #047857);
-  }
-
-  .start-attempt-btn {
-    padding: 5px 12px;
-    border-radius: 6px;
-    border: 1px solid var(--color-graphite-border, #e2e4dc);
-    background: var(--color-graphite, #ffffff);
-    color: var(--color-heading, #121418);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .start-attempt-btn:hover:not(:disabled) {
-    background: var(--color-graphite-hover, #f1f2ed);
-    border-color: var(--color-horizon-blue, #d97706);
-    color: var(--color-horizon-blue, #d97706);
-  }
-
-  .submit-milestone-btn {
-    padding: 5px 14px;
-    border-radius: 6px;
-    border: none;
-    background: var(--color-horizon-blue, #d97706);
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .submit-milestone-btn:hover:not(:disabled) {
-    background: var(--color-horizon-bright, #b45309);
-    box-shadow: 0 2px 6px rgba(217, 119, 6, 0.25);
-  }
-
-  .submit-milestone-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
 
   /* Top Control Bar */
   .workspace-topbar {
