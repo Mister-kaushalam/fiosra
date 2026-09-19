@@ -1,5 +1,5 @@
 <script>
-  import { onDestroy, onMount } from 'svelte';
+  import { onDestroy, onMount, untrack } from 'svelte';
   import { Editor, Extension } from '@tiptap/core';
   import { Plugin } from '@tiptap/pm/state';
   import { Decoration, DecorationSet } from '@tiptap/pm/view';
@@ -1647,6 +1647,7 @@
   onMount(() => {
     editor = new Editor({
       element: editorElement,
+      editable: !disabled,
       extensions: [
         StarterKit.configure({
           heading: { levels: [1, 2, 3] },
@@ -1704,6 +1705,15 @@
   $effect(() => {
     if (editor && learningDocument && learningDocument.document_id !== loadedDocumentId) {
       initialiseEditor(learningDocument);
+    }
+  });
+
+  $effect(() => {
+    const shouldBeEditable = !disabled;
+    if (editor && editor.isEditable !== shouldBeEditable) {
+      untrack(() => {
+        editor.setEditable(shouldBeEditable);
+      });
     }
   });
 

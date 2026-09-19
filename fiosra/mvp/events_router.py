@@ -204,3 +204,49 @@ async def get_session_replay(
     session_info = await get_authorized_session(session_id, session_token)
     events = await event_store.get_session_events(session_id)
     return {"session": session_info, "total_events": len(events), "events": events}
+
+
+class ReconnectSessionRequest(BaseModel):
+    student_id: str = Field(..., description="Student identifier owning this reasoning session")
+
+
+class ReconnectSessionResponse(BaseModel):
+    session_id: str
+    access_token: str
+    status: str
+
+
+@router.get("/sessions")
+async def list_student_sessions(
+    student_id: str,
+    assignment_id: UUID,
+) -> dict[str, Any]:
+    """Retrieve chronological history of reasoning sessions for a student and assignment."""
+    sessions = await event_store.get_student_assignment_sessions(student_id, assignment_id)
+    return {
+        "student_id": student_id,
+        "assignment_id": str(assignment_id),
+        "sessions": sessions,
+    }
+
+
+@router.post("/session/{session_id}/reconnect", response_model=ReconnectSessionResponse)
+async def reconnect_session(
+    session_id: UUID,
+    request: ReconnectSessionRequest,
+) -> dict[str, str]:
+    """Issue a fresh access token for a student reconnecting to their existing session."""
+    session_info = await event_store.get_session_details(session_id)
+    if not session_info:
+        raise HTTPException(status_code=404, detail="Reasoning session not found.")
+    if session_info["student_id"] != request.student_id:
+        raise HTTPException(status_code=403, detail="Student identity does not match this session.")
+    new_token = await event_store.reconnect_session(session_id, request.student_id)
+    if not new_token:
+        raise HTTPException(status_code=500, detail="Failed to reconnect to reasoning session.")
+    return {
+        "session_id": str(session_id),
+        "access_token": new_token,
+        "status": session_info["status"],
+    }
+

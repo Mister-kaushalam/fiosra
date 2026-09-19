@@ -64,6 +64,13 @@
   let activeSearchTerm = $state('');
   let iframeKey = $state(1);
 
+  function handleMatchesChange(info) {
+    if (!info) return;
+    if (matchInfo.current !== info.current || matchInfo.total !== info.total) {
+      matchInfo = info;
+    }
+  }
+
   function performSearch() {
     const q = searchQuery.trim();
     if (!q) {
@@ -426,7 +433,7 @@
             title={activeDoc.title}
             searchTerm={activeSearchTerm}
             {onQuoteEvidence}
-            onMatchesChange={(info) => matchInfo = info}
+            onMatchesChange={handleMatchesChange}
           />
         {:else}
           <div class="empty-doc-view">

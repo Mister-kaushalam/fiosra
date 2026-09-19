@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import * as pdfjsLib from 'pdfjs-dist';
   import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
   import 'pdfjs-dist/web/pdf_viewer.css';
@@ -51,8 +51,16 @@
   let searchMatches = $state([]);
   let currentMatchIndex = $state(0);
 
+  let lastMatchesReport = { current: -1, total: -1 };
   $effect(() => {
-    onMatchesChange({ current: currentMatchIndex, total: searchMatches.length });
+    const cur = currentMatchIndex;
+    const tot = searchMatches.length;
+    if (lastMatchesReport.current !== cur || lastMatchesReport.total !== tot) {
+      lastMatchesReport = { current: cur, total: tot };
+      untrack(() => {
+        onMatchesChange({ current: cur, total: tot });
+      });
+    }
   });
 
   // Selection tooltip state
