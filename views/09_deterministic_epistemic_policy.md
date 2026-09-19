@@ -46,7 +46,7 @@ stateDiagram-v2
     STATE_4_EVIDENTIARY_SYNTHESIS --> STATE_5_AUTHENTIC_MASTERY: AutoSCORE ClaimVerifier confirms entailment
     STATE_4_EVIDENTIARY_SYNTHESIS --> STATE_3_CONCEPTUAL_CONFRONTATION: Fallacious synthesis - Retry limit N=2
     
-    STATE_5_AUTHENTIC_MASTERY --> [*]: Session submitted for Educator Review
+    STATE_5_AUTHENTIC_MASTERY --> [*]
 ```
 
 ---

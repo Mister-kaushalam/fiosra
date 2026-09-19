@@ -39,13 +39,13 @@ In traditional AI tutoring prototypes, assistance is bolted onto a text editor a
 Fiosra models the student inquiry journey as a closed-loop **Epistemic Work Allocation Engine**:
 
 ```mermaid
-graph TD
-    A["<b>1. Epistemic State</b><br>What does the student understand, assume, question, conclude?"] --> B["<b>2. Learning Opportunity</b><br>What is the next unresolved intellectual operation?"]
-    B --> C["<b>3. Cognitive Work Allocation</b><br>What should the student do vs minimum AI contribution?"]
-    C --> D["<b>4. Student Action</b><br>Student generates, challenges, connects, revises, explains"]
-    D --> E["<b>5. State Transition</b><br>Did reasoning materially change or just rephrase?"]
-    E --> F["<b>6. Evidence Qualification</b><br>Is the change sufficiently grounded in primary sources?"]
-    F --> G["<b>7. Epistemic State Update</b><br>Graphiti bi-temporal belief ledger update"]
+flowchart TD
+    A["1. Epistemic State: What student understands, assumes, concludes"] --> B["2. Learning Opportunity: Next unresolved intellectual operation"]
+    B --> C["3. Cognitive Work Allocation: Student task vs minimum AI contribution"]
+    C --> D["4. Student Action: Student generates, challenges, revises, explains"]
+    D --> E["5. State Transition: Did reasoning materially change?"]
+    E --> F["6. Evidence Qualification: Is change grounded in sources?"]
+    F --> G["7. Epistemic State Update: Graphiti bi-temporal belief ledger update"]
     G --> A
 ```
 
