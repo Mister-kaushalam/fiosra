@@ -88,8 +88,8 @@ class SocraticProbeProposal(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     rung: int = Field(default=0, ge=0, le=2)
-    probe_text: str = Field(min_length=4, max_length=600)
-    rationale: str = Field(default="Socratic inquiry scaffolding.", max_length=400)
+    probe_text: str = Field(min_length=4, max_length=4000)
+    rationale: str = Field(default="Socratic inquiry scaffolding.", max_length=2000)
 
 
 class MisconceptionProposal(BaseModel):
@@ -97,9 +97,9 @@ class MisconceptionProposal(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    name: str = Field(min_length=2, max_length=160)
-    flawed_rule: str = Field(min_length=4, max_length=600)
-    remediation_hint: str = Field(min_length=4, max_length=600)
+    name: str = Field(min_length=2, max_length=255)
+    flawed_rule: str = Field(min_length=4, max_length=3000)
+    remediation_hint: str = Field(min_length=4, max_length=4000)
     probes: list[SocraticProbeProposal] = Field(default_factory=list)
 
 
@@ -109,17 +109,17 @@ class ConceptProposalNode(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
     proposal_id: str = Field(pattern=r"^c[0-9]+$")
-    label: str = Field(min_length=2, max_length=160)
-    definition: str = Field(min_length=4, max_length=1200)
+    label: str = Field(min_length=2, max_length=255)
+    definition: str = Field(min_length=4, max_length=4000)
     concept_type: ConceptType = "domain"
     level: ConceptLevel = "topic"
     bloom_level: BloomLevel | None = None
     parent_proposal_id: str | None = Field(default=None, pattern=r"^c[0-9]+$")
-    module_positions: list[int] = Field(default_factory=list, max_length=8)
+    module_positions: list[int] = Field(default_factory=list, max_length=16)
     module_role: ModuleConceptRole = "introduces"
     misconceptions: list[MisconceptionProposal] = Field(default_factory=list)
-    aliases: list[str] = Field(default_factory=list, max_length=10)
-    evidence_chunk_ids: list[str] = Field(default_factory=list, max_length=20)
+    aliases: list[str] = Field(default_factory=list, max_length=20)
+    evidence_chunk_ids: list[str] = Field(default_factory=list, max_length=50)
 
 
 class PrerequisiteProposal(BaseModel):
@@ -129,7 +129,7 @@ class PrerequisiteProposal(BaseModel):
 
     prerequisite_proposal_id: str = Field(pattern=r"^c[0-9]+$")
     dependent_proposal_id: str = Field(pattern=r"^c[0-9]+$")
-    rationale: str = Field(min_length=4, max_length=360)
+    rationale: str = Field(min_length=4, max_length=2000)
 
 
 class ConceptGraphProposal(BaseModel):
@@ -137,9 +137,9 @@ class ConceptGraphProposal(BaseModel):
 
     model_config = ConfigDict(extra="ignore")
 
-    course_rationale: str = Field(min_length=4, max_length=1200)
-    concepts: list[ConceptProposalNode] = Field(min_length=3, max_length=64)
-    prerequisites: list[PrerequisiteProposal] = Field(default_factory=list, max_length=64)
+    course_rationale: str = Field(min_length=4, max_length=10000)
+    concepts: list[ConceptProposalNode] = Field(min_length=3, max_length=10000)
+    prerequisites: list[PrerequisiteProposal] = Field(default_factory=list, max_length=5000)
 
 
 class CompletenessStats(BaseModel):

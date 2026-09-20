@@ -137,7 +137,7 @@ class SocraticTutorAgent:
                 "adversarial_flag": False,
             }
 
-        # Meta-questions about the tutor itself (orientation-style, not substantive claims)
+        # Meta-questions about the tutor or assignment (orientation-style, not substantive claims)
         meta_pattern = (
             r"^\s*(?:"
             r"what(?:\s+(?:can|do|will|would))?\s+you\s+(?:do|help|assist|support|offer|cover|handle)|"
@@ -145,10 +145,14 @@ class SocraticTutorAgent:
             r"what\s+(?:are\s+you|is\s+this)|"
             r"who\s+are\s+you|"
             r"can\s+you\s+help\s+(?:me\s+)?(?:with\s+this|today|please)?|"
-            r"what\s+should\s+(?:i|we)\s+(?:do|start\s+with)"
+            r"what\s+should\s+(?:i|we)\s+(?:do|start\s+with)|"
+            r"what\s+is\s+(?:the\s+|this\s+|our\s+)?assignment\s+(?:about|asking)|"
+            r"explain\s+(?:the\s+|this\s+)?assignment|"
+            r"tell\s+me\s+about\s+(?:the\s+|this\s+)?assignment|"
+            r"what\s+am\s+i\s+supposed\s+to\s+do"
             r")"
         )
-        if re.search(meta_pattern, text_lower) and len(student_input.split()) <= 10:
+        if re.search(meta_pattern, text_lower) and len(student_input.split()) <= 15:
             return {
                 "discourse_phase": "orientation",
                 "adversarial_flag": False,
@@ -191,11 +195,7 @@ class SocraticTutorAgent:
         has_qualification = bool(re.search(r"\b(?:however|although|unless|might|may|provisional|partially)\b", analysis_text, re.I))
 
         assumptions = []
-        if "feudal" in analysis_text.lower() or "serf" in analysis_text.lower():
-            assumptions.append("Assumes legal serfdom was uniform across all royal manors")
-        elif "bankrupt" in analysis_text.lower() or "debt" in analysis_text.lower() or "necker" in analysis_text.lower():
-            assumptions.append("Assumes crown finances were solely drained by foreign war rather than structural exemptions")
-        elif len(sentences) > 0 and not has_warrant:
+        if len(sentences) > 0 and not has_warrant:
             assumptions.append("Assumes direct correlation without articulating underlying causal mechanism")
 
         stance = "Grounded" if (has_evidence and has_warrant) else ("Provisional" if has_warrant or has_evidence else "Intuitive")
@@ -293,13 +293,14 @@ class SocraticTutorAgent:
                     "Stage: Toward Claim Formulation. Several exchanges have occurred. Generate 2 intentions prompting the student to synthesize an observation or draft an initial claim."
                 )
 
+            domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
             system_prompt = (
-                "You are generating 2 short conversation-starter chips for a student in a Socratic history seminar. "
+                f"You are generating 2 short conversation-starter chips for a student in a Socratic {domain} seminar. "
                 "Each chip is a natural, first-person student intention they can click to send to the tutor. "
                 "Ground them specifically in the ongoing dialogue, the assignment prompt, and assigned exhibits. "
                 "Chips must be student requests or intentions — NOT tutor questions. "
                 "Do NOT loop or repeat previous student choices. Move the reasoning arc forward. "
-                "Examples: 'I want to examine market price controls in Barani', 'What does this passage reveal about agrarian taxes?'. "
+                "Examples: 'I want to examine this specific exhibit in detail', 'What evidence best supports this strategic option?'. "
                 "Output ONLY a JSON array of exactly 2 objects, each with 'title' (3-5 words) and 'prompt' (one natural student sentence). "
                 "No other text before or after the JSON."
             )
@@ -316,8 +317,8 @@ class SocraticTutorAgent:
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     pseudonymous_seed=f"chips:entry:{student_id}:{turns_count}:{student_input[:32]}",
-                    max_characters=400,
-                    max_tokens=120,
+                    max_characters=800,
+                    max_tokens=140,
                     allow_live=True,
                     require_live=True,
                 )
@@ -342,8 +343,9 @@ class SocraticTutorAgent:
             canvas_snippet = " ".join(
                 (b.get("text") or "")[:200] for b in canvas_blocks[:3]
             ).strip()
+            domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
             system_prompt = (
-                "You are generating 2 short conversation-starter chips for a student in a Socratic history seminar. "
+                f"You are generating 2 short conversation-starter chips for a student in a Socratic {domain} seminar. "
                 "The student has already written something in their draft canvas. "
                 "Each chip is a natural, first-person student intention they can click to send to the tutor. "
                 "Ground them in the student's current draft and recent dialogue. "
@@ -363,8 +365,8 @@ class SocraticTutorAgent:
                     system_prompt=system_prompt,
                     user_prompt=user_prompt,
                     pseudonymous_seed=f"chips:cont:{student_id}:{canvas_snippet[:32]}",
-                    max_characters=400,
-                    max_tokens=120,
+                    max_characters=800,
+                    max_tokens=140,
                     allow_live=True,
                     require_live=True,
                 )
@@ -490,14 +492,16 @@ class SocraticTutorAgent:
         """
         student_id = state.get("student_id", "anonymous_student")
         student_input = state.get("student_input", "")
-        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "A historical analysis assignment."
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "An inquiry-based analysis assignment."
+        domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
 
         system_prompt = (
-            "You are an expert Socratic tutor in a university history seminar. "
-            "The student has just started a session or asked a meta-question about what you can help with. "
-            "Respond warmly and briefly. Introduce yourself as a Socratic tutor who helps students "
-            "develop their own evidence-grounded arguments — you do not write for them or give direct answers. "
-            "Mention the assignment topic briefly, and invite the student to pick a starting point. "
+            f"You are an expert Socratic tutor in a university {domain} seminar. "
+            "The student has just started a session or asked a question about what the assignment is about or what you can help with. "
+            "Respond warmly, clearly, and concisely. "
+            "Briefly summarize the assignment's core objective or challenge based on the assignment prompt, "
+            "clarify that your role as a Socratic tutor is to guide their reasoning rather than providing direct answers, "
+            "and invite them to share their initial thoughts or pick a starting angle. "
             "Keep it to 2-3 sentences. Do not start with 'I' as the first word."
         )
 
@@ -511,8 +515,8 @@ class SocraticTutorAgent:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             pseudonymous_seed=f"orientation:{student_id}:{student_input[:32]}",
-            max_characters=600,
-            max_tokens=120,
+            max_characters=1000,
+            max_tokens=150,
             allow_live=True,
             require_live=True,
         )
@@ -538,7 +542,8 @@ class SocraticTutorAgent:
         """
         student_id = state.get("student_id", "anonymous_student")
         student_input = state.get("student_input", "")
-        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "A historical analysis assignment."
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "An inquiry-based analysis assignment."
+        domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
 
         # Surface the most recent tutor message as context
         dialogue_history = state.get("dialogue_history") or []
@@ -549,7 +554,7 @@ class SocraticTutorAgent:
                 break
 
         system_prompt = (
-            "You are an expert Socratic tutor in a university history seminar. "
+            f"You are an expert Socratic tutor in a university {domain} seminar. "
             "The student has just responded with a brief conversational affirmation (e.g. 'sure', 'ok', 'sounds good'). "
             "Acknowledge warmly and naturally, then move the seminar forward with a single focused question "
             "that picks up exactly where your last message left off. "
@@ -568,8 +573,8 @@ class SocraticTutorAgent:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             pseudonymous_seed=f"ack:{student_id}:{student_input[:32]}",
-            max_characters=600,
-            max_tokens=120,
+            max_characters=800,
+            max_tokens=140,
             allow_live=True,
             require_live=True,
         )
@@ -598,7 +603,8 @@ class SocraticTutorAgent:
         """
         student_id = state.get("student_id", "anonymous_student")
         student_input = state.get("student_input", "")
-        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the historical problem grounded in assigned exhibits."
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the core problem grounded in assigned exhibits."
+        domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
         focused_text = state.get("focused_block_text") or ""
 
         # Build multi-turn context
@@ -613,10 +619,10 @@ class SocraticTutorAgent:
             history_snippet = "Recent Seminar Dialogue Context:\n" + "\n".join(formatted) + "\n\n"
 
         system_prompt = (
-            "You are an expert Socratic tutor in a university history seminar. "
+            f"You are an expert Socratic tutor in a university {domain} seminar. "
             "The student has asked for help structuring or brainstorming their assignment. "
             "Do NOT give them a structure, skeleton, list of sections, or outline. "
-            "The structure of a historical argument must emerge from the student's own reasoning — "
+            "The structure of an argument must emerge from the student's own reasoning — "
             "it is not something to be handed to them. "
             "In one sentence, warmly acknowledge that structure is built step by step through the argument itself. "
             "Then ask one single focused question: what is their initial instinct or provisional answer "
@@ -635,8 +641,8 @@ class SocraticTutorAgent:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             pseudonymous_seed=f"scaffold:{student_id}:{student_input[:64]}",
-            max_characters=600,
-            max_tokens=120,
+            max_characters=1000,
+            max_tokens=150,
             allow_live=True,
             require_live=True,
         )
@@ -661,6 +667,7 @@ class SocraticTutorAgent:
         current_rung = state.get("current_rung", 0)
         active_rung = min(current_rung + 1, 3)
         hint_ladder = state.get("hint_ladder") or []
+        domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
 
         assignment_hint = None
         for hint in hint_ladder:
@@ -675,9 +682,9 @@ class SocraticTutorAgent:
             probe_text = assignment_hint
         else:
             rung_ladders = {
-                1: "What were the key institutional and economic transformations that occurred across medieval and early modern India, and how did dynastic transitions shape regional networks?",
-                2: "Looking at your working claim, what specific causal mechanism connects these administrative reforms to changes in agricultural productivity or rural credit?",
-                3: "Let's decompose this into three analytical steps: 1) Identify one specific reform from the assigned exhibits, 2) Note how primary accounts quantify its revenue impact, and 3) Contrast this with an alternative regional interpretation.",
+                1: f"Consider the core principles and frameworks introduced in the assigned {domain} exhibits. How do they apply to this question?",
+                2: "Looking at your working claim, what specific evidence, framework, or mechanism from the exhibits connects your premise to your conclusion?",
+                3: "Let's decompose this into three steps: 1) Identify key evidence from the exhibits, 2) Explain how it supports your claim, and 3) Evaluate potential limitations or alternatives.",
             }
             probe_text = rung_ladders.get(active_rung, rung_ladders[1])
 
@@ -745,7 +752,8 @@ class SocraticTutorAgent:
         if attempts > 0 and remediation:
             remediation_snippet = f"\nCorrection Notice from Answer-Isolation Critic: {remediation}\n"
 
-        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the historical problem grounded in assigned exhibits."
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the core problem grounded in assigned exhibits."
+        domain = state.get("domain") or (state.get("assignment_meta") or {}).get("domain") or "academic"
         focused_text = state.get("focused_block_text") or ""
 
         assigned_sources = state.get("assigned_sources") or []
@@ -759,12 +767,12 @@ class SocraticTutorAgent:
             sources_snippet = "Assigned Primary Sources / Exhibits in Course Pack:\n" + "\n".join(sources_list) + "\n\n"
 
         system_prompt = (
-            "You are an expert Socratic tutor in a rigorous university history seminar. "
-            "Your goal is to guide the student toward independent critical thinking, historical causation, and evidence-grounded analysis.\n"
+            f"You are an expert Socratic tutor in a rigorous university {domain} seminar. "
+            "Your goal is to guide the student toward independent critical thinking, analytical reasoning, and evidence-grounded analysis.\n"
             "STRICT PEDAGOGICAL CONSTRAINTS:\n"
             "1. NO SYCOPHANCY: NEVER open with formulaic praise or filler validation. Do NOT say 'That's a focused direction!', 'That's a focused approach!', 'That's a crucial aspect!', 'Great question!', etc. Jump directly and conversationally into the inquiry.\n"
             "2. SINGLE QUESTION ONLY: Ask strictly ONE focused, intellectually substantive question per turn. Never fire multiple questions, and do not append secondary inquiries with 'Additionally...', 'Furthermore...', 'What about...', or 'And how...'.\n"
-            "3. GROUND IN ASSIGNED EXHIBITS: When the student expresses interest in a period or topic (e.g. Delhi Sultanate, Mughal economy, British revenue), immediately steer them to the specific assigned exhibit in the course pack covering that topic, asking what specific historical observation or evidence they draw from it.\n"
+            "3. GROUND IN ASSIGNED EXHIBITS: When the student discusses a concept, topic, or strategic option, immediately steer them to the specific assigned exhibit in the course pack covering that topic, asking what specific observation, data, framework, or evidence they draw from it to support their reasoning.\n"
             "4. NEVER GHOSTWRITE: Do not write thesis statements or give direct answers. Guide the student to formulate their own claims from the sources.\n"
             "5. NO LITERALISM ON SLANG: Never take casual rhetorical checks literally (e.g. 'cool?' means 'sound good?')."
         )
