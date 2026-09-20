@@ -45,7 +45,9 @@ out/
 *.dump
 *.cypher
 pgdata/
-storage/
+storage/**
+!storage/**/
+!storage/**/*.pdf
 db_dumps/*
 !db_dumps/*.tar.gz
 
