@@ -60,6 +60,19 @@ make test
 # Or: pytest fiosra/tests/ -v
 ```
 
+### 6. Database Management (Windows / Cross-Platform)
+If you are on Windows and do not have `make` installed, use the cross-platform Python sync utility to manage database snapshots and load seed data:
+```bash
+# Load full marketing course (rebuild from scratch)
+uv run python create_marketing_course.py
+
+# Create a snapshot (dumps PostgreSQL and Neo4j)
+uv run python scripts/db_sync.py dump
+
+# Restore from snapshot
+uv run python scripts/db_sync.py restore
+```
+
 ---
 
 ## 🏛️ Repository Directory Map

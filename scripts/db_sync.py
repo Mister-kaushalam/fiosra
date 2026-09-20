@@ -15,6 +15,10 @@ import tarfile
 import time
 from pathlib import Path
 
+# Ensure Windows prints emojis correctly without crashing
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding='utf-8')
+
 # Project paths
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_DUMP_DIR = PROJECT_ROOT / "db_dumps"
