@@ -79,6 +79,44 @@ def ensure_containers_running() -> None:
         print("⚠️ Warning: PostgreSQL readiness check timed out. Proceeding anyway...")
 
 
+def clean_neo4j_database() -> None:
+    """Drop all constraints, indexes, and nodes in Neo4j to ensure clean import without collision."""
+    print("   -> Clearing existing Neo4j constraints & indexes...")
+    # 1. Drop constraints
+    res = subprocess.run([
+        "docker", "exec", NEO4J_CONTAINER, "cypher-shell", "-u", NEO4J_USER, "-p", NEO4J_PASS,
+        "--format", "plain", "SHOW CONSTRAINTS YIELD name RETURN name;"
+    ], capture_output=True, text=True, check=False)
+    if res.returncode == 0:
+        for line in res.stdout.splitlines()[1:]:
+            name = line.strip().strip('"').strip("'")
+            if name:
+                subprocess.run([
+                    "docker", "exec", NEO4J_CONTAINER, "cypher-shell", "-u", NEO4J_USER, "-p", NEO4J_PASS,
+                    f"DROP CONSTRAINT {name} IF EXISTS;"
+                ], capture_output=True, text=True, check=False)
+
+    # 2. Drop non-lookup indexes
+    res = subprocess.run([
+        "docker", "exec", NEO4J_CONTAINER, "cypher-shell", "-u", NEO4J_USER, "-p", NEO4J_PASS,
+        "--format", "plain", "SHOW INDEXES YIELD name, type WHERE type <> 'LOOKUP' RETURN name;"
+    ], capture_output=True, text=True, check=False)
+    if res.returncode == 0:
+        for line in res.stdout.splitlines()[1:]:
+            name = line.strip().strip('"').strip("'")
+            if name:
+                subprocess.run([
+                    "docker", "exec", NEO4J_CONTAINER, "cypher-shell", "-u", NEO4J_USER, "-p", NEO4J_PASS,
+                    f"DROP INDEX {name} IF EXISTS;"
+                ], capture_output=True, text=True, check=False)
+
+    # 3. Detach delete all nodes
+    subprocess.run([
+        "docker", "exec", NEO4J_CONTAINER, "cypher-shell", "-u", NEO4J_USER, "-p", NEO4J_PASS,
+        "MATCH (n) DETACH DELETE n;"
+    ], capture_output=True, text=True, check=False)
+
+
 def dump_databases(dump_dir: Path) -> Path:
     """Export PostgreSQL and Neo4j databases and package into tar.gz."""
     ensure_containers_running()
@@ -88,21 +126,27 @@ def dump_databases(dump_dir: Path) -> Path:
     neo4j_dump_file = dump_dir / "fiosra_neo4j.cypher"
     archive_file = dump_dir / DEFAULT_SNAPSHOT_NAME
 
-    # 1. PostgreSQL dump
+    # 1. PostgreSQL dump (write directly to file inside container to prevent any TTY/pipe byte corruption)
     print("\n📦 [1/2] Exporting PostgreSQL (pgvector schema & tables)...")
     run_cmd([
         "docker", "exec", PG_CONTAINER,
-        "pg_dump", "-U", PG_USER, "-d", PG_DB, "-F", "c", "-b", "-v",
+        "pg_dump", "-U", PG_USER, "-d", PG_DB, "-F", "c", "-b",
         "-f", "/tmp/fiosra_postgres.dump"
     ])
     run_cmd(["docker", "cp", f"{PG_CONTAINER}:/tmp/fiosra_postgres.dump", str(pg_dump_file)])
-    print(f"   -> Saved: {pg_dump_file.name} ({pg_dump_file.stat().st_size / (1024*1024):.2f} MB)")
+    
+    # Verify binary magic signature
+    with open(pg_dump_file, "rb") as f:
+        magic = f.read(5)
+        if magic != b"PGDMP":
+            sys.exit(f"❌ Error: Corrupted PostgreSQL dump file generated (magic: {magic!r}).")
+    print(f"   -> Saved: {pg_dump_file.name} ({pg_dump_file.stat().st_size / (1024*1024):.2f} MB - Valid PGDMP)")
 
     # 2. Neo4j APOC export
     print("\n📦 [2/2] Exporting Neo4j Knowledge Graph via APOC...")
     apoc_cypher = (
         "CALL apoc.export.cypher.all('/var/lib/neo4j/import/export.cypher', "
-        "{format: 'cypher-shell', useOptimizations: {type: 'unwind_batch', batchSize: 500}});"
+        "{format: 'cypher-shell', useOptimizations: {type: 'unwind_batch', batchSize: 500}, ifNotExists: true});"
     )
     run_cmd([
         "docker", "exec", NEO4J_CONTAINER,
@@ -141,6 +185,15 @@ def restore_databases(dump_dir: Path) -> None:
     if not pg_dump_file.exists():
         sys.exit(f"❌ Error: PostgreSQL dump not found at {pg_dump_file} or in {archive_file}.")
 
+    # Validate PostgreSQL archive header
+    with open(pg_dump_file, "rb") as f:
+        magic = f.read(5)
+        if magic != b"PGDMP":
+            sys.exit(
+                f"❌ Error: '{pg_dump_file.name}' is not a valid PostgreSQL custom dump archive.\n"
+                f"   Header starts with: {magic!r}. Please re-generate using 'make db-dump'."
+            )
+
     # 1. Restore PostgreSQL
     print("\n🔄 [1/2] Restoring PostgreSQL database...")
     run_cmd(["docker", "cp", str(pg_dump_file), f"{PG_CONTAINER}:/tmp/fiosra_postgres.dump"])
@@ -148,18 +201,15 @@ def restore_databases(dump_dir: Path) -> None:
         "docker", "exec", PG_CONTAINER,
         "pg_restore", "-U", PG_USER, "-d", PG_DB, "--clean", "--if-exists", "--no-owner",
         "/tmp/fiosra_postgres.dump"
-    ], check=False)  # pg_restore may return non-zero for minor warnings like pre-existing roles
+    ], check=False)
     print("   -> PostgreSQL restored successfully.")
 
     # 2. Restore Neo4j
     if neo4j_dump_file.exists():
         print("\n🔄 [2/2] Restoring Neo4j Knowledge Graph...")
-        # Clear existing nodes
-        run_cmd([
-            "docker", "exec", NEO4J_CONTAINER,
-            "cypher-shell", "-u", NEO4J_USER, "-p", NEO4J_PASS,
-            "MATCH (n) DETACH DELETE n;"
-        ])
+        # Clear existing constraints, indexes and nodes to avoid duplicate index collisions
+        clean_neo4j_database()
+        
         # Copy cypher file into container
         run_cmd(["docker", "cp", str(neo4j_dump_file), f"{NEO4J_CONTAINER}:/var/lib/neo4j/import/export.cypher"])
         # Import cypher
