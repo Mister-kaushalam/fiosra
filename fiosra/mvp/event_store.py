@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import logging
+from secrets import token_urlsafe
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -237,6 +238,80 @@ class EventStore:
     async def get_session(self, session_id: UUID | str) -> dict[str, Any] | None:
         """Compatibility alias for session detail lookup."""
         return await self.get_session_details(session_id)
+
+    async def get_student_assignment_sessions(
+        self,
+        student_id: str,
+        assignment_id: UUID | str,
+    ) -> list[dict[str, Any]]:
+        """Retrieve chronological history of reasoning sessions for a student on an assignment."""
+        query_sql = text("""
+            SELECT s.session_id, s.student_id, s.assignment_id, s.current_question_id, s.status,
+                   s.started_at, s.last_activity_at, s.completed_at,
+                   sub.document_revision AS submitted_document_revision,
+                   sub.submitted_at,
+                   doc.document_id,
+                   doc.document_revision AS current_document_revision,
+                   doc.title AS document_title,
+                   (
+                       SELECT COUNT(*)
+                       FROM learning_document_blocks b
+                       WHERE b.document_id = doc.document_id
+                   ) AS block_count
+            FROM student_sessions s
+            LEFT JOIN student_session_submissions sub ON sub.session_id = s.session_id
+            LEFT JOIN learning_documents doc ON doc.session_id = s.session_id
+            WHERE s.student_id = :student_id
+              AND s.assignment_id = :assignment_id
+            ORDER BY s.started_at ASC;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                query_sql,
+                {"student_id": str(student_id), "assignment_id": str(assignment_id)},
+            )
+            rows = result.mappings().all()
+
+        sessions_list = []
+        for idx, row in enumerate(rows, start=1):
+            s_dict = dict(row)
+            s_dict["attempt_number"] = idx
+            s_dict["session_id"] = str(s_dict["session_id"])
+            if s_dict.get("assignment_id"):
+                s_dict["assignment_id"] = str(s_dict["assignment_id"])
+            if s_dict.get("document_id"):
+                s_dict["document_id"] = str(s_dict["document_id"])
+            for key in ("started_at", "last_activity_at", "completed_at", "submitted_at"):
+                if isinstance(s_dict.get(key), datetime):
+                    s_dict[key] = s_dict[key].isoformat()
+            sessions_list.append(s_dict)
+
+        sessions_list.reverse()
+        return sessions_list
+
+    async def reconnect_session(self, session_id: UUID | str, student_id: str) -> str | None:
+        """Issue a fresh access token for a student's own active or submitted session."""
+        new_token = token_urlsafe(32)
+        update_sql = text("""
+            UPDATE student_sessions
+            SET access_token_hash = :new_token_hash,
+                last_activity_at = NOW()
+            WHERE session_id = :session_id
+              AND student_id = :student_id
+            RETURNING session_id;
+        """)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                update_sql,
+                {
+                    "session_id": str(session_id),
+                    "student_id": student_id,
+                    "new_token_hash": self._hash_access_token(new_token),
+                },
+            )
+            matched = result.scalar()
+            await session.commit()
+        return new_token if matched else None
 
     async def get_document_revision(self, session_id: UUID | str) -> int | None:
         """Return the latest saved revision for compatibility callers without a request body."""

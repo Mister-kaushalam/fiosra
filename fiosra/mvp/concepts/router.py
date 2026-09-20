@@ -64,10 +64,16 @@ async def generate_concept_graph_proposal(
 ) -> ConceptGraphProposalResponse:
     """Generate a teacher-reviewable high-to-low concept graph from the course materials."""
     course = await _course_or_404(course_id)
-    proposal, generated_by = await concept_graph_service.generate_proposal(
-        course, instruction=payload.instruction if payload else None
+    proposal, generated_by, completeness = await concept_graph_service.generate_proposal(
+        course,
+        instruction=payload.instruction if payload else None,
+        similarity_threshold=payload.similarity_threshold if payload else 0.85,
     )
-    return ConceptGraphProposalResponse(proposal=proposal, generated_by=generated_by)
+    return ConceptGraphProposalResponse(
+        proposal=proposal,
+        generated_by=generated_by,
+        completeness=completeness,
+    )
 
 
 @router.post("/proposals/approve", response_model=ConceptGraphResponse)

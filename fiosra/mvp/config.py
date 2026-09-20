@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     # prefix where required, allowing the application to switch without code changes.
     OPENROUTER_API_KEY: str | None = None
     OPENROUTER_API_BASE: str = "https://openrouter.ai/api/v1"
-    OPENROUTER_MODEL: str = "openrouter/nvidia/nemotron-3-ultra-550b-a55b:free"
+    OPENROUTER_MODEL: str = "openrouter/nvidia/nemotron-3.5-lightning:free"
     OPENAI_API_KEY: str | None = None
     OPENAI_API_BASE: str | None = None
     # Nano is appropriate for brief, structured, answer-blind writing help.

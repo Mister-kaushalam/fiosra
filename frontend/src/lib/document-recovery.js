@@ -56,14 +56,14 @@ export async function saveDocumentRecovery(snapshot) {
       role: b.role || 'claim',
     }));
   }
-  const record = {
-    key: recoveryKey(snapshot.sessionId, snapshot.documentId),
-    sessionId: snapshot.sessionId,
-    documentId: snapshot.documentId,
+  const record = JSON.parse(JSON.stringify({
+    key: String(recoveryKey(snapshot.sessionId, snapshot.documentId)),
+    sessionId: String(snapshot.sessionId),
+    documentId: String(snapshot.documentId),
     baseRevision: Number(snapshot.baseRevision || 0),
     blocks: cleanBlocks,
     savedAt: new Date().toISOString(),
-  };
+  }));
   await withStore('readwrite', (store) => store.put(record));
   return record;
 }

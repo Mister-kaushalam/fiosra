@@ -75,22 +75,28 @@ class TutorSessionState(TypedDict, total=False):
     hint_requested: bool
     student_input: str
     domain: str
+    discourse_phase: str                        # "orientation", "structural_scaffold", "substantive_inquiry", "hint_scaffold", "adversarial", "acknowledgment"
+    dialogue_history: list[dict[str, str]]      # Prior turns [{"role": "student"|"tutor", "text": "..."}]
+    hint_ladder: list[dict[str, Any]] | None    # Configured pedagogical hint rungs
+    hint_rung: int | None                       # Only present on explicit hint scaffold turns
     
     # 1. Assignment Context
     assignment_meta: dict[str, Any]
     target_bloom_level: str
     rubric_criteria: list[dict[str, Any]]
-    
+    section_guidance: str | None
+
     # 2. Graphiti Temporal Mental Model
     active_beliefs: list[dict[str, Any]]        # invalidated_at IS NULL
     historical_pivots: list[dict[str, Any]]     # Prior self-corrections & leaps
     in_flight_revisions: list[dict[str, Any]]   # Uncommitted revisions awaiting async AutoSCORE
-    
+
     # 3. Source Material Grounding
     open_exhibit_id: str | None                 # Currently open in left DocumentReader
     open_exhibit_page: int | None
     selected_source_quote: str | None
     retrieved_source_chunks: list[dict[str, Any]]
+    assigned_sources: list[dict[str, Any]]      # Primary sources and exhibits from assignment source pack
     
     # 4. Neo4j Curriculum Knowledge Graph
     target_kcs: list[dict[str, Any]]
@@ -104,6 +110,7 @@ class TutorSessionState(TypedDict, total=False):
     toulmin_structure: dict[str, Any]           # Active claims, warrants, citations
     
     # Internal reasoning and diagnosis
+    intellectual_operation: str | None
     adversarial_flag: bool
     adversarial_reason: str | None
     temporal_context: list[dict[str, Any]]

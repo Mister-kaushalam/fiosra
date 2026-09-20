@@ -64,6 +64,18 @@
   let activeSearchTerm = $state('');
   let iframeKey = $state(1);
 
+  function handleMatchesChange(info) {
+    if (!info) return;
+    if (
+      matchInfo.current !== info.current ||
+      matchInfo.total !== info.total ||
+      matchInfo.pageNum !== info.pageNum ||
+      matchInfo.sectionTitle !== info.sectionTitle
+    ) {
+      matchInfo = info;
+    }
+  }
+
   function performSearch() {
     const q = searchQuery.trim();
     if (!q) {
@@ -426,7 +438,7 @@
             title={activeDoc.title}
             searchTerm={activeSearchTerm}
             {onQuoteEvidence}
-            onMatchesChange={(info) => matchInfo = info}
+            onMatchesChange={handleMatchesChange}
           />
         {:else}
           <div class="empty-doc-view">
@@ -451,7 +463,9 @@
           />
           {#if matchInfo.total > 0}
             <div class="search-match-nav">
-              <span class="match-count">{matchInfo.current + 1} of {matchInfo.total}</span>
+              <span class="match-count" title={matchInfo.sectionTitle ? `Page ${matchInfo.pageNum} · ${matchInfo.sectionTitle}` : `Page ${matchInfo.pageNum}`}>
+                p. {matchInfo.pageNum || 1}{matchInfo.sectionTitle ? ` · ${matchInfo.sectionTitle}` : ''} ({matchInfo.current + 1} of {matchInfo.total})
+              </span>
               <button
                 type="button"
                 class="btn-match-arrow"
@@ -853,12 +867,13 @@
     align-items: center;
     gap: 3px;
     background: rgba(0, 0, 0, 0.05);
-    padding: 2px 6px;
+    padding: 2px 8px;
     border-radius: 999px;
     font-size: 0.72rem;
     font-weight: 600;
     color: var(--color-slate-subtle, #475569);
     flex-shrink: 0;
+    max-width: 280px;
   }
 
   :global([data-theme="dark"]) .search-match-nav {
@@ -869,6 +884,8 @@
   .match-count {
     padding: 0 4px;
     white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 
   .btn-match-arrow {

@@ -6,6 +6,7 @@
   import TutorChatDrawer from '../lib/TutorChatDrawer.svelte';
   import { fiosraContext } from '../lib/contextStore.svelte.js';
   import {
+    formatDate,
     getStudentId,
     responseError,
     routeParams,
@@ -19,8 +20,41 @@
   let isGutterCollapsed = $state(true);
   let activeGutterTab = $state('marginalia'); // 'marginalia' | 'agent'
   let isTutorChatDrawerOpen = $state(false);
-  let macroTurns = $state([]);
   let isMacroBusy = $state(false);
+
+  // Socratic Consultation Chat Threads
+  let chatSessions = $state([
+    {
+      id: 'chat_init',
+      title: 'Consultation 1',
+      startedAt: new Date().toISOString(),
+      turns: [],
+    }
+  ]);
+  let activeChatSessionId = $state('chat_init');
+
+  let currentChatSession = $derived(
+    chatSessions.find((cs) => cs.id === activeChatSessionId) || chatSessions[0]
+  );
+  let macroTurns = $derived(currentChatSession?.turns || []);
+
+  function handleStartNewChatSession() {
+    const nextNum = chatSessions.length + 1;
+    const newSession = {
+      id: `chat_${crypto.randomUUID().slice(0, 8)}`,
+      title: `Consultation ${nextNum}`,
+      startedAt: new Date().toISOString(),
+      turns: [],
+    };
+    chatSessions = [newSession, ...chatSessions];
+    activeChatSessionId = newSession.id;
+  }
+
+  function handleSwitchChatSession(id) {
+    if (chatSessions.some((cs) => cs.id === id)) {
+      activeChatSessionId = id;
+    }
+  }
 
   let courseId = $state('');
   let assignmentId = $state('');
@@ -748,8 +782,7 @@
       });
       if (!res.ok) throw new Error(await responseError(res, 'Dialogue service unavailable'));
       const data = await res.json();
-      macroTurns = [
-        ...macroTurns,
+      const newTurns = [
         { role: 'student', text: studentInput },
         {
           role: 'tutor',
@@ -759,12 +792,37 @@
           is_adversarial: data.is_adversarial,
           action_capsules: data.action_capsules || [],
           radar: data.learner_radar || null,
+          prompt_launchers: data.prompt_launchers || [],
         }
       ];
+      const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
+      if (sessionIdx >= 0) {
+        chatSessions[sessionIdx].turns = [...chatSessions[sessionIdx].turns, ...newTurns];
+        if (chatSessions[sessionIdx].title.startsWith('Consultation') && chatSessions[sessionIdx].turns.length <= 2) {
+          const snippet = studentInput.slice(0, 30).trim();
+          if (snippet) chatSessions[sessionIdx].title = snippet.length >= 28 ? `${snippet}…` : snippet;
+        }
+      }
       fiosraContext.setEpistemicState(null, data.hint_rung);
       await loadSessionEvents();
     } catch (err) {
       console.error('Macro dialogue error:', err);
+      const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
+      if (sessionIdx >= 0) {
+        const errorTurn = {
+          role: 'tutor',
+          text: `⚠️ Socratic Tutor is currently unavailable: ${err.message || 'LLM service connection required'}. Please ensure your LLM provider is configured and running.`,
+          is_adversarial: false,
+          hint_rung: 0,
+          action_capsules: [],
+          radar: null,
+        };
+        chatSessions[sessionIdx].turns = [
+          ...chatSessions[sessionIdx].turns,
+          { role: 'student', text: studentInput },
+          errorTurn
+        ];
+      }
     } finally {
       isMacroBusy = false;
     }
@@ -885,7 +943,13 @@
   async function handleCommitActionCapsule(capsule) {
     if (!capsule) return;
     const textToInsert = capsule.suggested_student_text || capsule.text_payload || '';
-    if (editorRef?.insertEvidenceBlock && capsule.role === 'evidence') {
+    if (editorRef?.insertCapsuleText) {
+      editorRef.insertCapsuleText({
+        text: textToInsert,
+        role: capsule.role || 'qualification',
+        sourceTitle: capsule.source_title || 'Assigned Exhibit',
+      });
+    } else if (editorRef?.insertEvidenceBlock && capsule.role === 'evidence') {
       editorRef.insertEvidenceBlock({
         quoteText: textToInsert,
         sourceTitle: capsule.source_title || 'Assigned Exhibit',
@@ -903,7 +967,7 @@
         body: JSON.stringify({
           session_id: sessionId,
           student_id: studentId,
-          question_id: activeQuestionId || 'Q1',
+          question_id: assignment?.question_id || 'q1',
           event_type: 'action_capsule_committed',
           payload: {
             capsule_id: capsule.capsule_id,
@@ -950,6 +1014,7 @@
 <svelte:window onkeydown={(e) => {
   if (e.key === 'Escape') {
     if (isTutorPanelOpen) isTutorPanelOpen = false;
+    if (isSessionRegisterOpen) isSessionRegisterOpen = false;
   }
 }} />
 
@@ -1086,6 +1151,10 @@
               assignment={assignment}
               currentRung={fiosraContext.currentHintRung}
               turns={macroTurns}
+              chatSessions={chatSessions}
+              activeChatSessionId={activeChatSessionId}
+              onNewChatSession={handleStartNewChatSession}
+              onSwitchChatSession={handleSwitchChatSession}
               onSendMessage={handleMacroSendMessage}
               onRequestHint={handleMacroRequestHint}
               isAgentBusy={isMacroBusy}
@@ -1218,6 +1287,7 @@
     background: var(--color-obsidian);
     overflow: hidden;
   }
+
 
   /* Top Control Bar */
   .workspace-topbar {

@@ -9,7 +9,13 @@ import re
 from typing import Any
 from uuid import uuid4
 
-from fiosra.mvp.concepts.schemas import ConceptGraphProposal
+from fiosra.mvp.concepts.resolution import (
+    CompletenessChecker,
+    ConceptEntityResolver,
+    compute_embedding,
+    cosine_similarity,
+)
+from fiosra.mvp.concepts.schemas import CompletenessStats, ConceptGraphProposal
 from fiosra.mvp.config import settings
 from fiosra.mvp.llm.contracts import CompletionRequest
 from fiosra.mvp.llm.litellm_provider import LiteLLMProvider
@@ -130,9 +136,11 @@ class ConceptGraphService:
         concept_type: str,
         level: str,
         parent_concept_id: str | None = None,
+        bloom_level: str | None = None,
     ) -> dict[str, Any]:
         canonical_key = _slug(label).upper()
         concept_id = f"CON_{canonical_key}_{uuid4().hex[:6].upper()}"
+        is_kc = level == "atomic_concept" or bloom_level is not None
         query = """
         MATCH (course:Course {course_id: $course_id})
         MERGE (concept:Concept {course_id: $course_id, canonical_key: $canonical_key})
@@ -143,12 +151,21 @@ class ConceptGraphService:
             concept.definition = $definition,
             concept.concept_type = $concept_type,
             concept.level = $level,
+            concept.bloom_level = $bloom_level,
             concept.status = 'approved',
             concept.created_at = datetime(),
             concept.updated_at = datetime()
-        ON MATCH SET concept.updated_at = datetime()
+        ON MATCH SET concept.updated_at = datetime(),
+            concept.definition = $definition,
+            concept.concept_type = $concept_type,
+            concept.level = $level,
+            concept.bloom_level = coalesce($bloom_level, concept.bloom_level)
+        FOREACH (_ IN CASE WHEN $is_kc THEN [1] ELSE [] END |
+            SET concept:KnowledgeComponent,
+                concept.kc_id = coalesce(concept.kc_id, concept.concept_id)
+        )
         MERGE (course)-[:HAS_CONCEPT]->(concept)
-        RETURN concept { .concept_id, .course_id, .label, .definition, .concept_type, .level, .status } AS concept
+        RETURN concept { .concept_id, .course_id, .label, .definition, .concept_type, .level, .status, .bloom_level, .kc_id } AS concept
         """
         async with self.client.get_session() as session:
             result = await session.run(
@@ -161,6 +178,8 @@ class ConceptGraphService:
                     "definition": definition.strip(),
                     "concept_type": concept_type,
                     "level": level,
+                    "bloom_level": bloom_level,
+                    "is_kc": is_kc,
                 },
             )
             row = await result.single()
@@ -258,6 +277,17 @@ class ConceptGraphService:
 
     async def add_prerequisite(self, course_id: str, prerequisite_id: str, dependent_id: str) -> None:
         await self._add_relation(course_id, prerequisite_id, dependent_id, "PREREQUISITE_OF")
+        query = """
+        MATCH (dependent:Concept {concept_id: $dependent_id, course_id: $course_id})
+        MATCH (prerequisite:Concept {concept_id: $prerequisite_id, course_id: $course_id})
+        MERGE (dependent)-[r:REQUIRES]->(prerequisite)
+        SET r.updated_at = datetime()
+        """
+        async with self.client.get_session() as session:
+            await session.run(
+                query,
+                {"course_id": str(course_id), "prerequisite_id": prerequisite_id, "dependent_id": dependent_id},
+            )
 
     async def link_module(self, course_id: str, module_id: str, concept_id: str, role: str) -> None:
         relation = {"introduces": "INTRODUCES", "develops": "DEVELOPS", "assesses": "ASSESSES"}.get(role)
@@ -387,22 +417,191 @@ class ConceptGraphService:
 
     @staticmethod
     def _proposal_json(content: str) -> dict[str, Any] | None:
-        """Parse a structured proposal even when a provider wraps it in Markdown."""
+        """Parse a structured proposal even when a provider wraps it in Markdown or produces minor trailing syntax issues."""
         candidate = content.strip()
         if candidate.startswith("```"):
-            candidate = re.sub(r"^```(?:json)?\s*|\s*```$", "", candidate, flags=re.IGNORECASE)
+            candidate = re.sub(r"^```(?:json)?\s*|\s*```$", "", candidate, flags=re.IGNORECASE).strip()
         try:
             parsed = json.loads(candidate)
             return parsed if isinstance(parsed, dict) else None
         except json.JSONDecodeError:
-            start = candidate.find("{")
-            if start == -1:
-                return None
+            pass
+
+        start = candidate.find("{")
+        if start == -1:
+            return None
+        trimmed = candidate[start:]
+        try:
+            parsed, _ = json.JSONDecoder().raw_decode(trimmed)
+            return parsed if isinstance(parsed, dict) else None
+        except json.JSONDecodeError:
+            pass
+
+        # Attempt to repair unclosed JSON arrays/objects if output was cut off
+        for suffix in ["}]}]}", "]}]}", "}]}", "]}", "}", '"}]}]}', '"}]}']:
             try:
-                parsed, _ = json.JSONDecoder().raw_decode(candidate[start:])
-                return parsed if isinstance(parsed, dict) else None
+                cleaned = re.sub(r",\s*$", "", trimmed.rstrip()) + suffix
+                parsed = json.loads(cleaned)
+                if isinstance(parsed, dict) and "concepts" in parsed:
+                    return parsed
             except json.JSONDecodeError:
-                return None
+                continue
+
+        return None
+
+    @classmethod
+    def _normalize_proposal_dict(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Normalize varied LLM JSON outputs (nodes/edges, missing rationales) to fit ConceptGraphProposal."""
+        if not isinstance(data, dict):
+            return data
+
+        if "course_rationale" not in data or not str(data.get("course_rationale", "")).strip():
+            data["course_rationale"] = "Curriculum concept graph synthesized from course materials."
+
+        raw_concepts = data.get("concepts") or data.get("nodes") or []
+        normalized_concepts = []
+        for i, c in enumerate(raw_concepts):
+            if isinstance(c, str):
+                c = {"label": c, "definition": f"Curriculum topic and analytical study of {c}."}
+            elif not isinstance(c, dict):
+                continue
+            raw_id = c.get("proposal_id") or c.get("id") or f"c{i+1}"
+            pid = re.sub(r"[^0-9]", "", str(raw_id))
+            pid = f"c{pid}" if pid else f"c{i+1}"
+            label = str(c.get("label") or c.get("title") or c.get("name") or f"Concept {i+1}").strip()
+            definition = str(c.get("definition") or c.get("description") or f"Core concept: {label}").strip()
+            if len(definition) < 4:
+                definition = f"Core pedagogical understanding of {label}."
+            ctype = str(c.get("concept_type") or "domain").lower()
+            if ctype not in ["domain", "entity", "process", "relationship", "method", "threshold", "misconception"]:
+                ctype = "domain"
+            level = str(c.get("level") or ("course_theme" if i == 0 else "topic")).lower()
+            if level not in ["course_theme", "strand", "topic", "subtopic", "atomic_concept"]:
+                level = "topic"
+            parent = c.get("parent_proposal_id") or c.get("parent_id")
+            if parent:
+                parent_digits = re.sub(r"[^0-9]", "", str(parent))
+                parent = f"c{parent_digits}" if parent_digits else None
+            if i == 0:
+                parent = None
+            elif parent is None and i > 0:
+                parent = "c1"
+            role = str(c.get("module_role") or "introduces").lower()
+            if role not in ["introduces", "develops", "assesses"]:
+                role = "introduces"
+            positions = c.get("module_positions") or [1]
+            if not isinstance(positions, list):
+                positions = [1]
+            bloom = str(c.get("bloom_level") or "").lower()
+            if bloom not in ["remember", "understand", "apply", "analyze", "evaluate", "create"]:
+                bloom = "understand" if level == "atomic_concept" else None
+
+            misconceptions_raw = c.get("misconceptions") or []
+            normalized_misconceptions = []
+            if isinstance(misconceptions_raw, list):
+                for m in misconceptions_raw:
+                    if not isinstance(m, dict):
+                        continue
+                    m_name = str(m.get("name") or "").strip()
+                    m_flawed = str(m.get("flawed_rule") or m.get("rule") or "").strip()
+                    m_remediation = str(m.get("remediation_hint") or m.get("remediation") or "").strip()
+                    if not m_name or not m_flawed:
+                        continue
+                    probes_raw = m.get("probes") or []
+                    normalized_probes = []
+                    if isinstance(probes_raw, list):
+                        for p in probes_raw:
+                            if not isinstance(p, dict):
+                                continue
+                            p_text = str(p.get("probe_text") or p.get("text") or "").strip()
+                            if not p_text:
+                                continue
+                            p_rung = p.get("rung")
+                            try:
+                                p_rung = int(p_rung)
+                                if p_rung not in (0, 1, 2):
+                                    p_rung = 0
+                            except (TypeError, ValueError):
+                                p_rung = 0
+                            normalized_probes.append({
+                                "rung": p_rung,
+                                "probe_text": p_text[:600],
+                                "rationale": str(p.get("rationale") or "Socratic diagnostic scaffolding.")[:400],
+                            })
+                    normalized_misconceptions.append({
+                        "name": m_name[:160],
+                        "flawed_rule": m_flawed[:600],
+                        "remediation_hint": (m_remediation or "Analyze authentic primary source evidence.")[:600],
+                        "probes": normalized_probes,
+                    })
+
+            normalized_concepts.append({
+                "proposal_id": pid,
+                "label": label[:160],
+                "definition": definition[:1200],
+                "concept_type": ctype,
+                "level": level,
+                "bloom_level": bloom,
+                "parent_proposal_id": parent,
+                "module_positions": [int(p) for p in positions if isinstance(p, (int, float))][:8] or [1],
+                "module_role": role,
+                "misconceptions": normalized_misconceptions,
+            })
+
+        if len(normalized_concepts) < 3:
+            for j in range(len(normalized_concepts) + 1, 4):
+                normalized_concepts.append({
+                    "proposal_id": f"c{j}",
+                    "label": f"Foundational inquiry {j}",
+                    "definition": f"Supporting analytical concept for curriculum inquiry {j}.",
+                    "concept_type": "domain",
+                    "level": "topic",
+                    "parent_proposal_id": "c1",
+                    "module_positions": [1],
+                    "module_role": "introduces",
+                })
+
+        data["concepts"] = normalized_concepts
+
+        raw_prereqs = data.get("prerequisites") or data.get("edges") or []
+        normalized_prereqs = []
+        concept_ids = {c["proposal_id"] for c in normalized_concepts}
+        for idx, e in enumerate(raw_prereqs):
+            if isinstance(e, str):
+                if idx + 1 < len(normalized_concepts):
+                    normalized_prereqs.append({
+                        "prerequisite_proposal_id": normalized_concepts[idx]["proposal_id"],
+                        "dependent_proposal_id": normalized_concepts[idx + 1]["proposal_id"],
+                        "rationale": f"{e[:300]} establishes prerequisite knowledge.",
+                    })
+                continue
+            if not isinstance(e, dict):
+                continue
+            src_raw = e.get("prerequisite_proposal_id") or e.get("source") or e.get("source_id")
+            tgt_raw = e.get("dependent_proposal_id") or e.get("target") or e.get("target_id")
+            src_digits = re.sub(r"[^0-9]", "", str(src_raw or ""))
+            tgt_digits = re.sub(r"[^0-9]", "", str(tgt_raw or ""))
+            src = f"c{src_digits}" if src_digits else None
+            tgt = f"c{tgt_digits}" if tgt_digits else None
+            if src in concept_ids and tgt in concept_ids and src != tgt:
+                normalized_prereqs.append({
+                    "prerequisite_proposal_id": src,
+                    "dependent_proposal_id": tgt,
+                    "rationale": str(e.get("rationale") or e.get("relation") or f"{src} is required before {tgt}")[:360] or "Prerequisite foundation.",
+                })
+
+        if not normalized_prereqs and len(normalized_concepts) >= 2:
+            for k in range(len(normalized_concepts) - 1):
+                normalized_prereqs.append({
+                    "prerequisite_proposal_id": normalized_concepts[k]["proposal_id"],
+                    "dependent_proposal_id": normalized_concepts[k + 1]["proposal_id"],
+                    "rationale": f"{normalized_concepts[k]['label']} establishes foundational prerequisite for {normalized_concepts[k+1]['label']}."[:360],
+                })
+
+        data["prerequisites"] = normalized_prereqs
+        data.pop("nodes", None)
+        data.pop("edges", None)
+        return data
 
     @staticmethod
     def _deterministic_proposal(
@@ -411,19 +610,19 @@ class ConceptGraphService:
         existing_labels: set[str] | None = None,
         source_snippets: list[str] | None = None,
     ) -> ConceptGraphProposal:
-        """Provide a reviewable course graph draft grounded in syllabus and source materials."""
+        """Provide a reviewable 4-tier pedagogical graph draft grounded in syllabus and source materials."""
         existing_set = {l.lower() for l in (existing_labels or set())}
         concepts: list[dict[str, Any]] = []
         modules_to_process = [target_module] if target_module else course.modules
 
-        root_label = f"{course.title}: core inquiries"
+        root_label = f"{course.title}: Civilizational and Disciplinary Trajectories"
         root_id = "c1"
-        if not existing_set or not any("core inquiries" in l or "central" in l for l in existing_set):
+        if not existing_set or not any("civilizational" in l or "core inquiries" in l for l in existing_set):
             concepts.append(
                 {
                     "proposal_id": "c1",
                     "label": root_label,
-                    "definition": course.syllabus_context or f"The central conceptual foundation of {course.title}.",
+                    "definition": course.syllabus_context or f"The central thematic and conceptual foundations of {course.title}.",
                     "concept_type": "domain",
                     "level": "course_theme",
                     "parent_proposal_id": None,
@@ -435,93 +634,108 @@ class ConceptGraphService:
             root_id = None
 
         idx = len(concepts) + 1
+        atomic_concept_ids: list[str] = []
+
         for mod in modules_to_process:
             if not mod:
                 continue
             mod_title = mod.title.strip()
-            if mod_title.lower() not in existing_set:
-                p_id = f"c{idx}"
-                concepts.append(
-                    {
-                        "proposal_id": p_id,
-                        "label": mod_title,
-                        "definition": mod.description or f"Conceptual focus and historical mechanics for {mod_title}.",
-                        "concept_type": "process",
-                        "level": "topic",
-                        "parent_proposal_id": root_id,
-                        "module_positions": [mod.position],
-                        "module_role": "introduces" if mod.position == 1 else "develops",
-                    }
-                )
-                idx += 1
-
-            for obj in mod.learning_objectives or []:
-                obj_text = str(obj).strip()
-                if len(obj_text) > 4 and obj_text.lower() not in existing_set and len(concepts) < 10:
-                    p_id = f"c{idx}"
-                    concepts.append(
-                        {
-                            "proposal_id": p_id,
-                            "label": obj_text[:80],
-                            "definition": f"Core curriculum competency: {obj_text}.",
-                            "concept_type": "method",
-                            "level": "subtopic",
-                            "parent_proposal_id": concepts[-1]["proposal_id"] if concepts else root_id,
-                            "module_positions": [mod.position],
-                            "module_role": "develops",
-                        }
-                    )
-                    idx += 1
-
-        if source_snippets and len(concepts) < 8:
-            for snippet in source_snippets[:3]:
-                clean_snippet = re.sub(r"\[.*?\]:", "", snippet).strip()
-                first_line = clean_snippet.split("\n")[0][:60].strip()
-                if len(first_line) > 5 and first_line.lower() not in existing_set and len(concepts) < 10:
-                    p_id = f"c{idx}"
-                    concepts.append(
-                        {
-                            "proposal_id": p_id,
-                            "label": first_line,
-                            "definition": f"Primary source evidence: {clean_snippet[:180]}...",
-                            "concept_type": "entity",
-                            "level": "atomic_concept",
-                            "parent_proposal_id": concepts[-1]["proposal_id"] if concepts else root_id,
-                            "module_positions": [modules_to_process[0].position] if modules_to_process else [],
-                            "module_role": "develops",
-                        }
-                    )
-                    idx += 1
-
-        while len(concepts) < 3:
-            p_id = f"c{idx}"
-            fallback_label = f"{course.domain} disciplinary focus {idx}"
+            strand_id = f"c{idx}"
+            idx += 1
             concepts.append(
                 {
-                    "proposal_id": p_id,
-                    "label": fallback_label,
-                    "definition": f"Critical evaluation of evidence in {course.domain}.",
-                    "concept_type": "method",
-                    "level": "topic",
-                    "parent_proposal_id": root_id or (concepts[0]["proposal_id"] if concepts else None),
-                    "module_positions": [1],
-                    "module_role": "develops",
+                    "proposal_id": strand_id,
+                    "label": mod_title,
+                    "definition": mod.description or f"Curriculum strand analyzing the historical mechanics of {mod_title}.",
+                    "concept_type": "process",
+                    "level": "strand",
+                    "parent_proposal_id": root_id,
+                    "module_positions": [mod.position],
+                    "module_role": "introduces" if mod.position == 1 else "develops",
                 }
             )
-            idx += 1
+
+            objectives = list(mod.learning_objectives or [])
+            if not objectives:
+                objectives = [
+                    f"Structural and Institutional Developments of {mod_title}",
+                    f"Socio-Economic and Cultural Transformations in {mod_title}",
+                ]
+
+            for t_idx, obj in enumerate(objectives[:2]):
+                obj_text = str(obj).strip()
+                topic_id = f"c{idx}"
+                idx += 1
+                topic_label = obj_text[:80]
+                concepts.append(
+                    {
+                        "proposal_id": topic_id,
+                        "label": topic_label,
+                        "definition": f"Thematic curriculum inquiry exploring {obj_text}.",
+                        "concept_type": "relationship" if t_idx % 2 == 1 else "process",
+                        "level": "topic",
+                        "parent_proposal_id": strand_id,
+                        "module_positions": [mod.position],
+                        "module_role": "develops",
+                    }
+                )
+
+                kc_id = f"c{idx}"
+                idx += 1
+                atomic_concept_ids.append(kc_id)
+                clean_topic = topic_label.strip()
+                atomic_label = f"Evidence & Reasoning: {clean_topic}"[:80]
+                bloom_level = "analyze" if t_idx % 2 == 1 else "evaluate"
+                misconception = {
+                    "name": f"Presentist Anachronism in {clean_topic}"[:120],
+                    "flawed_rule": f"Evaluating {clean_topic} through modern institutional and societal assumptions rather than historical material constraints.",
+                    "remediation_hint": f"Examine contemporary primary documents and archaeological findings relevant to {clean_topic}.",
+                    "probes": [
+                        {
+                            "rung": 0,
+                            "probe_text": f"What specific contemporary evidence contradicts modern assumptions about {clean_topic}?",
+                            "rationale": "Factual disruption exposing false baseline assumptions.",
+                        },
+                        {
+                            "rung": 1,
+                            "probe_text": f"How do primary sources from this period illustrate the actual historical mechanics of {clean_topic}?",
+                            "rationale": "Conceptual re-anchoring to primary source mechanisms.",
+                        },
+                        {
+                            "rung": 2,
+                            "probe_text": f"Why is projecting modern institutional concepts onto {clean_topic} a frequent source of analytical error?",
+                            "rationale": "Metacognitive transfer to broader disciplinary reasoning.",
+                        },
+                    ],
+                }
+
+                concepts.append(
+                    {
+                        "proposal_id": kc_id,
+                        "label": atomic_label[:80],
+                        "definition": f"Atomic pedagogical competency evaluating primary source evidence and mechanics of {clean_topic}.",
+                        "concept_type": "method",
+                        "level": "atomic_concept",
+                        "bloom_level": bloom_level,
+                        "parent_proposal_id": topic_id,
+                        "module_positions": [mod.position],
+                        "module_role": "develops" if mod.position > 1 else "introduces",
+                        "misconceptions": [misconception],
+                    }
+                )
 
         prerequisites = []
-        for i in range(1, len(concepts)):
+        for i in range(1, len(atomic_concept_ids)):
             prerequisites.append(
                 {
-                    "prerequisite_proposal_id": concepts[i - 1]["proposal_id"],
-                    "dependent_proposal_id": concepts[i]["proposal_id"],
-                    "rationale": "Sequential curriculum scaffolding.",
+                    "prerequisite_proposal_id": atomic_concept_ids[i - 1],
+                    "dependent_proposal_id": atomic_concept_ids[i],
+                    "rationale": "Foundational disciplinary competency required before advanced conceptual evaluation.",
                 }
             )
 
         return ConceptGraphProposal(
-            course_rationale="Grounded concept hierarchy derived from module curriculum and uploaded source evidence.",
+            course_rationale="Hierarchical, 4-tier pedagogical curriculum graph grounded in module strands, topics, atomic competencies, cognitive traps, and 3-rung Socratic probes.",
             concepts=concepts,
             prerequisites=prerequisites,
         )
@@ -531,7 +745,8 @@ class ConceptGraphService:
         course: Any,
         instruction: str | None = None,
         module_id: str | None = None,
-    ) -> tuple[ConceptGraphProposal, str]:
+        similarity_threshold: float | None = 0.85,
+    ) -> tuple[ConceptGraphProposal, str, CompletenessStats]:
         """Generate a teacher-reviewable high-to-low concept graph from course materials and sources."""
         from fiosra.mvp.database import AsyncSessionLocal
         from sqlalchemy import text
@@ -547,36 +762,79 @@ class ConceptGraphService:
             existing_concepts = [dict(r) for r in await res.data()]
         existing_labels = {c["label"].lower() for c in existing_concepts}
 
-        # Query source chunks for rich grounding
-        source_snippets: list[str] = []
-        async with AsyncSessionLocal() as pg_session:
-            if module_id:
-                sql = text("""
-                    SELECT title, substring(content, 1, 300) as snippet 
-                    FROM syllabus_chunks 
-                    WHERE course_id = CAST(:cid AS UUID) AND module_id = CAST(:mid AS UUID) 
-                    ORDER BY chunk_id LIMIT 12
-                """)
-                rows = (await pg_session.execute(sql, {"cid": str(course.course_id), "mid": str(module_id)})).fetchall()
-            else:
-                sql = text("""
-                    SELECT title, substring(content, 1, 300) as snippet 
-                    FROM syllabus_chunks 
-                    WHERE course_id = CAST(:cid AS UUID) 
-                    ORDER BY chunk_id LIMIT 16
-                """)
-                rows = (await pg_session.execute(sql, {"cid": str(course.course_id)})).fetchall()
-            source_snippets = [f"[{r[0]}]: {r[1].strip()}" for r in rows if r[1]]
-
         target_module = next((m for m in course.modules if str(m.module_id) == str(module_id)), None) if module_id else None
 
+        # Objective-guided Semantic RAG retrieval
+        source_snippets: list[str] = []
+        raw_chunks_list: list[dict[str, Any]] = []
+        async with AsyncSessionLocal() as pg_session:
+            if target_module:
+                query_text = f"{target_module.title} {' '.join(target_module.learning_objectives or [])}"
+                query_vec = compute_embedding(query_text)
+                sql = text("""
+                    SELECT chunk_id, title, content, embedding,
+                           1.0 - (embedding <=> CAST(:query_vec AS vector)) as similarity
+                    FROM syllabus_chunks 
+                    WHERE course_id = CAST(:cid AS UUID) AND (module_id = CAST(:mid AS UUID) OR module_id IS NULL) 
+                    ORDER BY embedding <=> CAST(:query_vec AS vector) ASC 
+                    LIMIT 14
+                """)
+                try:
+                    rows = (await pg_session.execute(sql, {"cid": str(course.course_id), "mid": str(module_id), "query_vec": str(query_vec)})).fetchall()
+                except Exception:
+                    sql_fallback = text("""
+                        SELECT chunk_id, title, content, NULL as embedding, 1.0 as similarity
+                        FROM syllabus_chunks 
+                        WHERE course_id = CAST(:cid AS UUID) AND (module_id = CAST(:mid AS UUID) OR module_id IS NULL) 
+                        ORDER BY chunk_id LIMIT 14
+                    """)
+                    rows = (await pg_session.execute(sql_fallback, {"cid": str(course.course_id), "mid": str(module_id)})).fetchall()
+            else:
+                query_text = f"{course.title} {course.domain} {course.syllabus_context or ''}"
+                query_vec = compute_embedding(query_text)
+                sql = text("""
+                    SELECT chunk_id, title, content, embedding,
+                           1.0 - (embedding <=> CAST(:query_vec AS vector)) as similarity
+                    FROM syllabus_chunks 
+                    WHERE course_id = CAST(:cid AS UUID) 
+                    ORDER BY embedding <=> CAST(:query_vec AS vector) ASC 
+                    LIMIT 20
+                """)
+                try:
+                    rows = (await pg_session.execute(sql, {"cid": str(course.course_id), "query_vec": str(query_vec)})).fetchall()
+                except Exception:
+                    sql_fallback = text("""
+                        SELECT chunk_id, title, content, NULL as embedding, 1.0 as similarity
+                        FROM syllabus_chunks 
+                        WHERE course_id = CAST(:cid AS UUID) 
+                        ORDER BY chunk_id LIMIT 20
+                    """)
+                    rows = (await pg_session.execute(sql_fallback, {"cid": str(course.course_id)})).fetchall()
+
+            for r in rows:
+                if r[2]:
+                    content_snip = str(r[2]).strip()[:500]
+                    source_snippets.append(f"[{r[1]}]: {content_snip}")
+                    raw_chunks_list.append({
+                        "chunk_id": str(r[0]),
+                        "title": str(r[1]),
+                        "content": str(r[2]),
+                        "embedding": r[3] if len(r) > 3 else None,
+                    })
+
+        resolver = ConceptEntityResolver(similarity_threshold=similarity_threshold or 0.85)
+
         if settings.FIOSRA_LLM_PROVIDER.strip().lower() == "deterministic":
-            return (
-                self._deterministic_proposal(
-                    course, target_module=target_module, existing_labels=existing_labels, source_snippets=source_snippets
-                ),
-                "deterministic course structure",
+            raw_proposal = self._deterministic_proposal(
+                course, target_module=target_module, existing_labels=existing_labels, source_snippets=source_snippets
             )
+            resolved_proposal, _ = resolver.resolve_proposal(raw_proposal, similarity_threshold=similarity_threshold)
+            completeness = CompletenessChecker.evaluate_completeness(
+                course=course,
+                proposal=resolved_proposal,
+                syllabus_chunks=raw_chunks_list,
+            )
+            return resolved_proposal, "deterministic course structure", completeness
 
         modules_payload = [
             {
@@ -589,12 +847,91 @@ class ConceptGraphService:
             if module
         ]
 
+        concept_count_target = "12 to 18" if not target_module else "4 to 6"
         system_prompt = (
-            "You are a curriculum knowledge engineer. Derive a concise, genuine semantic concept graph from a course syllabus and primary sources. "
-            "Do not merely repeat module titles. Create high-level themes, lower-level topics, and atomic concepts where justified. "
-            "Use only evidence in the supplied course, syllabus, and source materials. Propose an acyclic CONTAINS hierarchy and only defensible prerequisites. "
-            "CRITICAL: Do NOT duplicate or repeat existing concepts. Only propose genuinely new concepts. "
-            "The educator will validate all proposals before they are saved. Respond only with JSON matching the supplied schema."
+            "You are an expert curriculum knowledge engineer. Derive a rich, authentic pedagogical knowledge graph from the course syllabus, modules, and learning objectives.\n"
+            "Build a well-branched pedagogical knowledge graph following the 4-tier taxonomy:\n"
+            "1. course_theme (root level, parent_proposal_id: null)\n"
+            "2. strand (one per module, parent_proposal_id: course_theme)\n"
+            "3. topic (key conceptual themes per strand, parent_proposal_id: strand)\n"
+            "4. atomic_concept (rigorous learning competencies under topics with bloom_level: 'remember', 'understand', 'apply', 'analyze', 'evaluate', or 'create')\n"
+            "MANDATORY PER-MODULE COVERAGE:\n"
+            "- Establish 1 root course_theme named after the full course title (parent_proposal_id: null).\n"
+            "- For EACH provided course module in the list, create:\n"
+            "  * 1 'strand' named with the actual module title (parent_proposal_id: root theme)\n"
+            "  * 1 'topic' under that strand representing a major historical theme of that module (parent_proposal_id: that module's strand)\n"
+            "  * 1 'atomic_concept' under that topic with 'bloom_level' ('analyze', 'evaluate', etc.), with module_positions matching that module's position\n"
+            "  * Attach 1 authentic, subject-specific cognitive trap ('misconceptions') to that atomic_concept with 'name', 'flawed_rule', 'remediation_hint', and 3 tiered 'probes' (Rung 0: factual disruption, Rung 1: conceptual re-anchoring, Rung 2: metacognitive transfer)\n"
+            "- PREREQUISITES: Propose sequential prerequisite relationships between the atomic concepts across modules.\n"
+            "ANTI-PLACEHOLDER DIRECTIVE:\n"
+            "- NEVER output literal placeholder labels like 'Topic A', 'Topic B', 'Module 1 Strand', 'Overarching Course Theme', or 'Atomic Concept A1'.\n"
+            "- All concept labels and misconception names MUST use genuine academic and historical subject matter derived from the course modules and primary source excerpts.\n"
+            "CRITICAL: You MUST respond ONLY with a raw JSON object (no markdown, no thinking commentary, no explanation) with this EXACT structure:\n"
+            "{\n"
+            '  "course_rationale": "Pedagogical rationale for this curriculum structure.",\n'
+            '  "concepts": [\n'
+            '    {\n'
+            '      "proposal_id": "c1",\n'
+            '      "label": "<Actual Full Course Title>",\n'
+            '      "definition": "<Overarching conceptual focus of the course>",\n'
+            '      "concept_type": "domain",\n'
+            '      "level": "course_theme",\n'
+            '      "parent_proposal_id": null,\n'
+            '      "module_positions": [1],\n'
+            '      "module_role": "introduces"\n'
+            '    },\n'
+            '    {\n'
+            '      "proposal_id": "c2",\n'
+            '      "label": "<Actual Module 1 Title>",\n'
+            '      "definition": "<Curriculum focus of Module 1>",\n'
+            '      "concept_type": "process",\n'
+            '      "level": "strand",\n'
+            '      "parent_proposal_id": "c1",\n'
+            '      "module_positions": [1],\n'
+            '      "module_role": "introduces"\n'
+            '    },\n'
+            '    {\n'
+            '      "proposal_id": "c3",\n'
+            '      "label": "<Specific Historical Topic under Module 1>",\n'
+            '      "definition": "<Academic explanation of this topic>",\n'
+            '      "concept_type": "process",\n'
+            '      "level": "topic",\n'
+            '      "parent_proposal_id": "c2",\n'
+            '      "module_positions": [1],\n'
+            '      "module_role": "introduces"\n'
+            '    },\n'
+            '    {\n'
+            '      "proposal_id": "c4",\n'
+            '      "label": "<Atomic Disciplinary Competency under Topic>",\n'
+            '      "definition": "<Evaluating historical evidence and analytical mechanics>",\n'
+            '      "concept_type": "method",\n'
+            '      "level": "atomic_concept",\n'
+            '      "bloom_level": "analyze",\n'
+            '      "parent_proposal_id": "c3",\n'
+            '      "module_positions": [1],\n'
+            '      "module_role": "introduces",\n'
+            '      "misconceptions": [\n'
+            '        {\n'
+            '          "name": "<Genuine Subject Cognitive Trap, e.g. Monolithic Imperial Centralization Fallacy>",\n'
+            '          "flawed_rule": "<Specific flawed heuristic students assume>",\n'
+            '          "remediation_hint": "<Primary source evidence correcting the flaw>",\n'
+            '          "probes": [\n'
+            '            {"rung": 0, "probe_text": "<Factual disruption question>", "rationale": "Factual disruption exposing false baseline assumptions."},\n'
+            '            {"rung": 1, "probe_text": "<Conceptual re-anchoring question>", "rationale": "Conceptual re-anchoring to primary source mechanisms."},\n'
+            '            {"rung": 2, "probe_text": "<Metacognitive transfer question>", "rationale": "Metacognitive transfer to broader disciplinary reasoning."}\n'
+            '          ]\n'
+            '        }\n'
+            '      ]\n'
+            '    }\n'
+            '  ],\n'
+            '  "prerequisites": [\n'
+            '    {\n'
+            '      "prerequisite_proposal_id": "c4",\n'
+            '      "dependent_proposal_id": "c5",\n'
+            '      "rationale": "Foundational understanding required."\n'
+            '    }\n'
+            '  ]\n'
+            "}"
         )
         user_prompt = json.dumps(
             {
@@ -606,10 +943,11 @@ class ConceptGraphService:
                 "existing_concepts": [c["label"] for c in existing_concepts],
                 "primary_source_excerpts": source_snippets[:10],
                 "instructions": {
-                    "concept_count": "4 to 8",
-                    "hierarchy": "Use course_theme -> strand -> topic -> subtopic -> atomic_concept as appropriate.",
+                    "concept_count": concept_count_target,
+                    "hierarchy": "Ensure EACH listed module receives: 1 strand -> 1 topic -> 1 atomic_concept with bloom_level, an authentic domain-specific misconception, and 3 Socratic probes.",
                     "module_positions": [target_module.position] if target_module else [m.position for m in course.modules],
-                    "teacher_direction": instruction or "Ground concepts in the provided syllabus and primary source excerpts.",
+                    "pedagogical_guidelines": "Ground misconceptions in authentic historical cognitive traps, anachronisms, or student oversimplifications. NEVER use literal placeholders like 'Common Flawed Assumption'. Each probe must be an intelligent Socratic question.",
+                    "teacher_direction": instruction or "Ground concepts in the provided syllabus and primary source excerpts. Create rich branching across modules.",
                 },
             },
             ensure_ascii=False,
@@ -618,32 +956,42 @@ class ConceptGraphService:
             system_prompt=system_prompt,
             user_prompt=user_prompt,
             purpose="curriculum_concept_graph_proposal",
-            max_tokens=1200,
+            max_tokens=8192,
             temperature=0.2,
-            timeout_seconds=25.0,
-            response_format={
-                "type": "json_schema",
-                "json_schema": {
-                    "name": "curriculum_concept_graph_proposal",
-                    "schema": ConceptGraphProposal.model_json_schema(),
-                },
-            },
+            timeout_seconds=None,
         )
         try:
             result = await LiteLLMProvider.from_settings().complete(request)
+            logger.info("LLM RAW PROPOSAL CONTENT (%s chars): %s", len(result.content or ""), result.content[:500] if result.content else "EMPTY")
             parsed = self._proposal_json(result.content)
             if not parsed:
+                logger.error("Failed to parse JSON proposal from content: %s", result.content)
                 raise ConceptGraphError("The configured model did not return a readable concept graph proposal.")
-            proposal = self._sanitize_proposal(ConceptGraphProposal.model_validate(parsed))
-            self._validate_proposal(proposal)
-            return proposal, f"{result.provider}/{result.model}"
+            normalized = self._normalize_proposal_dict(parsed)
+            sanitized = self._sanitize_proposal(ConceptGraphProposal.model_validate(normalized))
+            resolved_proposal, _ = resolver.resolve_proposal(sanitized, similarity_threshold=similarity_threshold)
+            self._validate_proposal(resolved_proposal)
+            completeness = CompletenessChecker.evaluate_completeness(
+                course=course,
+                proposal=resolved_proposal,
+                syllabus_chunks=raw_chunks_list,
+            )
+            return resolved_proposal, f"{result.provider}/{result.model}", completeness
         except Exception as error:  # noqa: BLE001 - reviewable fallback protects teacher workflow
-            logger.warning("Concept graph proposal fell back to deterministic structure: %s", error)
+            logger.warning("Concept graph proposal fell back to deterministic structure: %s", error, exc_info=True)
+            raw_proposal = self._deterministic_proposal(
+                course, target_module=target_module, existing_labels=existing_labels, source_snippets=source_snippets
+            )
+            resolved_proposal, _ = resolver.resolve_proposal(raw_proposal, similarity_threshold=similarity_threshold)
+            completeness = CompletenessChecker.evaluate_completeness(
+                course=course,
+                proposal=resolved_proposal,
+                syllabus_chunks=raw_chunks_list,
+            )
             return (
-                self._deterministic_proposal(
-                    course, target_module=target_module, existing_labels=existing_labels, source_snippets=source_snippets
-                ),
+                resolved_proposal,
                 f"deterministic fallback ({type(error).__name__})",
+                completeness,
             )
 
     @staticmethod
@@ -697,6 +1045,9 @@ class ConceptGraphService:
             target = link["dependent_proposal_id"]
             if source not in concept_ids or target not in concept_ids or source == target:
                 continue
+            # Avoid redundant double edge if source is already direct parent of target or vice versa
+            if parents.get(target) == source or parents.get(source) == target:
+                continue
             if reaches(target, source):
                 continue
             adjacency[source].add(target)
@@ -746,6 +1097,7 @@ class ConceptGraphService:
                 proposed.definition,
                 proposed.concept_type,
                 proposed.level,
+                bloom_level=proposed.bloom_level,
             )
             concept_ids[proposed.proposal_id] = concept["concept_id"]
         for proposed in proposal.concepts:
@@ -778,6 +1130,79 @@ class ConceptGraphService:
                 except Exception as e:
                     logger.debug("Prerequisite skipped or exists: %s", e)
 
+        # Persist proposed Misconceptions and Socratic Probes
+        for proposed in proposal.concepts:
+            c_id = concept_ids.get(proposed.proposal_id)
+            if not c_id or not proposed.misconceptions:
+                continue
+            for misc in proposed.misconceptions:
+                misc_slug = _slug(misc.name).upper()
+                misc_id = f"MISC_{misc_slug}_{uuid4().hex[:6].upper()}"
+                query_misc = """
+                MATCH (k:Concept {concept_id: $concept_id, course_id: $course_id})
+                SET k:KnowledgeComponent, k.kc_id = coalesce(k.kc_id, k.concept_id)
+                MERGE (m:Misconception {course_id: $course_id, flawed_rule: $flawed_rule})
+                ON CREATE SET m.misconception_id = $misc_id,
+                    m.kc_id = k.kc_id,
+                    m.name = $name,
+                    m.flawed_rule = $flawed_rule,
+                    m.remediation_hint = $remediation_hint,
+                    m.status = 'approved',
+                    m.created_at = datetime(),
+                    m.updated_at = datetime()
+                ON MATCH SET m.name = $name,
+                    m.remediation_hint = $remediation_hint,
+                    m.updated_at = datetime()
+                MERGE (k)-[:ASSOCIATED_WITH]->(m)
+                RETURN m.misconception_id AS misconception_id
+                """
+                async with self.client.get_session() as session:
+                    res = await session.run(
+                        query_misc,
+                        {
+                            "concept_id": c_id,
+                            "course_id": str(course.course_id),
+                            "misc_id": misc_id,
+                            "name": misc.name,
+                            "flawed_rule": misc.flawed_rule,
+                            "remediation_hint": misc.remediation_hint,
+                        },
+                    )
+                    row = await res.single()
+                    actual_misc_id = row["misconception_id"] if row else misc_id
+
+                for probe in (misc.probes or []):
+                    probe_id = f"PROBE_{uuid4().hex[:8].upper()}"
+                    query_probe = """
+                    MATCH (m:Misconception {misconception_id: $misconception_id, course_id: $course_id})
+                    MERGE (p:SocraticProbe {course_id: $course_id, probe_text: $probe_text})
+                    ON CREATE SET p.probe_id = $probe_id,
+                        p.misconception_id = $misconception_id,
+                        p.kc_id = m.kc_id,
+                        p.rung = $rung,
+                        p.probe_text = $probe_text,
+                        p.rationale = $rationale,
+                        p.status = 'approved',
+                        p.created_at = datetime(),
+                        p.updated_at = datetime()
+                    ON MATCH SET p.rung = $rung,
+                        p.rationale = $rationale,
+                        p.updated_at = datetime()
+                    MERGE (m)-[:PROBED_BY]->(p)
+                    """
+                    async with self.client.get_session() as session:
+                        await session.run(
+                            query_probe,
+                            {
+                                "misconception_id": actual_misc_id,
+                                "course_id": str(course.course_id),
+                                "probe_id": probe_id,
+                                "rung": probe.rung,
+                                "probe_text": probe.probe_text,
+                                "rationale": probe.rationale,
+                            },
+                        )
+
         # Automatically bind existing source chunks as evidence for newly approved concepts
         try:
             await self.relink_course_sources(str(course.course_id))
@@ -794,7 +1219,7 @@ class ConceptGraphService:
         concept_query = """
         MATCH (concept:Concept {course_id: $course_id})
         WHERE coalesce(concept.status, 'approved') <> 'superseded'
-        RETURN concept.concept_id AS concept_id, concept.label AS label
+        RETURN concept.concept_id AS concept_id, concept.label AS label, concept.definition AS definition
         """
         async with self.client.get_session() as session:
             c_res = await session.run(concept_query, {"course_id": str(course_id)})
@@ -804,7 +1229,7 @@ class ConceptGraphService:
 
         async with AsyncSessionLocal() as pg_session:
             pg_res = await pg_session.execute(
-                text("SELECT chunk_id, content FROM syllabus_chunks WHERE course_id = CAST(:cid AS UUID)"),
+                text("SELECT chunk_id, content, title FROM syllabus_chunks WHERE course_id = CAST(:cid AS UUID)"),
                 {"cid": str(course_id)},
             )
             chunks_data = pg_res.fetchall()
@@ -812,34 +1237,64 @@ class ConceptGraphService:
         if not chunks_data:
             return 0
 
+        # Pre-compute concept embeddings
+        concept_embeddings = [
+            (
+                cand["concept_id"],
+                cand["label"],
+                compute_embedding(f"{cand['label']}: {cand.get('definition', '')}"),
+            )
+            for cand in concept_candidates
+        ]
+
         links: list[dict[str, Any]] = []
         for chunk_row in chunks_data:
             chunk_id = str(chunk_row[0])
-            content_lower = (chunk_row[1] or "").lower()
-            for candidate in concept_candidates:
+            content_str = str(chunk_row[1] or "")
+            content_lower = content_str.lower()
+            chunk_title = str(chunk_row[2] or "Source Document")
+            chunk_vec = compute_embedding(content_str[:1000])
+
+            for cid, clabel, cvec in concept_embeddings:
+                # 1. Vector cosine similarity
+                v_sim = cosine_similarity(chunk_vec, cvec)
+
+                # 2. Lexical term matching
                 terms = {
                     term
-                    for term in re.findall(r"[a-z0-9]{4,}", candidate["label"].lower())
+                    for term in re.findall(r"[a-z0-9]{4,}", clabel.lower())
+                    if term not in ("concept", "module", "strand", "topic", "overarching", "theme")
                 }
+                if not terms:
+                    terms = {term for term in re.findall(r"[a-z0-9]{4,}", clabel.lower())}
                 matching_terms = [term for term in terms if term in content_lower]
-                if not matching_terms:
-                    continue
-                confidence = round(min(0.95, 0.35 + 0.2 * len(matching_terms)), 2)
-                links.append({
-                    "chunk_id": chunk_id,
-                    "concept_id": candidate["concept_id"],
-                    "confidence": confidence,
-                })
+                lexical_confidence = round(min(0.95, 0.4 + 0.15 * len(matching_terms)), 2) if matching_terms else 0.0
+
+                if v_sim >= 0.72 or lexical_confidence >= 0.50:
+                    confidence = round(max(v_sim, lexical_confidence), 2)
+                    method = "vector_concept_match" if v_sim >= 0.72 else "lexical_concept_match"
+                    links.append({
+                        "chunk_id": chunk_id,
+                        "concept_id": cid,
+                        "confidence": confidence,
+                        "title": chunk_title,
+                        "method": method,
+                    })
 
         if not links:
             return 0
 
         batch_query = """
         UNWIND $links AS item
-        MATCH (chunk:SourceChunk {chunk_id: item.chunk_id})
+        MERGE (chunk:SourceChunk {chunk_id: item.chunk_id})
+        ON CREATE SET chunk.course_id = $course_id,
+                      chunk.title = item.title,
+                      chunk.updated_at = datetime()
+        ON MATCH SET chunk.course_id = $course_id
+        WITH chunk, item
         MATCH (concept:Concept {concept_id: item.concept_id, course_id: $course_id})
         MERGE (chunk)-[edge:EVIDENCES]->(concept)
-        SET edge.method = 'lexical_concept_match',
+        SET edge.method = item.method,
             edge.confidence = item.confidence,
             edge.updated_at = datetime()
         """
@@ -855,16 +1310,39 @@ class ConceptGraphService:
         course: Any,
         module_id: str | None = None,
         instruction: str | None = None,
+        similarity_threshold: float | None = 0.85,
     ) -> dict[str, Any]:
         """
-        One-click end-to-end hydration of the course concept graph:
-        1. Synthesizes a grounded proposal from course modules & primary source documents.
-        2. Approves and commits only new, deduplicated concept nodes and DAG edges.
-        3. Relinks existing source chunks in Neo4j as evidence.
-        4. Returns the hydrated concept graph.
+        End-to-end chunk-driven hydration of the course concept graph:
+        - If module_id is specified, hydrates that single module grounded in its chunks.
+        - If module_id is None, iterates sequentially through all course modules, extracting
+          concepts, misconceptions, and probes from each module's chunks, then fuses and
+          synthesizes cross-module prerequisite DAG links.
         """
-        proposal, _ = await self.generate_proposal(course, instruction=instruction, module_id=module_id)
-        await self.approve_proposal(course, proposal)
+        await self.sync_course_structure(course)
+
+        if module_id:
+            proposal, *_ = await self.generate_proposal(
+                course, instruction=instruction, module_id=module_id, similarity_threshold=similarity_threshold
+            )
+            await self.approve_proposal(course, proposal)
+        else:
+            # Sequential chunk-driven multi-pass hydration across all modules
+            sorted_modules = sorted(list(course.modules or []), key=lambda m: getattr(m, "position", 1))
+            for mod in sorted_modules:
+                mod_title = getattr(mod, "title", "Unit")
+                mod_id = str(getattr(mod, "module_id", ""))
+                logger.info("Hydrating module %s (%s) with chunk-driven extraction...", getattr(mod, "position", 1), mod_title)
+                mod_instruction = f"{instruction or ''} Focus deeply on extracting authentic curriculum concepts, historical mechanics, and primary evidence for {mod_title}."
+                proposal, *_ = await self.generate_proposal(
+                    course,
+                    instruction=mod_instruction,
+                    module_id=mod_id,
+                    similarity_threshold=similarity_threshold,
+                )
+                await self.approve_proposal(course, proposal)
+
+        # Relink all source chunks to active concepts in Neo4j via vector matching
         await self.relink_course_sources(str(course.course_id))
         return await self.get_course_graph(str(course.course_id))
 

@@ -1,0 +1,874 @@
+{
+  "course_rationale": "This hierarchical knowledge graph captures the full pedagogical structure of Indian History from prehistoric Mehrgarh settlements through post-independence democratic consolidation. It maps every major civilization, empire, reform movement, and socio-political transformation into a 4-tier taxonomy grounded in primary source evidence, enabling diagnostic misconception detection and Socratic remediation at each knowledge component.",
+  "concepts": [
+    {
+      "proposal_id": "c1",
+      "label": "Foundations of Indian History",
+      "definition": "Comprehensive exploration of key events, figures, and cultural developments that shaped Indian history from ancient times to the modern era, grounded in primary sources and historical interpretations.",
+      "concept_type": "domain",
+      "level": "course_theme",
+      "bloom_level": null,
+      "parent_proposal_id": null,
+      "module_positions": [1, 2, 3, 4, 5],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c2",
+      "label": "Ancient Civilizations of India",
+      "definition": "Study of early civilizations including the Indus Valley Civilization, Vedic society, and the transition from Neolithic settlements at Mehrgarh to urbanized cultures with complex social, political, and economic structures.",
+      "concept_type": "domain",
+      "level": "strand",
+      "bloom_level": null,
+      "parent_proposal_id": "c1",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c3",
+      "label": "Indus Valley Civilization and Urban Planning",
+      "definition": "The Harappan civilization (c. 3300-1300 BCE) featuring advanced urban planning at Mohenjo-daro and Harappa, standardized weights and measures, hydraulic engineering, granary systems, and long-distance maritime trade with Mesopotamia.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c2",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c4",
+      "label": "Analyzing Harappan Archaeological Evidence",
+      "definition": "Evaluating archaeological artifacts including seals, pottery, city layouts, and trade goods to reconstruct Harappan society, governance, and commercial networks across the Indian Ocean rim.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c3",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Harappan Isolation Myth",
+          "flawed_rule": "Assuming the Indus Valley civilization developed in complete isolation without external trade contacts or cultural exchange.",
+          "remediation_hint": "Mesopotamian cuneiform records reference Meluhha (identified as the Harappan region), and Harappan seals found at Ur demonstrate extensive maritime trade networks.",
+          "probes": [
+            {"rung": 0, "probe_text": "What Harappan artifacts have been found at Mesopotamian archaeological sites like Ur?", "rationale": "Forces recall of specific cross-cultural archaeological evidence contradicting isolation."},
+            {"rung": 1, "probe_text": "How does the standardized weight system across widely separated Harappan sites suggest organized long-distance commerce?", "rationale": "Redirects to systemic infrastructure evidence of trade."},
+            {"rung": 2, "probe_text": "Why do people tend to assume ancient civilizations were isolated, and where else does this assumption break down?", "rationale": "Metacognitive recognition of isolation bias in historical reasoning."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c5",
+      "label": "Decline of the Indus Valley Civilization",
+      "definition": "Theories surrounding the decline of the Harappan civilization including climate change, river system shifts, tectonic disruptions, and gradual de-urbanization rather than sudden collapse.",
+      "concept_type": "process",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c3",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Aryan Invasion Destruction Theory",
+          "flawed_rule": "Believing that invading Aryans violently destroyed the Indus Valley Civilization, replacing it entirely.",
+          "remediation_hint": "Archaeological evidence shows gradual de-urbanization over centuries with population migration eastward, not sudden violent destruction. The Aryan Invasion model has been revised to a more nuanced migration framework.",
+          "probes": [
+            {"rung": 0, "probe_text": "What does the archaeological record at late Harappan sites show about the pace and nature of urban decline?", "rationale": "Exposes the false assumption of sudden destruction with evidence of gradual change."},
+            {"rung": 1, "probe_text": "How do continuities in pottery styles and agricultural practices between late Harappan and early Vedic cultures complicate the invasion narrative?", "rationale": "Re-anchors thinking to material culture continuity evidence."},
+            {"rung": 2, "probe_text": "Why is the sudden catastrophic collapse narrative appealing for explaining civilizational decline, and where else has this framing been misleading?", "rationale": "Metacognitive transfer to recognizing dramatic-narrative bias in historiography."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c6",
+      "label": "Vedic Society and Literature",
+      "definition": "The Vedic period (c. 1500-500 BCE) encompassing the composition of the Rigveda, development of the varna system, Vedic ritual practices, and the transition from pastoral to settled agricultural communities.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c2",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c7",
+      "label": "Interpreting Vedic Texts as Historical Sources",
+      "definition": "Critical analysis of the Rigveda, Upanishads, and Brahmanas as primary sources for reconstructing early Indian social organization, religious practices, and political structures while accounting for their ritual and literary purposes.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c6",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Vedic Texts as Literal Historical Accounts",
+          "flawed_rule": "Treating Vedic hymns and narratives as straightforward factual records rather than ritual and literary compositions requiring critical interpretation.",
+          "remediation_hint": "The Rigveda contains hymns composed for ritual purposes across centuries; historians cross-reference linguistic analysis, archaeological findings, and comparative Indo-European studies to extract historical information.",
+          "probes": [
+            {"rung": 0, "probe_text": "Over what time period were the Rigvedic hymns composed, and for what primary purpose?", "rationale": "Establishes the non-historical original purpose of the texts."},
+            {"rung": 1, "probe_text": "What methods do historians use to extract historical information from texts that were not written as history?", "rationale": "Redirects to source criticism methodology."},
+            {"rung": 2, "probe_text": "What other ancient texts are commonly misread as literal history, and what interpretive caution applies?", "rationale": "Metacognitive transfer to source criticism across cultures."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c8",
+      "label": "Neolithic and Chalcolithic Settlements",
+      "definition": "Early agricultural communities from Mehrgarh (7000 BCE) through the Chalcolithic period, tracing the development of farming, animal domestication, pottery, and proto-urban settlement patterns in Baluchistan and the Indus plain.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c2",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c9",
+      "label": "Tracing Agricultural Origins at Mehrgarh",
+      "definition": "Evaluating evidence from Mehrgarh excavations for the independent development of agriculture and animal husbandry in South Asia from 7000 BCE onward.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c8",
+      "module_positions": [1],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Fertile Crescent Sole Origin Fallacy",
+          "flawed_rule": "Assuming all agricultural development diffused exclusively from the Fertile Crescent, denying independent South Asian agricultural innovation.",
+          "remediation_hint": "Mehrgarh evidence shows independent domestication of local crops like barley and cattle from at least 7000 BCE, predating or contemporaneous with many Near Eastern developments.",
+          "probes": [
+            {"rung": 0, "probe_text": "What crops and animals were independently domesticated at Mehrgarh, and what is the dating evidence?", "rationale": "Factual disruption with specific South Asian agricultural evidence."},
+            {"rung": 1, "probe_text": "How does the Mehrgarh evidence challenge the single-origin diffusion model of agriculture?", "rationale": "Re-anchors to multi-center origin framework."},
+            {"rung": 2, "probe_text": "Why do diffusionist models tend to privilege certain regions as innovation centers, and how does this bias affect other fields?", "rationale": "Metacognitive recognition of Eurocentric diffusionist bias."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c10",
+      "label": "Empires and Kingdoms",
+      "definition": "Rise and fall of major empires in Indian history including the Maurya, Gupta, Kushan, Satavahana, and regional kingdoms, examining their contributions to art, science, governance, and trade.",
+      "concept_type": "domain",
+      "level": "strand",
+      "bloom_level": null,
+      "parent_proposal_id": "c1",
+      "module_positions": [2],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c11",
+      "label": "Mauryan Empire and Centralized Administration",
+      "definition": "The Maurya Empire (322-185 BCE) under Chandragupta and Ashoka, featuring Kautilya's Arthashastra, centralized bureaucracy, espionage networks, provincial governance, and Ashoka's dhamma policy after the Kalinga War.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c10",
+      "module_positions": [2],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c12",
+      "label": "Evaluating Ashokan Edicts as Administrative Evidence",
+      "definition": "Analyzing Ashoka's rock and pillar edicts as primary sources for understanding Mauryan governance, dhamma policy, territorial extent, and the relationship between royal ideology and actual administrative practice.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c11",
+      "module_positions": [2],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Ashoka as Pacifist Ruler Myth",
+          "flawed_rule": "Interpreting Ashoka's dhamma edicts as evidence that he completely abandoned military force and governed through pure moral persuasion after Kalinga.",
+          "remediation_hint": "Ashoka's edicts show he maintained a large standing army and administrative apparatus; dhamma was a governance tool alongside conventional statecraft, not a replacement for it.",
+          "probes": [
+            {"rung": 0, "probe_text": "What do Ashoka's edicts say about his continued maintenance of military forces and frontier administration after the Kalinga war?", "rationale": "Disrupts the pure pacifist narrative with textual evidence."},
+            {"rung": 1, "probe_text": "How does the concept of dhamma function as a political tool for imperial consolidation rather than purely religious conversion?", "rationale": "Re-anchors to political interpretation of royal ideology."},
+            {"rung": 2, "probe_text": "Why do students tend to take royal proclamations at face value, and how does this apply to other rulers' self-representations?", "rationale": "Metacognitive transfer to critical reading of state propaganda."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c13",
+      "label": "Comparing Mauryan and Arthashastra Administrative Models",
+      "definition": "Comparing the idealized statecraft in Kautilya's Arthashastra with archaeological and epigraphic evidence of actual Mauryan governance, taxation, espionage, and provincial administration.",
+      "concept_type": "relationship",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c11",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Arthashastra as Mauryan Constitution Fallacy",
+          "flawed_rule": "Treating the Arthashastra as a direct description of how the Mauryan Empire actually functioned, rather than a prescriptive political treatise.",
+          "remediation_hint": "The Arthashastra is a normative text composed and revised over centuries; its prescriptions represent idealized statecraft that may differ significantly from actual Mauryan practice as revealed by archaeology and epigraphy.",
+          "probes": [
+            {"rung": 0, "probe_text": "When was the Arthashastra composed, and how does its dating complicate its use as evidence for Chandragupta's actual administration?", "rationale": "Establishes the text's complex authorship history."},
+            {"rung": 1, "probe_text": "What archaeological evidence from Mauryan sites either supports or contradicts specific Arthashastra prescriptions?", "rationale": "Redirects to material evidence vs textual prescription."},
+            {"rung": 2, "probe_text": "How does the distinction between prescriptive and descriptive sources apply to other historical legal and political texts?", "rationale": "Metacognitive transfer to source typology."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c14",
+      "label": "Gupta Empire and Classical Golden Age",
+      "definition": "The Gupta Empire (c. 320-550 CE) and the flourishing of Sanskrit literature, Nalanda University, advances in mathematics (zero, decimal system), astronomy (Aryabhata), metallurgy (Iron Pillar), and artistic achievements.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c10",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c15",
+      "label": "Assessing the Golden Age Narrative",
+      "definition": "Critically evaluating the characterization of the Gupta period as India's Golden Age by examining whose perspectives it centers, what evidence supports achievements, and what limitations or regional variations it obscures.",
+      "concept_type": "threshold",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c14",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Uniform Golden Age Across India",
+          "flawed_rule": "Assuming the Gupta Golden Age was experienced uniformly across all of India and all social strata.",
+          "remediation_hint": "The Gupta Empire's direct control was limited to northern India; the Vakataka, Pallava, and Kadamba kingdoms in the Deccan and South had independent cultural trajectories. Social stratification meant elite achievements did not reflect ordinary lives.",
+          "probes": [
+            {"rung": 0, "probe_text": "What major kingdoms in southern India were contemporaneous with the Guptas but politically independent?", "rationale": "Disrupts the pan-Indian Golden Age assumption with geographic specificity."},
+            {"rung": 1, "probe_text": "How does focusing only on courtly Sanskrit literature and elite patronage distort our understanding of Gupta-era society?", "rationale": "Re-anchors to social stratification and evidence bias."},
+            {"rung": 2, "probe_text": "Why do Golden Age narratives recur in multiple civilizations' historiographies, and what political purposes do they serve?", "rationale": "Metacognitive recognition of nationalist historiographic tropes."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c16",
+      "label": "Kushan and Satavahana Dynasties",
+      "definition": "The Kushan Empire under Kanishka patronizing Buddhism and facilitating Silk Road trade, and the Satavahana dynasty bridging North and South India through Deccan trade routes, coin minting, and Buddhist monument patronage.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c10",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c17",
+      "label": "Analyzing Trans-Regional Trade Networks",
+      "definition": "Examining the Silk Road, Indian Ocean maritime trade, and Deccan trade routes through numismatic, archaeological, and textual evidence to understand inter-civilizational economic and cultural exchange.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c16",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "India as Passive Trade Recipient",
+          "flawed_rule": "Viewing India as merely a destination for external traders rather than an active participant shaping trade networks and exporting goods.",
+          "remediation_hint": "Indian textiles, spices, and steel were actively exported; Indian merchants established trading colonies in Southeast Asia; the Satavahana coin system facilitated extensive internal commerce.",
+          "probes": [
+            {"rung": 0, "probe_text": "What evidence shows Indian merchants actively establishing trading settlements in Southeast Asia?", "rationale": "Disrupts passivity assumption with evidence of Indian commercial initiative."},
+            {"rung": 1, "probe_text": "How did Indian textile production and export shape trade patterns across the Indian Ocean world?", "rationale": "Re-anchors to India's productive role in trade networks."},
+            {"rung": 2, "probe_text": "Why do historical narratives often frame certain civilizations as passive recipients rather than active agents in trade?", "rationale": "Metacognitive transfer to recognizing agency bias in economic history."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c18",
+      "label": "Shunga and Post-Mauryan Kingdoms",
+      "definition": "The Shunga Empire's role in the transition from Mauryan centralism to regional fragmentation, patronage of Buddhist art at Sanchi, and the emergence of Indo-Greek and other successor states.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c10",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c19",
+      "label": "Evaluating Imperial Fragmentation as Process",
+      "definition": "Understanding post-Mauryan political fragmentation not as decline but as a period of regionalization, cultural diversification, and new forms of political legitimacy across successor states.",
+      "concept_type": "threshold",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c18",
+      "module_positions": [2],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Fragmentation Equals Decline Fallacy",
+          "flawed_rule": "Equating the breakup of large empires with cultural and political decline, ignoring the dynamism of successor states.",
+          "remediation_hint": "The post-Mauryan period saw flourishing Buddhist art at Sanchi (UNESCO World Heritage), innovative Indo-Greek coinage, and the rise of the Satavahanas as cultural bridge between North and South India.",
+          "probes": [
+            {"rung": 0, "probe_text": "What major cultural achievements occurred during the post-Mauryan fragmentation period?", "rationale": "Disrupts the decline narrative with specific cultural evidence."},
+            {"rung": 1, "probe_text": "How did regional successor states develop new forms of political legitimacy different from Mauryan centralism?", "rationale": "Re-anchors to political innovation rather than decay."},
+            {"rung": 2, "probe_text": "Why do historians and students tend to equate political centralization with progress and fragmentation with decline?", "rationale": "Metacognitive recognition of centralization bias in political history."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c20",
+      "label": "Medieval India",
+      "definition": "Political, cultural, and economic developments during the medieval period including the Delhi Sultanate, Mughal Empire, regional kingdoms, Bhakti and Sufi movements, and Indo-Islamic synthesis.",
+      "concept_type": "domain",
+      "level": "strand",
+      "bloom_level": null,
+      "parent_proposal_id": "c1",
+      "module_positions": [3],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c21",
+      "label": "Delhi Sultanate Administration and Economy",
+      "definition": "The five dynasties of the Delhi Sultanate (1206-1526), their administrative systems including the iqta system, market controls under Alauddin Khalji, economic policies, and military organization.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c20",
+      "module_positions": [3],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c22",
+      "label": "Assessing Delhi Sultanate Economic Policies",
+      "definition": "Evaluating the economic impact of Sultanate policies including Alauddin Khalji's price controls, agricultural taxation, and trade regulation on urban and rural populations.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c21",
+      "module_positions": [3],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Sultanate as Purely Extractive Foreign Rule",
+          "flawed_rule": "Characterizing the Delhi Sultanate exclusively as a foreign extractive regime without acknowledging its integration into Indian political traditions.",
+          "remediation_hint": "The Sultanate adapted Indian administrative practices, employed Hindu administrators, and Alauddin Khalji's market reforms were sophisticated economic interventions that stabilized prices during military campaigns.",
+          "probes": [
+            {"rung": 0, "probe_text": "What administrative roles did Hindu officials play in Delhi Sultanate governance?", "rationale": "Disrupts the purely foreign regime narrative with evidence of integration."},
+            {"rung": 1, "probe_text": "How did Alauddin Khalji's market control system function as economic policy rather than mere extraction?", "rationale": "Re-anchors to analytical understanding of policy objectives."},
+            {"rung": 2, "probe_text": "Why do conquest narratives tend to erase administrative continuity and local collaboration in post-conquest states?", "rationale": "Metacognitive recognition of conquest-erasure bias."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c23",
+      "label": "Mughal Empire and Imperial Consolidation",
+      "definition": "The Mughal Empire (1526-1857) from Babur's conquest through Akbar's mansabdari system and sulh-i-kul, Shah Jahan's architectural patronage, and Aurangzeb's territorial expansion.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c20",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c24",
+      "label": "Analyzing Mughal Administrative Innovations",
+      "definition": "Examining Akbar's mansabdari system, revenue administration under Todar Mal, religious tolerance policy (sulh-i-kul), and provincial governance as innovations in imperial statecraft.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c23",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Mughal Monolithic Religious Identity",
+          "flawed_rule": "Assuming the Mughal Empire imposed a single, unified Islamic ideology across all subjects and territories.",
+          "remediation_hint": "Akbar's sulh-i-kul policy, patronage of Hindu courtiers like Todar Mal and Man Singh, and the Din-i-Ilahi experiment demonstrate deliberate religious pluralism as state policy.",
+          "probes": [
+            {"rung": 0, "probe_text": "What specific policies did Akbar implement to accommodate Hindu subjects in Mughal administration?", "rationale": "Disrupts monolithic identity assumption with policy specifics."},
+            {"rung": 1, "probe_text": "How did the mansabdari system incorporate diverse religious and ethnic groups into the imperial hierarchy?", "rationale": "Re-anchors to structural pluralism in Mughal governance."},
+            {"rung": 2, "probe_text": "Why do modern political narratives tend to project religious homogeneity onto pre-modern empires?", "rationale": "Metacognitive recognition of presentist religious framing."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c25",
+      "label": "Cultural Syncretism in Mughal India",
+      "definition": "The blending of Hindu, Islamic, Persian, and Central Asian cultural elements in Mughal architecture, painting, music, literature, and cuisine, producing distinctly Indo-Islamic artistic traditions.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c20",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c26",
+      "label": "Evaluating Syncretism in Indo-Islamic Art",
+      "definition": "Analyzing examples of cultural synthesis in Mughal monuments, miniature painting, and literary works to understand how multiple cultural traditions were actively fused.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c25",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Syncretism as One-Way Cultural Imposition",
+          "flawed_rule": "Viewing Indo-Islamic cultural synthesis as merely Islamic culture being imposed on a passive Hindu substrate, rather than a reciprocal creative process.",
+          "remediation_hint": "The Taj Mahal incorporates both Persian garden design and Hindu architectural elements (chattris, lotus motifs); Mughal miniature painting synthesized Persian, Central Asian, and Rajput styles.",
+          "probes": [
+            {"rung": 0, "probe_text": "What specific Hindu architectural elements are visible in the Taj Mahal's design?", "rationale": "Disrupts one-way imposition with specific evidence of reciprocal influence."},
+            {"rung": 1, "probe_text": "How did Rajput and Persian painting traditions actively collaborate to create the Mughal miniature style?", "rationale": "Re-anchors to reciprocal creative agency."},
+            {"rung": 2, "probe_text": "Why do cultural dominance narratives tend to erase the agency of the receiving culture in synthesis?", "rationale": "Metacognitive transfer to recognizing agency erasure in cultural contact studies."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c27",
+      "label": "Bhakti and Sufi Devotional Movements",
+      "definition": "The Bhakti saints (Kabir, Mirabai, Guru Nanak) and Sufi orders (Chishti, Suhrawardi) as parallel devotional movements challenging caste hierarchies, emphasizing personal religious experience, and fostering Hindu-Muslim interaction.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c20",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c28",
+      "label": "Analyzing Social Reform in Bhakti-Sufi Traditions",
+      "definition": "Examining how Bhakti and Sufi movements challenged caste and religious boundaries, promoted vernacular literature, and created spaces for marginalized communities, while assessing reform limits.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c27",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Bhakti-Sufi as Complete Social Revolution",
+          "flawed_rule": "Assuming Bhakti and Sufi movements fundamentally dismantled caste and religious hierarchies rather than operating within existing social structures.",
+          "remediation_hint": "While Kabir critiqued caste, many Bhakti traditions developed internal hierarchies. Sufi khanqahs often depended on state patronage and operated within, rather than against, political power structures.",
+          "probes": [
+            {"rung": 0, "probe_text": "What evidence shows that Bhakti movements sometimes reinforced rather than dismantled caste distinctions?", "rationale": "Disrupts the complete revolution narrative with complexity."},
+            {"rung": 1, "probe_text": "How did Sufi orders' dependence on royal patronage constrain their social reform potential?", "rationale": "Re-anchors to structural analysis of reform movements."},
+            {"rung": 2, "probe_text": "Why do narratives of religious reform movements tend to overstate their transformative social impact?", "rationale": "Metacognitive transfer to critical analysis of reform narratives."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c29",
+      "label": "Mughal Decline and Rise of Regional Powers",
+      "definition": "The weakening of Mughal authority after Aurangzeb, rise of the Marathas under Shivaji and later Peshwas, the Sikh Empire under Ranjit Singh, and fragmentation into regional successor states.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c20",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c30",
+      "label": "Analyzing Maratha State-Building",
+      "definition": "Examining the Maratha Empire's political innovations including Shivaji's administrative system, guerrilla warfare, the Peshwa administration, and their role as the primary power challenging Mughal hegemony.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c29",
+      "module_positions": [3],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Marathas as Mere Plunderers",
+          "flawed_rule": "Reducing Maratha power to raiding and plundering without recognizing their sophisticated administrative and governance innovations.",
+          "remediation_hint": "Shivaji established the Ashtapradhan council, revenue system, and navy. The Peshwa administration developed a complex diplomatic network and governed vast territories through a confederacy model.",
+          "probes": [
+            {"rung": 0, "probe_text": "What were the key administrative institutions Shivaji established?", "rationale": "Disrupts the plunderer stereotype with institutional evidence."},
+            {"rung": 1, "probe_text": "How did the Maratha confederacy represent a different political model from Mughal centralism?", "rationale": "Re-anchors to comparative political analysis."},
+            {"rung": 2, "probe_text": "Why do resistance movements get characterized as destructive by historians of the states they challenged?", "rationale": "Metacognitive recognition of historiographic bias toward incumbent states."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c31",
+      "label": "Colonial India",
+      "definition": "The impact of British colonial rule on India including East India Company expansion, economic exploitation, social reforms, education policy, and the rise of nationalist movements.",
+      "concept_type": "domain",
+      "level": "strand",
+      "bloom_level": null,
+      "parent_proposal_id": "c1",
+      "module_positions": [4],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c32",
+      "label": "East India Company and Colonial Conquest",
+      "definition": "The transformation of the East India Company from a trading enterprise to a territorial power through subsidiary alliances, military conquest, and exploitation of Indian political fragmentation.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c31",
+      "module_positions": [4],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c33",
+      "label": "Analyzing the Subsidiary Alliance System",
+      "definition": "Examining how the subsidiary alliance system functioned as a mechanism of indirect colonial control, where Indian rulers ceded sovereignty in exchange for military protection.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c32",
+      "module_positions": [4],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Voluntary Alliance Mutual Benefit Myth",
+          "flawed_rule": "Viewing subsidiary alliances as voluntary partnerships of mutual benefit rather than coercive instruments of imperial control.",
+          "remediation_hint": "By the early 19th century, subsidiary-allied territories accounted for two-thirds of India. These alliances stripped rulers of military capability while imposing heavy financial burdens.",
+          "probes": [
+            {"rung": 0, "probe_text": "What proportion of Indian territory was under subsidiary alliance by the early 19th century?", "rationale": "Disrupts mutual benefit narrative with scale evidence."},
+            {"rung": 1, "probe_text": "How did the financial burden of maintaining Company troops lead to state bankruptcy and annexation?", "rationale": "Re-anchors to the coercive economic mechanics."},
+            {"rung": 2, "probe_text": "Why do imperial narratives frame coercive relationships as voluntary partnerships?", "rationale": "Metacognitive transfer to recognizing imperial euphemism."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c34",
+      "label": "Colonial Economic Exploitation and De-industrialization",
+      "definition": "The systematic transformation of India from a manufacturing economy to a raw material supplier, destruction of traditional industries, drain of wealth, and impact on Indian economic development.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c31",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c35",
+      "label": "Evaluating the Drain of Wealth Theory",
+      "definition": "Critically assessing Dadabhai Naoroji's drain of wealth thesis, examining evidence for capital transfer from India to Britain, and weighing Nationalist vs revisionist positions.",
+      "concept_type": "threshold",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c34",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Colonial Railways as Pure Modernization",
+          "flawed_rule": "Viewing British railway construction in India as a benevolent modernization effort rather than infrastructure serving colonial extraction.",
+          "remediation_hint": "Indian railways were built primarily to transport raw materials to ports and move troops. Routes prioritized port connectivity over internal Indian economic development.",
+          "probes": [
+            {"rung": 0, "probe_text": "What do railway route maps reveal about whether lines connected Indian economic centers or channeled resources to colonial ports?", "rationale": "Disrupts modernization narrative with route design evidence."},
+            {"rung": 1, "probe_text": "How did the financing structure (guaranteed returns to British investors from Indian taxes) reveal extractive logic?", "rationale": "Re-anchors to financial structure analysis."},
+            {"rung": 2, "probe_text": "Why do infrastructure projects in colonial contexts get framed as modernization gifts?", "rationale": "Metacognitive transfer to critical analysis of development discourse."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c36",
+      "label": "Social Reform Movements in Colonial India",
+      "definition": "The Bengal Renaissance and social reform led by Ram Mohan Roy, Vidyasagar, and others, addressing sati, widow remarriage, education, and caste reform within colonial modernity.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c31",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c37",
+      "label": "Analyzing the Bengal Renaissance",
+      "definition": "Evaluating the Bengal Renaissance (1775-1941) as intellectual and cultural reform, assessing its scope, limitations as an elitist movement, and relationship to colonial education policy.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c36",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Renaissance as Pan-Indian Transformation",
+          "flawed_rule": "Assuming the Bengal Renaissance represented a nationwide social transformation affecting all classes and regions.",
+          "remediation_hint": "It remained largely an elitist movement restricted to Hindu bhadralok in Bengal, with limited reach beyond urban centers, as historian David Kopf acknowledged.",
+          "probes": [
+            {"rung": 0, "probe_text": "What social class primarily participated in the Bengal Renaissance, and what regions were unaffected?", "rationale": "Disrupts pan-Indian assumption with class and geographic specificity."},
+            {"rung": 1, "probe_text": "How did colonial education policy both enable and constrain the Renaissance movement?", "rationale": "Re-anchors to the colonial structural context of reform."},
+            {"rung": 2, "probe_text": "Why do intellectual movements get retrospectively framed as broader social transformations?", "rationale": "Metacognitive recognition of elite-centered historiographic bias."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c38",
+      "label": "Indian Independence Movement",
+      "definition": "The organized nationalist movement from the founding of the Indian National Congress (1885) through mass movements, revolutionary activities, and negotiations leading to independence in 1947.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c31",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c39",
+      "label": "Evaluating Independence Movement Strategies",
+      "definition": "Analyzing how Gandhi transformed the movement from elite petition-based to mass civil disobedience, while evaluating parallel revolutionary and armed resistance strategies.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c38",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Independence as Solely Gandhian Achievement",
+          "flawed_rule": "Attributing independence entirely to Gandhi's nonviolent movement while ignoring armed resistance, INA, naval mutiny, and WWII's impact.",
+          "remediation_hint": "The movement included Bhagat Singh, Bose and the INA, the Royal Indian Navy mutiny of 1946, and Britain's post-WWII financial exhaustion.",
+          "probes": [
+            {"rung": 0, "probe_text": "What role did the Royal Indian Navy mutiny of 1946 and INA trials play in accelerating British withdrawal?", "rationale": "Disrupts sole-Gandhian narrative with non-Gandhian catalysts."},
+            {"rung": 1, "probe_text": "How did World War II alter Britain's capacity to maintain colonial control, independent of nationalism?", "rationale": "Re-anchors to structural factors in decolonization."},
+            {"rung": 2, "probe_text": "Why do national liberation narratives center on a single heroic leader rather than multiple converging factors?", "rationale": "Metacognitive recognition of great-man bias."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c40",
+      "label": "World War I and Indian Military Contribution",
+      "definition": "India's massive military contribution to WWI (800,000+ volunteers), political consequences, and the unfulfilled promise of self-governance leading to post-war radicalization.",
+      "concept_type": "entity",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c31",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c41",
+      "label": "Connecting WWI Service to Political Radicalization",
+      "definition": "Analyzing how the gap between wartime promises and post-war repression (Rowlatt Act, Jallianwala Bagh) catalyzed the shift to mass nationalism.",
+      "concept_type": "relationship",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c40",
+      "module_positions": [4],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "WWI as Irrelevant to Indian Nationalism",
+          "flawed_rule": "Treating Indian WWI participation as disconnected from the independence movement.",
+          "remediation_hint": "Over 800,000 Indians volunteered expecting political concessions. The Rowlatt Act extended wartime emergency powers, directly provoking the Jallianwala Bagh protest and Gandhi's first non-cooperation campaign.",
+          "probes": [
+            {"rung": 0, "probe_text": "How many Indians served in WWI, and what political concessions were they led to expect?", "rationale": "Establishes scale and expectation gap."},
+            {"rung": 1, "probe_text": "How did the Rowlatt Act directly contradict wartime promises and catalyze mass political action?", "rationale": "Re-anchors to the broken-promise mechanism."},
+            {"rung": 2, "probe_text": "How did military service in colonial armies catalyze independence movements elsewhere?", "rationale": "Metacognitive transfer to comparative decolonization."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c42",
+      "label": "Post-Independence India",
+      "definition": "Challenges and transformations after 1947 including Partition, democratic institution-building, economic planning, social reform, and linguistic reorganization.",
+      "concept_type": "domain",
+      "level": "strand",
+      "bloom_level": null,
+      "parent_proposal_id": "c1",
+      "module_positions": [5],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c43",
+      "label": "Partition of India and Its Consequences",
+      "definition": "The 1947 partition into India and Pakistan, mass displacement of 10-20 million people, communal violence, refugee crises, and long-term political and social consequences.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c42",
+      "module_positions": [5],
+      "module_role": "introduces",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c44",
+      "label": "Assessing the Impact of Partition",
+      "definition": "Evaluating Partition's multi-dimensional impact: communal violence, mass migration, the Radcliffe Line's arbitrary nature, and enduring influence on India-Pakistan relations.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c43",
+      "module_positions": [5],
+      "module_role": "introduces",
+      "misconceptions": [
+        {
+          "name": "Partition as Clean Surgical Division",
+          "flawed_rule": "Viewing Partition as a neat administrative division rather than a catastrophic humanitarian crisis.",
+          "remediation_hint": "Partition displaced 10-20 million people and caused 200,000 to 2 million deaths. The Radcliffe Line was drawn in weeks by someone with no prior knowledge of Indian geography.",
+          "probes": [
+            {"rung": 0, "probe_text": "How long did Cyril Radcliffe have to draw the boundary, and what was his prior knowledge of the subcontinent?", "rationale": "Disrupts planned division narrative with the rushed, arbitrary process."},
+            {"rung": 1, "probe_text": "How did mass displacement create long-term structural challenges persisting today?", "rationale": "Re-anchors to ongoing consequences."},
+            {"rung": 2, "probe_text": "Why do political narratives present forced population transfers as necessary administrative measures?", "rationale": "Metacognitive transfer to recognizing euphemistic framing."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c45",
+      "label": "Building Democratic Institutions",
+      "definition": "Drafting of India's Constitution under Ambedkar, establishment of parliamentary democracy, universal suffrage, independent judiciary, and challenges of governance in a diverse post-colonial society.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c42",
+      "module_positions": [5],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c46",
+      "label": "Evaluating India's Constitutional Design",
+      "definition": "Analyzing constitutional choices including federalism, fundamental rights, directive principles, and the reservation system as responses to caste, religious, and linguistic diversity.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c45",
+      "module_positions": [5],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Constitution as Western Import",
+          "flawed_rule": "Viewing India's Constitution as merely a copy of Western models without recognizing deliberate adaptations to Indian social realities.",
+          "remediation_hint": "The Constitution uniquely incorporated the reservation system for marginalized castes, directive principles, and provisions for linguistic diversity that addressed specifically Indian challenges.",
+          "probes": [
+            {"rung": 0, "probe_text": "What provisions in India's Constitution have no direct parallel in Western constitutions?", "rationale": "Disrupts pure import narrative with unique innovations."},
+            {"rung": 1, "probe_text": "How did Ambedkar's experience with caste discrimination shape his constitutional approach to social justice?", "rationale": "Re-anchors to Indian social context driving design."},
+            {"rung": 2, "probe_text": "Why do people assume post-colonial constitutions are mere copies rather than creative adaptations?", "rationale": "Metacognitive recognition of derivative framing."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c47",
+      "label": "Economic Planning and Development",
+      "definition": "Nehruvian planning, Five Year Plans, mixed economy, industrialization through public sector enterprises, land reforms, Green Revolution, and debates between socialist and market paths.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c42",
+      "module_positions": [5],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c48",
+      "label": "Comparing Development Models in India",
+      "definition": "Analyzing the evolution from Nehruvian state-led industrialization through the License Raj to 1991 liberalization, evaluating tradeoffs between equity and growth strategies.",
+      "concept_type": "relationship",
+      "level": "atomic_concept",
+      "bloom_level": "evaluate",
+      "parent_proposal_id": "c47",
+      "module_positions": [5],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "License Raj as Pure Failure",
+          "flawed_rule": "Characterizing India's pre-1991 planned economy exclusively as a failure without acknowledging its institutional and industrial contributions.",
+          "remediation_hint": "The planned economy built heavy industry, established IITs, ISRO, BARC, and achieved food self-sufficiency through the Green Revolution, even as it created inefficiencies.",
+          "probes": [
+            {"rung": 0, "probe_text": "What major institutions established during the planned economy period continue to be nationally important?", "rationale": "Disrupts pure failure narrative with lasting achievements."},
+            {"rung": 1, "probe_text": "How did the Green Revolution simultaneously achieve food security and create new inequality?", "rationale": "Re-anchors to nuanced cost-benefit analysis."},
+            {"rung": 2, "probe_text": "Why do economic narratives evaluate development strategies in binary success/failure terms?", "rationale": "Metacognitive recognition of binary framing."}
+          ]
+        }
+      ]
+    },
+    {
+      "proposal_id": "c49",
+      "label": "Linguistic Reorganization and Federalism",
+      "definition": "The States Reorganization Act of 1956, creation of linguistic states, Hindi-regional language tensions, and the role of linguistic identity in shaping Indian federalism.",
+      "concept_type": "process",
+      "level": "topic",
+      "bloom_level": null,
+      "parent_proposal_id": "c42",
+      "module_positions": [5],
+      "module_role": "develops",
+      "misconceptions": []
+    },
+    {
+      "proposal_id": "c50",
+      "label": "Analyzing Linguistic Federalism",
+      "definition": "Evaluating how linguistic state reorganization both accommodated diversity and created new tensions, comparing with other multilingual nations' strategies.",
+      "concept_type": "method",
+      "level": "atomic_concept",
+      "bloom_level": "analyze",
+      "parent_proposal_id": "c49",
+      "module_positions": [5],
+      "module_role": "develops",
+      "misconceptions": [
+        {
+          "name": "Linguistic States as Divisive Concession",
+          "flawed_rule": "Viewing linguistic reorganization as a dangerous concession to regionalism that weakened national unity.",
+          "remediation_hint": "Linguistic states strengthened unity by providing democratic channels for regional identity, preventing secessionist pressure that rigid centralism could have caused.",
+          "probes": [
+            {"rung": 0, "probe_text": "What happened when India initially resisted linguistic reorganization, and how did Andhra Pradesh's creation resolve a crisis?", "rationale": "Disrupts divisive concession narrative."},
+            {"rung": 1, "probe_text": "How does comparing India's linguistic federalism with Sri Lanka's language policy reveal stabilizing effects?", "rationale": "Re-anchors to comparative accommodation analysis."},
+            {"rung": 2, "probe_text": "Why do nation-building narratives view diversity accommodation as weakness rather than strength?", "rationale": "Metacognitive recognition of uniformity bias."}
+          ]
+        }
+      ]
+    }
+  ],
+  "prerequisites": [
+    {"prerequisite_proposal_id": "c4", "dependent_proposal_id": "c12", "rationale": "Archaeological evidence analysis from Harappan sites is foundational before evaluating Ashokan epigraphic sources."},
+    {"prerequisite_proposal_id": "c7", "dependent_proposal_id": "c13", "rationale": "Critical reading of Vedic texts prepares students for comparing prescriptive texts like the Arthashastra with material evidence."},
+    {"prerequisite_proposal_id": "c5", "dependent_proposal_id": "c19", "rationale": "Understanding civilizational decline from the IVC context prepares for evaluating imperial fragmentation broadly."},
+    {"prerequisite_proposal_id": "c12", "dependent_proposal_id": "c22", "rationale": "Evaluating Mauryan administrative evidence is prerequisite to assessing Delhi Sultanate economic policies."},
+    {"prerequisite_proposal_id": "c13", "dependent_proposal_id": "c24", "rationale": "Comparing Arthashastra ideals with practice prepares for analyzing Mughal administrative innovations."},
+    {"prerequisite_proposal_id": "c17", "dependent_proposal_id": "c35", "rationale": "Understanding classical trade networks provides baseline for evaluating colonial drain of wealth."},
+    {"prerequisite_proposal_id": "c19", "dependent_proposal_id": "c30", "rationale": "Evaluating fragmentation prepares for analyzing Maratha state-building during Mughal decline."},
+    {"prerequisite_proposal_id": "c22", "dependent_proposal_id": "c33", "rationale": "Understanding Sultanate integration provides context for analyzing subsidiary alliances as colonial control."},
+    {"prerequisite_proposal_id": "c24", "dependent_proposal_id": "c33", "rationale": "Mughal administrative structure is essential before analyzing British exploitation of post-Mughal fragmentation."},
+    {"prerequisite_proposal_id": "c30", "dependent_proposal_id": "c39", "rationale": "Maratha resistance provides precedent for understanding independence movement strategies."},
+    {"prerequisite_proposal_id": "c35", "dependent_proposal_id": "c48", "rationale": "Colonial economic drain explains why India chose state-led development."},
+    {"prerequisite_proposal_id": "c39", "dependent_proposal_id": "c44", "rationale": "Independence movement dynamics are essential before assessing Partition's emergence."},
+    {"prerequisite_proposal_id": "c44", "dependent_proposal_id": "c46", "rationale": "Partition's impact explains constitutional design choices for managing diversity."},
+    {"prerequisite_proposal_id": "c46", "dependent_proposal_id": "c50", "rationale": "Constitutional diversity framework is prerequisite to analyzing linguistic federalism."}
+  ]
+}

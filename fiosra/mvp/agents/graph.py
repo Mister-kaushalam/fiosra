@@ -30,6 +30,12 @@ def create_socratic_tutor_graph(
 ):
     """
     Constructs and compiles the Socratic Tutor LangGraph StateGraph.
+    Incorporates the Epistemic Discourse Router with specialized pedagogical nodes:
+    - Orientation (collegial welcome, entry point guidance)
+    - Structural Scaffold (3 analytical essay pillars)
+    - Hint Scaffold (3-rung ladder with strictly decoupled hint_rung)
+    - Adversarial Deflection (safe boundaries)
+    - Substantive Inquiry (Toulmin, cognitive allocator, socratic gen, answer-isolation critic)
     """
     tutor = tutor_agent or SocraticTutorAgent()
     critic = critic_agent or AnswerIsolationCriticAgent()
@@ -38,14 +44,26 @@ def create_socratic_tutor_graph(
     async def ingest_co_presence_node(state: TutorSessionState) -> dict[str, Any]:
         return tutor.ingest_co_presence(state)
 
-    async def toulmin_decomposition_node(state: TutorSessionState) -> dict[str, Any]:
-        return tutor.decompose_toulmin(state)
+    async def analyze_epistemic_discourse_node(state: TutorSessionState) -> dict[str, Any]:
+        return tutor.analyze_epistemic_discourse(state)
 
-    async def adversarial_guard_node(state: TutorSessionState) -> dict[str, Any]:
-        return tutor.check_adversarial_input(state)
+    async def orientation_node(state: TutorSessionState) -> dict[str, Any]:
+        return await tutor.generate_orientation_turn(state)
+
+    async def structural_scaffold_node(state: TutorSessionState) -> dict[str, Any]:
+        return await tutor.generate_structural_scaffold_turn(state)
+
+    async def acknowledgment_node(state: TutorSessionState) -> dict[str, Any]:
+        return await tutor.generate_acknowledgment_turn(state)
+
+    async def hint_scaffold_node(state: TutorSessionState) -> dict[str, Any]:
+        return await tutor.generate_hint_scaffold_turn(state)
 
     async def deflection_node(state: TutorSessionState) -> dict[str, Any]:
         return tutor.build_deflection(state)
+
+    async def toulmin_decomposition_node(state: TutorSessionState) -> dict[str, Any]:
+        return tutor.decompose_toulmin(state)
 
     async def cognitive_work_allocator_node(state: TutorSessionState) -> dict[str, Any]:
         return tutor.allocate_cognitive_work(state)
@@ -57,7 +75,7 @@ def create_socratic_tutor_graph(
         return critic.verify_response(state)
 
     async def epistemic_action_packer_node(state: TutorSessionState) -> dict[str, Any]:
-        return tutor.pack_epistemic_actions(state)
+        return await tutor.pack_epistemic_actions(state)
 
     async def safe_fallback_node(state: TutorSessionState) -> dict[str, Any]:
         logger.warning(
@@ -75,10 +93,11 @@ def create_socratic_tutor_graph(
         }
 
     # 2. Define Conditional Routing Functions
-    def route_adversarial(state: TutorSessionState) -> str:
-        if state.get("adversarial_flag", False):
-            return "deflection"
-        return "socratic"
+    def route_discourse(state: TutorSessionState) -> str:
+        phase = state.get("discourse_phase", "substantive_inquiry")
+        if phase in ("orientation", "structural_scaffold", "hint_scaffold", "adversarial", "acknowledgment"):
+            return phase
+        return "substantive_inquiry"
 
     def route_critic_verdict(state: TutorSessionState) -> str:
         if state.get("is_approved", False):
@@ -88,13 +107,17 @@ def create_socratic_tutor_graph(
             return "remediate"
         return "fallback"
 
-    # 3. Assemble StateGraph (8-Node Epistemic Learning Loop Pipeline)
+    # 3. Assemble StateGraph
     builder = StateGraph(TutorSessionState)
 
     builder.add_node("ingest_co_presence", ingest_co_presence_node)
-    builder.add_node("toulmin_decomposition", toulmin_decomposition_node)
-    builder.add_node("adversarial_guard", adversarial_guard_node)
+    builder.add_node("analyze_epistemic_discourse", analyze_epistemic_discourse_node)
+    builder.add_node("orientation_node", orientation_node)
+    builder.add_node("structural_scaffold_node", structural_scaffold_node)
+    builder.add_node("acknowledgment_node", acknowledgment_node)
+    builder.add_node("hint_scaffold_node", hint_scaffold_node)
     builder.add_node("deflection_node", deflection_node)
+    builder.add_node("toulmin_decomposition", toulmin_decomposition_node)
     builder.add_node("cognitive_work_allocator", cognitive_work_allocator_node)
     builder.add_node("socratic_generation", socratic_generation_node)
     builder.add_node("answer_isolation_critic", answer_isolation_critic_node)
@@ -103,19 +126,28 @@ def create_socratic_tutor_graph(
 
     # 4. Wire Edges and Branching
     builder.add_edge(START, "ingest_co_presence")
-    builder.add_edge("ingest_co_presence", "toulmin_decomposition")
-    builder.add_edge("toulmin_decomposition", "adversarial_guard")
+    builder.add_edge("ingest_co_presence", "analyze_epistemic_discourse")
 
     builder.add_conditional_edges(
-        "adversarial_guard",
-        route_adversarial,
+        "analyze_epistemic_discourse",
+        route_discourse,
         {
-            "deflection": "deflection_node",
-            "socratic": "cognitive_work_allocator",
+            "orientation": "orientation_node",
+            "structural_scaffold": "structural_scaffold_node",
+            "acknowledgment": "acknowledgment_node",
+            "hint_scaffold": "hint_scaffold_node",
+            "adversarial": "deflection_node",
+            "substantive_inquiry": "toulmin_decomposition",
         },
     )
 
+    builder.add_edge("orientation_node", "epistemic_action_packer")
+    builder.add_edge("structural_scaffold_node", "epistemic_action_packer")
+    builder.add_edge("acknowledgment_node", "epistemic_action_packer")
+    builder.add_edge("hint_scaffold_node", "epistemic_action_packer")
     builder.add_edge("deflection_node", "epistemic_action_packer")
+
+    builder.add_edge("toulmin_decomposition", "cognitive_work_allocator")
     builder.add_edge("cognitive_work_allocator", "socratic_generation")
     builder.add_edge("socratic_generation", "answer_isolation_critic")
 

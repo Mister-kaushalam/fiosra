@@ -1,7 +1,7 @@
 <script>
-  import { onMount, tick } from 'svelte';
+  import { onMount, tick, untrack } from 'svelte';
   import * as pdfjsLib from 'pdfjs-dist';
-  import pdfWorker from 'pdfjs-dist/build/pdf.worker.mjs?url';
+  import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
   import 'pdfjs-dist/web/pdf_viewer.css';
 
   if (typeof Promise.try !== 'function') {
@@ -27,6 +27,9 @@
   }
 
   pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorker;
+  if (pdfjsLib.VerbosityLevel) {
+    pdfjsLib.GlobalWorkerOptions.verbosity = pdfjsLib.VerbosityLevel.ERRORS;
+  }
 
   let {
     url = '',
@@ -48,8 +51,30 @@
   let searchMatches = $state([]);
   let currentMatchIndex = $state(0);
 
+  let lastMatchesReport = { current: -1, total: -1, pageNum: -1, sectionTitle: '' };
   $effect(() => {
-    onMatchesChange({ current: currentMatchIndex, total: searchMatches.length });
+    const cur = currentMatchIndex;
+    const tot = searchMatches.length;
+    const activeMatch = searchMatches[cur] || null;
+    const pageNum = activeMatch?.pageNum || 0;
+    const sectionTitle = activeMatch?.sectionTitle || '';
+    if (
+      lastMatchesReport.current !== cur ||
+      lastMatchesReport.total !== tot ||
+      lastMatchesReport.pageNum !== pageNum ||
+      lastMatchesReport.sectionTitle !== sectionTitle
+    ) {
+      lastMatchesReport = { current: cur, total: tot, pageNum, sectionTitle };
+      untrack(() => {
+        onMatchesChange({
+          current: cur,
+          total: tot,
+          pageNum,
+          sectionTitle,
+          snippet: activeMatch?.text?.slice(0, 140) || '',
+        });
+      });
+    }
   });
 
   // Selection tooltip state
@@ -60,10 +85,79 @@
     y: 0,
   });
 
-  // In-memory text index: Map<pageNum, { pageNum, fullText, lowerText }>
-  const pageIndexMap = new Map();
-  let currentlyMarkedPages = new Set();
+  // Paragraph-level Reverse / Inverted Index State
+  // paragraphsMap: Map<paraId, { paraId, pageNum, text, spans, tokens }>
+  const paragraphsMap = new Map();
+  // invertedIndex: Map<token, Array<{ paraId, pageNum, tf }>>
+  const invertedIndex = new Map();
+  // docFrequency: Map<token, number>
+  const docFrequency = new Map();
+  let totalParagraphCount = 0;
+  let pdfOutline = [];
+  let pdfHeadings = [];
+  let activeHighlightedSpans = [];
   let searchDebounceTimer = null;
+
+  const HISTORICAL_ANCHORS = {
+    mughal: ['mughal', 'akbar', 'babur', 'humayun', 'shah jahan', 'aurangzeb', 'jahangir'],
+    chola: ['chola', 'rajaraja', 'rajendra', 'coromandel', 'kaveri'],
+    gupta: ['gupta', 'samudragupta', 'chandragupta'],
+    sultanate: ['sultanate', 'delhi', 'khalji', 'tughlaq', 'mamluk', 'lodhi'],
+    maratha: ['maratha', 'shivaji', 'peshwa'],
+    british: ['british', 'east india company', 'raj', 'colonial'],
+    ancient: ['bce', 'magadha', 'vedic', 'harappa', 'indus valley', 'mauryan', 'ashoka'],
+  };
+
+  const STOP_WORDS = new Set([
+    'the', 'a', 'an', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
+    'by', 'from', 'as', 'is', 'was', 'were', 'are', 'be', 'been', 'being',
+    'have', 'has', 'had', 'do', 'does', 'did', 'how', 'what', 'why', 'where',
+    'which', 'who', 'when', 'that', 'this', 'these', 'those', 'can', 'could',
+    'would', 'should', 'about', 'into', 'over', 'under', 'between', 'through',
+    'it', 'its', 'their', 'they', 'them', 'he', 'she', 'his', 'her', 'we', 'our',
+    'during'
+  ]);
+
+  // Historical domain ontology for conceptual expansion in the inverted index
+  const DOMAIN_ONTOLOGY = {
+    trade: ['commerce', 'merchant', 'maritime', 'route', 'port', 'caravan', 'market', 'good', 'spic', 'bazaar'],
+    commerce: ['trade', 'merchant', 'market', 'caravan', 'rout'],
+    merchant: ['trade', 'commerce', 'guild', 'shreni', 'trader'],
+    network: ['route', 'trade', 'caravan', 'system', 'connect'],
+    agrarian: ['agricultur', 'peasant', 'cultivat', 'revenue', 'land', 'crop', 'ryot', 'zamindar', 'jagirdar', 'soil', 'irrigat'],
+    agricultur: ['agrarian', 'cultivat', 'peasant', 'crop', 'land', 'revenue'],
+    peasant: ['peasantry', 'cultivat', 'ryot', 'agrarian', 'tenant', 'villag'],
+    revenue: ['tax', 'fiscal', 'settlement', 'tribut', 'assess'],
+    temple: ['shrine', 'devasthana', 'brahmadeya', 'monaster', 'patronag', 'endow', 'mandapa', 'gopuram'],
+    endow: ['patronag', 'grant', 'donat', 'revenue', 'brahmadeya', 'inam', 'waqf'],
+    corporate: ['guild', 'shreni', 'assembl', 'associat', 'merchant'],
+    assembl: ['sabha', 'samiti', 'ur', 'nadu', 'gana', 'council'],
+    guild: ['shreni', 'merchant', 'trader', 'nigama', 'corporat'],
+    chola: ['tanjore', 'thanjavur', 'rajaraja', 'rajendra', 'coromandel', 'kaveri'],
+    mughal: ['akbar', 'babur', 'humayun', 'shah jahan', 'aurangzeb', 'mansabdari', 'subah'],
+    gupta: ['samudragupta', 'chandragupta', 'classical', 'magadha'],
+    maratha: ['shivaji', 'peshwa', 'deccan', 'swarajya'],
+    sultanate: ['delhi', 'mamluk', 'khalji', 'tughlaq', 'lodhi', 'sultan'],
+  };
+
+  function tokenizeAndStem(text) {
+    if (!text) return [];
+    const rawWords = text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, ' ')
+      .split(/\s+/)
+      .filter((w) => w.length >= 2 && !STOP_WORDS.has(w));
+
+    return rawWords.map((w) => {
+      if (w.endsWith('ies')) return w.slice(0, -3) + 'y';
+      if (w.endsWith('sses')) return w.slice(0, -2);
+      if (w.endsWith('s') && !w.endsWith('ss')) return w.slice(0, -1);
+      if (w.endsWith('ing') && w.length > 5) return w.slice(0, -3);
+      if (w.endsWith('ed') && w.length > 4) return w.slice(0, -2);
+      if (w.endsWith('ment') && w.length > 6) return w.slice(0, -4);
+      return w;
+    });
+  }
 
   $effect(() => {
     if (url) {
@@ -80,22 +174,102 @@
     }
   });
 
+  async function parsePdfOutline(doc) {
+    const sections = [];
+    try {
+      const rawOutline = await doc.getOutline();
+      if (!rawOutline || !rawOutline.length) return sections;
+
+      async function traverse(items) {
+        for (const item of items) {
+          let pageNum = null;
+          if (item.dest) {
+            let dest = item.dest;
+            if (typeof dest === 'string') {
+              dest = await doc.getDestination(dest);
+            }
+            if (Array.isArray(dest) && dest[0]) {
+              try {
+                const pageIdx = await doc.getPageIndex(dest[0]);
+                pageNum = pageIdx + 1;
+              } catch (e) {
+                // Ignore destination resolution failures
+              }
+            }
+          }
+          if (pageNum && item.title) {
+            sections.push({ title: item.title.trim(), pageNum });
+          }
+          if (item.items && item.items.length) {
+            await traverse(item.items);
+          }
+        }
+      }
+      await traverse(rawOutline);
+      sections.sort((a, b) => a.pageNum - b.pageNum);
+    } catch (err) {
+      console.warn('Could not extract PDF outline:', err);
+    }
+    return sections;
+  }
+
+  function getSectionTitleForPage(pageNum) {
+    if (pdfOutline && pdfOutline.length > 0) {
+      let current = '';
+      for (const sec of pdfOutline) {
+        if (sec.pageNum <= pageNum) {
+          current = sec.title;
+        } else {
+          break;
+        }
+      }
+      if (current) return current;
+    }
+    if (pdfHeadings && pdfHeadings.length > 0) {
+      let current = '';
+      for (const h of pdfHeadings) {
+        if (h.pageNum <= pageNum) {
+          current = h.title;
+        } else {
+          break;
+        }
+      }
+      if (current) return current;
+    }
+    return '';
+  }
+
+  function clearReverseIndex() {
+    paragraphsMap.clear();
+    invertedIndex.clear();
+    docFrequency.clear();
+    pdfHeadings = [];
+    totalParagraphCount = 0;
+    activeHighlightedSpans = [];
+  }
+
   async function loadPdf(pdfUrl) {
     if (!pdfUrl) return;
     isLoading = true;
     loadError = null;
     renderedPages.clear();
-    pageIndexMap.clear();
-    currentlyMarkedPages.clear();
+    clearReverseIndex();
     searchMatches = [];
     currentMatchIndex = 0;
 
     try {
-      const loadingTask = pdfjsLib.getDocument({ url: pdfUrl });
+      const loadingTask = pdfjsLib.getDocument({
+        url: pdfUrl,
+        verbosity: pdfjsLib.VerbosityLevel?.ERRORS ?? 0,
+      });
       pdfDoc = await loadingTask.promise;
       numPages = pdfDoc.numPages;
       currentPage = 1;
       isLoading = false;
+
+      // Extract outline bookmarks asynchronously
+      pdfOutline = await parsePdfOutline(pdfDoc);
+
       await tick();
       renderAllPages();
     } catch (err) {
@@ -109,10 +283,10 @@
     if (!pdfDoc || !pagesContainer) return;
     pagesContainer.innerHTML = '';
     renderedPages.clear();
-    pageIndexMap.clear();
-    currentlyMarkedPages.clear();
+    clearReverseIndex();
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      if (!pagesContainer) break;
       await renderPage(pageNum);
     }
 
@@ -121,11 +295,90 @@
     }
   }
 
+  function segmentPageIntoParagraphs(textContent, spans, pageNum) {
+    const items = textContent.items || [];
+    const paragraphs = [];
+    let curSpans = [];
+    let curText = '';
+    let lastY = null;
+
+    let spanIdx = 0;
+    for (let idx = 0; idx < items.length; idx++) {
+      const it = items[idx];
+      const hasContent = it.str && it.str.length > 0;
+      // In PDF.js TextLayer, only items with non-empty str create a DOM <span>
+      const span = hasContent ? (spans[spanIdx++] || null) : null;
+      const str = (it.str || '').trim();
+      if (!str) continue;
+
+      const y = it.transform ? it.transform[5] : 0;
+      // In PDF space, reading advances down the page (decreasing Y).
+      // Standard line height is ~12-14pt. Break paragraph only if line gap > 20pt or upward jump.
+      const isNew = lastY !== null && (lastY - y > 20 || lastY - y < -5);
+
+      if (isNew && curSpans.length > 0) {
+        if (curText.trim().length >= 25) {
+          paragraphs.push({
+            paraId: `p${pageNum}_${paragraphs.length + 1}`,
+            pageNum,
+            text: curText.trim(),
+            spans: [...curSpans],
+          });
+        }
+        curSpans = [];
+        curText = '';
+      }
+
+      if (span) curSpans.push(span);
+      curText += (curText ? ' ' : '') + str;
+      lastY = y;
+    }
+
+    if (curSpans.length > 0 && curText.trim().length >= 25) {
+      paragraphs.push({
+        paraId: `p${pageNum}_${paragraphs.length + 1}`,
+        pageNum,
+        text: curText.trim(),
+        spans: [...curSpans],
+      });
+    }
+
+    return paragraphs;
+  }
+
+  function indexParagraph(para) {
+    const tokens = tokenizeAndStem(para.text);
+    para.tokens = tokens;
+    paragraphsMap.set(para.paraId, para);
+    totalParagraphCount++;
+
+    const termCounts = new Map();
+    for (const t of tokens) {
+      termCounts.set(t, (termCounts.get(t) || 0) + 1);
+    }
+
+    // Square root document length normalization
+    const lengthNorm = Math.sqrt(tokens.length) || 1.0;
+    for (const [t, count] of termCounts.entries()) {
+      const tf = count / lengthNorm;
+      if (!invertedIndex.has(t)) {
+        invertedIndex.set(t, []);
+      }
+      invertedIndex.get(t).push({
+        paraId: para.paraId,
+        pageNum: para.pageNum,
+        tf,
+      });
+      docFrequency.set(t, (docFrequency.get(t) || 0) + 1);
+    }
+  }
+
   async function renderPage(pageNum) {
     if (!pdfDoc || !pagesContainer) return;
 
     try {
       const page = await pdfDoc.getPage(pageNum);
+      if (!pagesContainer) return;
       const viewport = page.getViewport({ scale });
 
       const pageWrapper = document.createElement('div');
@@ -145,6 +398,7 @@
       await page.render({ canvasContext: context, viewport }).promise;
 
       // Always append the rendered canvas to DOM immediately
+      if (!pagesContainer) return;
       pagesContainer.appendChild(pageWrapper);
       renderedPages.add(pageNum);
 
@@ -157,6 +411,18 @@
         pageWrapper.appendChild(textLayerDiv);
 
         const textContent = await page.getTextContent();
+
+        // Detect in-document section headings from large font items (h >= 13)
+        for (const it of textContent.items) {
+          if (it.height >= 13 && it.str && it.str.trim().length >= 4) {
+            const title = it.str.trim();
+            if (!/^\d+$/.test(title) && !pdfHeadings.some((h) => h.pageNum === pageNum && h.title === title)) {
+              pdfHeadings.push({ pageNum, title });
+            }
+          }
+        }
+        pdfHeadings.sort((a, b) => a.pageNum - b.pageNum);
+
         const textLayer = new pdfjsLib.TextLayer({
           textContentSource: textContent,
           container: textLayerDiv,
@@ -164,14 +430,12 @@
         });
         await textLayer.render();
 
-        // 3. Build In-Memory Text Index for instant (<1ms) semantic retrieval
-        const rawStrings = textContent.items.map((it) => it.str || '');
-        const fullText = rawStrings.join(' ');
-        pageIndexMap.set(pageNum, {
-          pageNum,
-          fullText,
-          lowerText: fullText.toLowerCase(),
-        });
+        // 3. Segment into Paragraphs and Build In-Memory Inverted Index
+        const spans = Array.from(textLayerDiv.querySelectorAll('span'));
+        const pageParas = segmentPageIntoParagraphs(textContent, spans, pageNum);
+        for (const p of pageParas) {
+          indexParagraph(p);
+        }
       } catch (textErr) {
         console.warn(`Text layer skipped for page ${pageNum}:`, textErr);
       }
@@ -180,273 +444,189 @@
     }
   }
 
-  // Semantic query parser & historical domain knowledge ontology
-  function expandSemanticQuery(rawQuery) {
-    const stopWords = new Set([
-      'the', 'a', 'an', 'and', 'or', 'in', 'on', 'at', 'to', 'for', 'of', 'with',
-      'by', 'from', 'as', 'is', 'was', 'were', 'are', 'be', 'been', 'being',
-      'have', 'has', 'had', 'do', 'does', 'did', 'how', 'what', 'why', 'where',
-      'which', 'who', 'when', 'that', 'this', 'these', 'those', 'can', 'could',
-      'would', 'should', 'about', 'into', 'over', 'under', 'between', 'through'
-    ]);
-
-    const clean = (rawQuery || '').trim().toLowerCase();
-    if (!clean) return { exactPhrase: '', clusters: [], allTerms: [] };
-
-    const words = clean
-      .split(/[\s,+/&|?.:;!"'()]+/)
-      .map((w) => w.replace(/[^a-z0-9]/g, '').trim())
-      .filter((w) => w.length >= 2 && !stopWords.has(w));
-
-    // Domain concept ontology for Indian & medieval history
-    const domainOntology = {
-      agrarian: ['agriculture', 'agricultural', 'peasant', 'peasantry', 'revenue', 'cultivation', 'land', 'crop', 'ryot', 'zamindar', 'jagirdar', 'soil', 'irrigation'],
-      agriculture: ['agrarian', 'agricultural', 'cultivation', 'peasant', 'crop', 'land', 'revenue'],
-      peasant: ['peasantry', 'cultivator', 'ryot', 'agrarian', 'tenant', 'village'],
-      revenue: ['tax', 'taxation', 'fiscal', 'settlement', 'tribute', 'tithe', 'assessment'],
-
-      temple: ['shrine', 'devasthana', 'brahmadeya', 'monastery', 'patronage', 'endowment', 'deity', 'matha', 'mandapa', 'gopuram'],
-      endowment: ['endowments', 'patronage', 'grant', 'grants', 'donation', 'donations', 'revenue', 'brahmadeya', 'inam', 'waqf'],
-      endowments: ['endowment', 'patronage', 'grant', 'grants', 'donation', 'donations', 'revenue', 'brahmadeya'],
-      patronage: ['endowment', 'donation', 'royal', 'king', 'benefaction', 'temple'],
-
-      corporate: ['guild', 'guilds', 'shreni', 'assembly', 'assemblies', 'association', 'merchant', 'traders'],
-      assembly: ['assemblies', 'sabha', 'samiti', 'ur', 'nadu', 'ganas', 'council', 'panchayat'],
-      assemblies: ['assembly', 'sabha', 'samiti', 'ur', 'nadu', 'ganas', 'councils'],
-      guild: ['guilds', 'shreni', 'merchants', 'traders', 'nigama', 'corporation'],
-      guilds: ['guild', 'shreni', 'merchants', 'traders', 'nigama'],
-
-      trade: ['commerce', 'merchant', 'merchants', 'routes', 'route', 'maritime', 'port', 'ports', 'caravan', 'market', 'goods', 'spices'],
-      economy: ['economic', 'revenue', 'fiscal', 'trade', 'commerce', 'monetary', 'coinage', 'currency'],
-      economic: ['economy', 'revenue', 'fiscal', 'trade', 'commerce', 'market'],
-
-      feudal: ['feudalism', 'vassal', 'samanta', 'chieftain', 'aristocracy', 'tributary', 'decentralized', 'fief'],
-      feudalism: ['feudal', 'vassal', 'samanta', 'chieftain', 'aristocracy', 'tributary'],
-      monarchy: ['king', 'monarch', 'sovereignty', 'statecraft', 'empire', 'dynasty', 'royal', 'rajya'],
-      state: ['polity', 'administration', 'governance', 'dynasty', 'empire', 'kingdom'],
-
-      chola: ['cholas', 'tanjore', 'thanjavur', 'rajaraja', 'rajendra', 'coromandel', 'kaveri'],
-      mughal: ['mughals', 'akbar', 'babur', 'humayun', 'shah jahan', 'aurangzeb', 'mansabdari', 'subah'],
-      gupta: ['guptas', 'samudragupta', 'chandragupta', 'classical', 'magadha'],
-      maratha: ['marathas', 'shivaji', 'peshwa', 'deccan', 'swarajya'],
-      sultanate: ['delhi sultanate', 'mamluk', 'khalji', 'tughlaq', 'lodhi', 'sultan'],
-    };
-
-    const clusters = [];
-    const allTerms = new Set();
-
-    if (words.length > 1) {
-      allTerms.add(clean);
-    }
-
-    for (const word of words) {
-      const cluster = new Set([word]);
-      allTerms.add(word);
-
-      if (domainOntology[word]) {
-        for (const syn of domainOntology[word]) {
-          cluster.add(syn);
-          allTerms.add(syn);
-        }
-      }
-
-      if (word.endsWith('ies')) cluster.add(word.slice(0, -3) + 'y');
-      if (word.endsWith('s') && !word.endsWith('ss')) cluster.add(word.slice(0, -1));
-      if (word.endsWith('ing')) cluster.add(word.slice(0, -3));
-      if (word.endsWith('ed')) cluster.add(word.slice(0, -2));
-
-      clusters.push(Array.from(cluster));
-    }
-
-    return {
-      exactPhrase: clean,
-      clusters,
-      allTerms: Array.from(allTerms),
-    };
-  }
-
-  // Lightning-fast in-memory semantic search across all pages
+  // Fast In-Memory TF-IDF Semantic Search over Paragraph Inverted Index
   async function executeSemanticSearch(rawQuery) {
     const clean = (rawQuery || '').trim();
-    if (!clean || !pdfDoc) {
+    if (!clean || !pdfDoc || totalParagraphCount === 0) {
       clearHighlights();
       searchMatches = [];
       currentMatchIndex = 0;
       return;
     }
 
-    const { exactPhrase, clusters } = expandSemanticQuery(clean);
+    const qTokens = tokenizeAndStem(clean);
+    if (qTokens.length === 0) {
+      clearHighlights();
+      searchMatches = [];
+      currentMatchIndex = 0;
+      return;
+    }
 
-    // 1. Scan in-memory cache directly (takes ~1ms in RAM)
-    const scoredPages = [];
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      const pageData = pageIndexMap.get(pageNum);
-      if (!pageData) continue;
-
-      const pText = pageData.lowerText;
-      let score = 0;
-      let satisfiedClusters = 0;
-      const matchedTermsOnPage = new Set();
-
-      // Exact phrase match gives highest confidence
-      if (exactPhrase && pText.includes(exactPhrase)) {
-        score += 200;
-        matchedTermsOnPage.add(exactPhrase);
+    // 1. Mandatory Historical Anchor Gating: detect anchor in query (e.g. Mughal, Chola, Gupta)
+    let activeAnchorTerms = null;
+    for (const [key, cluster] of Object.entries(HISTORICAL_ANCHORS)) {
+      if (qTokens.some((t) => cluster.includes(t) || t === key)) {
+        activeAnchorTerms = new Set(cluster);
+        break;
       }
+    }
 
-      // Concept cluster matches
-      for (const cluster of clusters) {
-        let clusterMatched = false;
-        for (const term of cluster) {
-          if (pText.includes(term)) {
-            matchedTermsOnPage.add(term);
-            clusterMatched = true;
-            score += 15;
-          }
+    const N = Math.max(totalParagraphCount, 1);
+    const queryTermWeights = new Map();
+
+    for (const t of qTokens) {
+      const df = docFrequency.get(t) || 0;
+      // Probabilistic BM25 / Lucene-style IDF
+      const idf = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+      queryTermWeights.set(t, { idf: Math.max(idf, 0.2), isPrimary: true });
+
+      // Domain ontology expansion (synonyms at 0.5 discount)
+      const synonyms = DOMAIN_ONTOLOGY[t] || [];
+      for (const syn of synonyms) {
+        if (!queryTermWeights.has(syn) && docFrequency.has(syn)) {
+          const synDf = docFrequency.get(syn) || 0;
+          const synIdf = Math.log(1 + (N - synDf + 0.5) / (synDf + 0.5));
+          queryTermWeights.set(syn, { idf: Math.max(synIdf, 0.2) * 0.5, isPrimary: false, parentTerm: t });
         }
-        if (clusterMatched) satisfiedClusters++;
-      }
-
-      // High synergy bonus when page unites multiple concept pillars
-      if (clusters.length > 1 && satisfiedClusters >= 2) {
-        score += satisfiedClusters * 60;
-      }
-
-      if (score > 0) {
-        scoredPages.push({
-          pageNum,
-          score,
-          satisfiedClusters,
-          matchedTerms: Array.from(matchedTermsOnPage),
-        });
       }
     }
 
-    // Sort pages by semantic relevance score descending
-    scoredPages.sort((a, b) => b.score - a.score || a.pageNum - b.pageNum);
+    // Accumulate scores across postings in inverted index
+    const paraScores = new Map();
 
-    // 2. Targeted DOM highlighting: ONLY mutate pages that have matches
+    for (const [term, meta] of queryTermWeights.entries()) {
+      const postings = invertedIndex.get(term);
+      if (!postings) continue;
+
+      for (const post of postings) {
+        if (!paraScores.has(post.paraId)) {
+          paraScores.set(post.paraId, {
+            paraId: post.paraId,
+            pageNum: post.pageNum,
+            score: 0,
+            primaryMatched: new Set(),
+            matchedTokens: new Set(),
+          });
+        }
+        const entry = paraScores.get(post.paraId);
+        entry.score += post.tf * meta.idf;
+        entry.matchedTokens.add(term);
+        if (meta.isPrimary) {
+          entry.primaryMatched.add(term);
+        } else if (meta.parentTerm) {
+          entry.primaryMatched.add(meta.parentTerm);
+        }
+      }
+    }
+
+    if (paraScores.size === 0) {
+      clearHighlights();
+      searchMatches = [];
+      currentMatchIndex = 0;
+      return;
+    }
+
+    const primaryCount = qTokens.length;
+    const candidates = [];
+
+    for (const entry of paraScores.values()) {
+      const para = paragraphsMap.get(entry.paraId);
+      if (!para) continue;
+
+      // Ignore bibliography, references, and citations pages (typically p >= 53)
+      if (entry.pageNum >= 53) continue;
+
+      const pLower = para.text.toLowerCase();
+
+      // Mandatory Anchor Gate: if user query mentions an anchor (e.g. Mughal), paragraph MUST contain it!
+      if (activeAnchorTerms) {
+        const hasAnchor = Array.from(activeAnchorTerms).some((term) => pLower.includes(term));
+        if (!hasAnchor) continue; // Completely filter out non-anchor eras (e.g. 480 BCE Magadha)
+      }
+
+      const matchedCount = entry.primaryMatched.size;
+
+      // Co-occurrence synergy boost: paragraphs uniting multiple distinct query concepts dominate
+      if (primaryCount > 1) {
+        if (matchedCount >= 2) {
+          entry.score *= (1.0 + (matchedCount - 1) * 0.75);
+        } else if (primaryCount >= 3 && matchedCount === 1) {
+          entry.score *= 0.35;
+        }
+      }
+
+      candidates.push(entry);
+    }
+
+    // Sort descending by relevance score
+    candidates.sort((a, b) => b.score - a.score || a.pageNum - b.pageNum);
+
+    const topScore = candidates[0]?.score || 0;
+    // Dynamic relevance threshold: keep top results that are within 35% of top score
+    const threshold = Math.max(topScore * 0.35, 0.4);
+    const filtered = candidates.filter((c) => c.score >= threshold).slice(0, 5);
+
+    // Map candidate paragraphs to rich search matches with section titles
+    const matches = filtered.map((c) => {
+      const para = paragraphsMap.get(c.paraId);
+      const sectionTitle = getSectionTitleForPage(c.pageNum);
+      return {
+        paraId: c.paraId,
+        pageNum: c.pageNum,
+        score: c.score,
+        text: para?.text || '',
+        spans: para?.spans || [],
+        sectionTitle: sectionTitle || (c.pageNum ? `Page ${c.pageNum}` : ''),
+      };
+    });
+
     clearHighlights();
-
-    const allMatches = [];
-    // Highlight matched pages (up to top 25 pages to maintain 60fps)
-    const pagesToHighlight = scoredPages.slice(0, 25);
-    for (const pageEntry of pagesToHighlight) {
-      const pageMatches = highlightPageMatches(pageEntry.pageNum, pageEntry.matchedTerms);
-      if (pageMatches.length > 0) {
-        allMatches.push(...pageMatches);
-        currentlyMarkedPages.add(pageEntry.pageNum);
-      }
-    }
-
-    searchMatches = allMatches;
+    searchMatches = matches;
     currentMatchIndex = 0;
 
-    if (allMatches.length > 0) {
-      scrollToMatch(0);
+    if (matches.length > 0) {
+      highlightMatch(0);
     }
   }
 
-  // Targeted DOM highlight on a single page
-  function highlightPageMatches(pageNum, terms) {
-    const pageEl = document.getElementById(`pdf-page-${pageNum}`);
-    if (!pageEl) return [];
-    const textLayer = pageEl.querySelector('.textLayer');
-    if (!textLayer) return [];
+  // Whole-Paragraph Scholastic Highlighting
+  function highlightMatch(index) {
+    clearHighlights();
+    const match = searchMatches[index];
+    if (!match) return;
 
-    const escapedTerms = terms
-      .map((t) => t.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'))
-      .filter(Boolean);
+    const para = paragraphsMap.get(match.paraId);
+    if (!para || !para.spans) return;
 
-    if (escapedTerms.length === 0) return [];
-
-    const splitRegex = new RegExp('(' + escapedTerms.join('|') + ')', 'gi');
-    const checkRegex = new RegExp('^(?:' + escapedTerms.join('|') + ')$', 'i');
-
-    const spans = Array.from(textLayer.querySelectorAll('span'));
-    const pageMatches = [];
-
-    for (const span of spans) {
-      const text = span.textContent;
-      if (!text) continue;
-      if (!terms.some((t) => text.toLowerCase().includes(t))) continue;
-
-      const parts = text.split(splitRegex);
-      if (parts.length <= 1) continue;
-
-      span.innerHTML = '';
-      for (const part of parts) {
-        if (checkRegex.test(part)) {
-          const mark = document.createElement('mark');
-          mark.className = 'pdf-search-mark';
-          mark.textContent = part;
-          span.appendChild(mark);
-
-          pageMatches.push({
-            pageNum,
-            markEl: mark,
-            text: part,
-            matchedTerm: part,
-          });
-        } else if (part) {
-          span.appendChild(document.createTextNode(part));
-        }
-      }
+    for (const span of para.spans) {
+      span.classList.add('pdf-passage-highlight');
+      activeHighlightedSpans.push(span);
     }
-    return pageMatches;
+
+    // Smooth scroll the highlighted paragraph into center view
+    if (para.spans[0]) {
+      para.spans[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
 
-  // Targeted teardown: only reset pages that were previously marked
+  // Non-destructive highlight teardown
   function clearHighlights() {
-    if (!pagesContainer) return;
-    for (const pageNum of currentlyMarkedPages) {
-      const pageEl = document.getElementById(`pdf-page-${pageNum}`);
-      if (!pageEl) continue;
-      const marks = pageEl.querySelectorAll('.pdf-search-mark');
-      const parents = new Set();
-      marks.forEach((m) => {
-        if (m.parentNode) parents.add(m.parentNode);
-      });
-      parents.forEach((p) => {
-        p.textContent = p.textContent;
-      });
+    for (const span of activeHighlightedSpans) {
+      span.classList.remove('pdf-passage-highlight', 'current-search-match');
     }
-    currentlyMarkedPages.clear();
+    activeHighlightedSpans = [];
   }
 
   export function nextMatch() {
     if (searchMatches.length === 0) return;
     currentMatchIndex = (currentMatchIndex + 1) % searchMatches.length;
-    scrollToMatch(currentMatchIndex);
+    highlightMatch(currentMatchIndex);
   }
 
   export function prevMatch() {
     if (searchMatches.length === 0) return;
     currentMatchIndex = (currentMatchIndex - 1 + searchMatches.length) % searchMatches.length;
-    scrollToMatch(currentMatchIndex);
-  }
-
-  function scrollToMatch(index) {
-    const match = searchMatches[index];
-    if (!match) return;
-
-    // Update active mark styling
-    if (pagesContainer) {
-      const allMarks = pagesContainer.querySelectorAll('.pdf-search-mark');
-      allMarks.forEach((m) => {
-        m.classList.remove('current-search-match');
-      });
-    }
-
-    if (match.markEl) {
-      match.markEl.classList.add('current-search-match');
-      match.markEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } else {
-      const pageEl = document.getElementById(`pdf-page-${match.pageNum}`);
-      if (pageEl) {
-        pageEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }
-    }
+    highlightMatch(currentMatchIndex);
   }
 
   function handleMouseUp() {
@@ -591,6 +771,22 @@
     display: block;
     width: 100%;
     height: 100%;
+  }
+
+  /* Whole-Paragraph Scholastic Highlighting inside Text Layer (Smooth Continuous Wash) */
+  :global(.pdf-passage-highlight) {
+    background-color: rgba(245, 158, 11, 0.24) !important;
+    color: transparent !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    transition: background-color 0.15s ease;
+  }
+
+  :global([data-theme="dark"]) :global(.pdf-passage-highlight) {
+    background-color: rgba(245, 158, 11, 0.32) !important;
+    color: transparent !important;
+    box-shadow: none !important;
   }
 
   /* Search Term Highlights inside Text Layer (Subtle Academic Wash) */

@@ -43,6 +43,7 @@ out/
 *.sqlite
 *.db
 pgdata/
+storage/
 
 # IDE & OS
 .DS_Store
