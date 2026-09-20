@@ -79,25 +79,53 @@ class ConceptGraphResponse(BaseModel):
     stats: dict[str, int] = Field(default_factory=dict)
 
 
+BloomLevel = Literal["remember", "understand", "apply", "analyze", "evaluate", "create"]
+
+
+class SocraticProbeProposal(BaseModel):
+    """A diagnostic Socratic question designed to expose and remediate a misconception."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    rung: int = Field(default=0, ge=0, le=2)
+    probe_text: str = Field(min_length=4, max_length=600)
+    rationale: str = Field(default="Socratic inquiry scaffolding.", max_length=400)
+
+
+class MisconceptionProposal(BaseModel):
+    """A cognitive trap or flawed reasoning rule associated with a knowledge component."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    name: str = Field(min_length=2, max_length=160)
+    flawed_rule: str = Field(min_length=4, max_length=600)
+    remediation_hint: str = Field(min_length=4, max_length=600)
+    probes: list[SocraticProbeProposal] = Field(default_factory=list)
+
+
 class ConceptProposalNode(BaseModel):
     """A reviewable, not-yet-approved concept generated from the course materials."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     proposal_id: str = Field(pattern=r"^c[0-9]+$")
     label: str = Field(min_length=2, max_length=160)
     definition: str = Field(min_length=4, max_length=1200)
-    concept_type: ConceptType
-    level: ConceptLevel
+    concept_type: ConceptType = "domain"
+    level: ConceptLevel = "topic"
+    bloom_level: BloomLevel | None = None
     parent_proposal_id: str | None = Field(default=None, pattern=r"^c[0-9]+$")
     module_positions: list[int] = Field(default_factory=list, max_length=8)
     module_role: ModuleConceptRole = "introduces"
+    misconceptions: list[MisconceptionProposal] = Field(default_factory=list)
+    aliases: list[str] = Field(default_factory=list, max_length=10)
+    evidence_chunk_ids: list[str] = Field(default_factory=list, max_length=20)
 
 
 class PrerequisiteProposal(BaseModel):
     """A proposed dependency within the generated curriculum concept graph."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     prerequisite_proposal_id: str = Field(pattern=r"^c[0-9]+$")
     dependent_proposal_id: str = Field(pattern=r"^c[0-9]+$")
@@ -107,17 +135,30 @@ class PrerequisiteProposal(BaseModel):
 class ConceptGraphProposal(BaseModel):
     """A teacher-reviewable draft of a course's high-to-low concept graph."""
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(extra="ignore")
 
     course_rationale: str = Field(min_length=4, max_length=1200)
-    concepts: list[ConceptProposalNode] = Field(min_length=3, max_length=28)
-    prerequisites: list[PrerequisiteProposal] = Field(default_factory=list, max_length=32)
+    concepts: list[ConceptProposalNode] = Field(min_length=3, max_length=64)
+    prerequisites: list[PrerequisiteProposal] = Field(default_factory=list, max_length=64)
+
+
+class CompletenessStats(BaseModel):
+    """Metrics validating curriculum breadth, objective alignment, and source evidence recall."""
+
+    module_coverage_pct: float = 100.0
+    objective_coverage_pct: float = 100.0
+    evidence_recall_pct: float = 100.0
+    total_concepts: int = 0
+    total_prerequisites: int = 0
+    unmapped_chunk_ids: list[str] = Field(default_factory=list)
+    is_complete: bool = True
 
 
 class ConceptGraphProposalResponse(BaseModel):
     proposal: ConceptGraphProposal
     generated_by: str
     needs_teacher_validation: bool = True
+    completeness: CompletenessStats | None = None
 
 
 class ConceptGraphProposalRequest(BaseModel):
@@ -126,6 +167,7 @@ class ConceptGraphProposalRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     instruction: str | None = Field(default=None, max_length=1200)
+    similarity_threshold: float | None = Field(default=0.85, ge=0.5, le=1.0)
 
 
 class ConceptGraphProposalApprovalRequest(BaseModel):
@@ -143,3 +185,5 @@ class ConceptGraphHydrateRequest(BaseModel):
 
     module_id: str | None = Field(default=None, max_length=96)
     instruction: str | None = Field(default=None, max_length=1200)
+    similarity_threshold: float | None = Field(default=0.85, ge=0.5, le=1.0)
+

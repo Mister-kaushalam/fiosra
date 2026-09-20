@@ -217,12 +217,33 @@ async def test_socratic_graph_state_persistence_across_turns(mock_mcp_client):
 
 
 @pytest.mark.asyncio
-async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_client):
+async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_client, monkeypatch):
     """
     Tests the 8-node LangGraph pipeline consuming the Pentagonal Context:
     co-presence ingestion, Toulmin decomposition, cognitive work allocation,
     and action packing into Action Capsules and Seminar Starters.
     """
+    from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
+    import json as _json
+
+    async def mock_enhance(*args, **kwargs):
+        purpose = kwargs.get("purpose", "")
+        if purpose in ("chip_entry_intentions", "chip_continuation_intentions"):
+            chips = [
+                {"title": "I found key evidence", "prompt": "I found something in the sources that may support my claim."},
+                {"title": "I want to test alternatives", "prompt": "I want to explore a counter-explanation to my claim."},
+            ]
+            return GuardedGeneration(
+                content=_json.dumps(chips),
+                metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+            )
+        return GuardedGeneration(
+            content="This raises a key question about the causal warrant: what specific mechanism in Necker's data directly demonstrates sovereign insolvency?",
+            metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
+
     tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
     critic = AnswerIsolationCriticAgent()
     checkpointer = MemorySaver()
@@ -411,5 +432,56 @@ async def test_socratic_graph_llm_unavailable_transparent_failure(mock_mcp_clien
         await graph.ainvoke(initial_state, config=config)
 
     assert "live LLM provider call failed" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_no_phantom_action_capsules_on_exploratory_turns():
+    """Verify that exploratory student intents or boilerplate text produce 0 action capsules."""
+    tutor = SocraticTutorAgent()
+
+    # Case 1: Exploratory intent on blank canvas
+    state_exploratory: TutorSessionState = {
+        "student_id": "stu-1",
+        "student_input": "I want to analyze primary sources from the Delhi Sultanate to understand its social changes.",
+        "focused_block_id": None,
+        "focused_block_text": "",
+        "canvas_blocks": [],
+        "dialogue_history": [],
+    }
+    decomp = tutor.decompose_toulmin(state_exploratory)
+    state_exploratory["toulmin_structure"] = decomp["toulmin_structure"]
+    actions = await tutor.pack_epistemic_actions(state_exploratory)
+    assert actions["action_capsules"] == [], "Must produce zero action capsules on exploratory intent"
+
+    # Case 2: Template instruction in focused_block_text must NOT become an action capsule
+    state_boilerplate: TutorSessionState = {
+        "student_id": "stu-2",
+        "student_input": "I want to analyze primary sources from the Delhi Sultanate.",
+        "focused_block_id": "current-block",
+        "focused_block_text": "Working claim: State a provisional, bounded answer to the assignment question. Guidance: Write one claim.",
+        "canvas_blocks": [],
+        "dialogue_history": [],
+    }
+    decomp_bp = tutor.decompose_toulmin(state_boilerplate)
+    state_boilerplate["toulmin_structure"] = decomp_bp["toulmin_structure"]
+    actions_bp = await tutor.pack_epistemic_actions(state_boilerplate)
+    assert actions_bp["action_capsules"] == [], "Must never surface rubric template text as an action capsule"
+
+    # Case 3: Genuine student claim with active canvas block earns an action capsule
+    state_claim: TutorSessionState = {
+        "student_id": "stu-3",
+        "student_input": "Price controls under Alauddin Khalji were maintained through coercion because Barani notes superintendents whipped merchants.",
+        "focused_block_id": "paragraph-1",
+        "focused_block_text": "",
+        "canvas_blocks": [{"id": "paragraph-1", "text": ""}],
+        "dialogue_history": [],
+    }
+    decomp_claim = tutor.decompose_toulmin(state_claim)
+    state_claim["toulmin_structure"] = decomp_claim["toulmin_structure"]
+    actions_claim = await tutor.pack_epistemic_actions(state_claim)
+    assert len(actions_claim["action_capsules"]) == 1, "Substantive claim must earn exactly one action capsule"
+    capsule = actions_claim["action_capsules"][0]
+    assert "Alauddin Khalji" in capsule["suggested_student_text"]
+    assert capsule["target_block_id"] == "paragraph-1"
 
 

@@ -84,17 +84,19 @@ class TutorSessionState(TypedDict, total=False):
     assignment_meta: dict[str, Any]
     target_bloom_level: str
     rubric_criteria: list[dict[str, Any]]
-    
+    section_guidance: str | None
+
     # 2. Graphiti Temporal Mental Model
     active_beliefs: list[dict[str, Any]]        # invalidated_at IS NULL
     historical_pivots: list[dict[str, Any]]     # Prior self-corrections & leaps
     in_flight_revisions: list[dict[str, Any]]   # Uncommitted revisions awaiting async AutoSCORE
-    
+
     # 3. Source Material Grounding
     open_exhibit_id: str | None                 # Currently open in left DocumentReader
     open_exhibit_page: int | None
     selected_source_quote: str | None
     retrieved_source_chunks: list[dict[str, Any]]
+    assigned_sources: list[dict[str, Any]]      # Primary sources and exhibits from assignment source pack
     
     # 4. Neo4j Curriculum Knowledge Graph
     target_kcs: list[dict[str, Any]]

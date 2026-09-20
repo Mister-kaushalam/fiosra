@@ -120,6 +120,32 @@ async def handle_dialogue_turn(
         elif etype in ("tutor_turn_completed", "hint_delivered", "adversarial_probe_defended") and payload.get("response_text"):
             dialogue_history.append({"role": "tutor", "text": payload["response_text"]})
 
+    canvas_blocks: list[dict[str, Any]] = []
+    try:
+        from fiosra.mvp.learning_document_service import learning_document_service
+        doc_state = await learning_document_service.get_state(request.session_id, session_token)
+        if doc_state and getattr(doc_state, "blocks", None):
+            canvas_blocks = [
+                {"id": b.block_id, "text": b.plaintext or "", "role": b.block_type}
+                for b in doc_state.blocks
+                if (b.plaintext or "").strip()
+            ]
+    except Exception:
+        canvas_blocks = []
+
+    assigned_sources: list[dict[str, Any]] = []
+    if assignment_context and assignment_context.published and getattr(assignment_context.published, "source_pack", None):
+        for s in assignment_context.published.source_pack:
+            assigned_sources.append({
+                "source_id": getattr(s, "source_id", ""),
+                "title": getattr(s, "title", ""),
+                "author": getattr(s, "author", "") or "",
+                "excerpt": s.excerpt[:300] if getattr(s, "excerpt", None) else "",
+            })
+
+    focused_block_id = canvas_blocks[0]["id"] if canvas_blocks else None
+    focused_block_text = canvas_blocks[0]["text"] if canvas_blocks else ""
+
     from fiosra.mvp.agents.graph import socratic_tutor_graph
 
     initial_state = {
@@ -146,9 +172,11 @@ async def handle_dialogue_turn(
         "target_kcs": active_target_kcs or [],
         "active_misconceptions": [],
         "prerequisite_status": {},
-        "canvas_blocks": [],
-        "focused_block_id": "current-block",
-        "focused_block_text": active_section_context or "",
+        "canvas_blocks": canvas_blocks,
+        "focused_block_id": focused_block_id,
+        "focused_block_text": focused_block_text,
+        "section_guidance": active_section_context or "",
+        "assigned_sources": assigned_sources,
         "toulmin_structure": {},
         "adversarial_flag": False,
         "adversarial_reason": None,

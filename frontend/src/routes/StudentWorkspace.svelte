@@ -792,6 +792,7 @@
           is_adversarial: data.is_adversarial,
           action_capsules: data.action_capsules || [],
           radar: data.learner_radar || null,
+          prompt_launchers: data.prompt_launchers || [],
         }
       ];
       const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);

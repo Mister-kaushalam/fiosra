@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS student_sessions (
     session_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     student_id VARCHAR(64) NOT NULL,
     assignment_id UUID REFERENCES assignments(assignment_id),
-    current_question_id VARCHAR(32) NOT NULL,
+    current_question_id VARCHAR(64) NOT NULL,
     status VARCHAR(32) DEFAULT 'active',
     started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     last_activity_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -70,7 +70,7 @@ CREATE TABLE IF NOT EXISTS session_events (
     session_id UUID NOT NULL REFERENCES student_sessions(session_id),
     student_id VARCHAR(64) NOT NULL,
     assignment_id UUID,
-    question_id VARCHAR(32) NOT NULL,
+    question_id VARCHAR(64) NOT NULL,
     event_type VARCHAR(64) NOT NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     payload JSONB NOT NULL

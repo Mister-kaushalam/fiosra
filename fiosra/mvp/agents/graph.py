@@ -75,7 +75,7 @@ def create_socratic_tutor_graph(
         return critic.verify_response(state)
 
     async def epistemic_action_packer_node(state: TutorSessionState) -> dict[str, Any]:
-        return tutor.pack_epistemic_actions(state)
+        return await tutor.pack_epistemic_actions(state)
 
     async def safe_fallback_node(state: TutorSessionState) -> dict[str, Any]:
         logger.warning(

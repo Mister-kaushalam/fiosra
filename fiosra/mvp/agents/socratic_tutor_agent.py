@@ -6,6 +6,7 @@ Consumes Fiosra FastMCP Server tools via AgentMCPClient.
 """
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -162,21 +163,37 @@ class SocraticTutorAgent:
         """
         Toulmin Argumentation Decomposition:
         Extracts claim, warrant, evidence, and implicit assumptions from active student text.
+        Guards against extracting claims from rubric boilerplate or exploratory student intent.
         """
-        text = state.get("focused_block_text") or state.get("student_input", "")
+        text = (state.get("focused_block_text") or "").strip()
+        student_input = (state.get("student_input") or "").strip()
         existing = state.get("toulmin_structure") or {}
 
-        sentences = [s.strip() for s in re.split(r"[.!?]\s+", text) if s.strip()]
-        claim = sentences[0] if sentences else text
+        # Discard instructional schema boilerplate
+        is_boilerplate = bool(
+            re.search(r"\b(?:working claim|provisional, bounded|completion guidance|assignment question)\b", text, re.I)
+        )
+        if is_boilerplate:
+            text = ""
 
-        has_warrant = bool(re.search(r"\b(?:because|since|therefore|thus|which implies|demonstrates that)\b", text, re.I))
-        has_evidence = bool(re.search(r"\b(?:according to|source|document|figure|exhibit|page|quotes?)\b", text, re.I) or '"' in text)
-        has_qualification = bool(re.search(r"\b(?:however|although|unless|might|may|provisional|partially)\b", text, re.I))
+        # Distinguish genuine claims from exploratory intents, queries, or greetings
+        is_intent_or_q = bool(
+            re.match(r"^\s*(?:i\s+(?:want|would like|need|wish|prefer|plan)\b|can\s+you\b|could\s+you\b|how\b|what\b|why\b|where\b|when\b|is\b|are\b|hi\b|hello\b|hey\b)", student_input, re.I)
+            or student_input.endswith("?")
+        )
+
+        analysis_text = text or (student_input if not is_intent_or_q else "")
+        sentences = [s.strip() for s in re.split(r"[.!?]\s+", analysis_text) if s.strip()]
+        claim = sentences[0] if sentences else ""
+
+        has_warrant = bool(re.search(r"\b(?:because|since|therefore|thus|which implies|demonstrates that)\b", analysis_text, re.I))
+        has_evidence = bool(re.search(r"\b(?:according to|source|document|figure|exhibit|page|quotes?)\b", analysis_text, re.I) or '"' in analysis_text)
+        has_qualification = bool(re.search(r"\b(?:however|although|unless|might|may|provisional|partially)\b", analysis_text, re.I))
 
         assumptions = []
-        if "feudal" in text.lower() or "serf" in text.lower():
+        if "feudal" in analysis_text.lower() or "serf" in analysis_text.lower():
             assumptions.append("Assumes legal serfdom was uniform across all royal manors")
-        elif "bankrupt" in text.lower() or "debt" in text.lower() or "necker" in text.lower():
+        elif "bankrupt" in analysis_text.lower() or "debt" in analysis_text.lower() or "necker" in analysis_text.lower():
             assumptions.append("Assumes crown finances were solely drained by foreign war rather than structural exemptions")
         elif len(sentences) > 0 and not has_warrant:
             assumptions.append("Assumes direct correlation without articulating underlying causal mechanism")
@@ -222,33 +239,172 @@ class SocraticTutorAgent:
             "current_rung": effective_rung,
         }
 
-    def pack_epistemic_actions(self, state: TutorSessionState) -> dict[str, Any]:
+    async def pack_epistemic_actions(self, state: TutorSessionState) -> dict[str, Any]:
         """
         Action Capsule & Discussion Starter Packer:
-        Assembles 1-click text-first transfer capsules, subtle scholastic seminar starters,
+        Assembles 1-click text-first transfer capsules, state-contingent student intention chips,
         and 2-line metacognitive progress radar.
+
+        Chips are student-voiced intentions (not tutor questions) and are:
+        - Absent on a blank canvas with no prior dialogue
+        - 2 LLM-generated entry intentions when canvas is empty but dialogue has started
+        - 2 LLM-generated continuation intentions when the canvas has content
+        - Capped at 2 maximum (Zero Button Bloat)
         """
         focused_id = state.get("focused_block_id")
         toulmin = state.get("toulmin_structure") or {}
+        student_id = state.get("student_id", "anonymous")
+        student_input = (state.get("student_input") or "").strip()
+        assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or ""
+        dialogue_history = state.get("dialogue_history") or []
+        canvas_blocks = state.get("canvas_blocks") or []
 
-        launchers = [
-            {"title": "Examine structural assumptions", "prompt": "What unstated premise underlies this historical interpretation?"},
-            {"title": "Test against primary exhibit", "prompt": "How does the primary document challenge this causal explanation?"},
-            {"title": "Refine causal warrant", "prompt": "Can you articulate the exact mechanism connecting the debt to the collapse?"},
-        ]
+        has_canvas_content = any((b.get("text") or "").strip() for b in canvas_blocks)
+        has_dialogue = len(dialogue_history) > 0
+
+        # ── State-contingent launcher generation ────────────────────────────
+        launchers: list[dict] = []
+
+        if not has_canvas_content and not has_dialogue:
+            # Truly blank state — no dialogue, no canvas — no chips
+            launchers = []
+
+        elif not has_canvas_content:
+            # After first exchange, canvas still blank — progressive entry/inquiry intentions
+            recent_history = dialogue_history[-4:]
+            history_snippet = "\n".join(
+                f"{t.get('role','').capitalize()}: {t.get('text','')[:120]}"
+                for t in recent_history
+            )
+            assigned_sources = state.get("assigned_sources") or []
+            sources_summary = ", ".join(s.get("title", "") for s in assigned_sources[:4] if s.get("title"))
+
+            turns_count = len(dialogue_history)
+            if turns_count <= 2:
+                stage_guidance = (
+                    "Stage: Initial Focus. Generate 2 distinct entry intentions pointing to specific primary source exhibits or historical angles to explore."
+                )
+            elif turns_count <= 5:
+                stage_guidance = (
+                    "Stage: Evidence Deepening. The student has begun exploring. Generate 2 intentions that probe evidence, specific chronicler claims, or comparative tensions."
+                )
+            else:
+                stage_guidance = (
+                    "Stage: Toward Claim Formulation. Several exchanges have occurred. Generate 2 intentions prompting the student to synthesize an observation or draft an initial claim."
+                )
+
+            system_prompt = (
+                "You are generating 2 short conversation-starter chips for a student in a Socratic history seminar. "
+                "Each chip is a natural, first-person student intention they can click to send to the tutor. "
+                "Ground them specifically in the ongoing dialogue, the assignment prompt, and assigned exhibits. "
+                "Chips must be student requests or intentions — NOT tutor questions. "
+                "Do NOT loop or repeat previous student choices. Move the reasoning arc forward. "
+                "Examples: 'I want to examine market price controls in Barani', 'What does this passage reveal about agrarian taxes?'. "
+                "Output ONLY a JSON array of exactly 2 objects, each with 'title' (3-5 words) and 'prompt' (one natural student sentence). "
+                "No other text before or after the JSON."
+            )
+            user_prompt = (
+                f"Assignment Question Prompt:\n{assignment_prompt}\n\n"
+                f"Assigned Sources in Pack:\n{sources_summary or 'General seminar exhibits'}\n\n"
+                f"Recent Seminar Dialogue:\n{history_snippet or 'None'}\n\n"
+                f"Last student message: {student_input[:120]}\n\n"
+                f"{stage_guidance}"
+            )
+            try:
+                gen = await llm_orchestrator.enhance(
+                    purpose="chip_entry_intentions",
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    pseudonymous_seed=f"chips:entry:{student_id}:{turns_count}:{student_input[:32]}",
+                    max_characters=400,
+                    max_tokens=120,
+                    allow_live=True,
+                    require_live=True,
+                )
+                raw = gen.content.strip()
+                # strip markdown fences if present
+                raw = re.sub(r"^```[^\n]*\n?", "", raw).rstrip("`").strip()
+                chips = json.loads(raw)
+                launchers = [
+                    {"title": c.get("title", ""), "prompt": c.get("prompt", "")}
+                    for c in chips if c.get("title") and c.get("prompt")
+                ][:2]
+            except Exception:
+                launchers = []  # fail silently — no chips beats wrong chips
+
+        else:
+            # Canvas has content — 2 reasoning-continuation intentions
+            recent_history = dialogue_history[-4:]
+            history_snippet = "\n".join(
+                f"{t.get('role','').capitalize()}: {t.get('text','')[:120]}"
+                for t in recent_history
+            )
+            canvas_snippet = " ".join(
+                (b.get("text") or "")[:200] for b in canvas_blocks[:3]
+            ).strip()
+            system_prompt = (
+                "You are generating 2 short conversation-starter chips for a student in a Socratic history seminar. "
+                "The student has already written something in their draft canvas. "
+                "Each chip is a natural, first-person student intention they can click to send to the tutor. "
+                "Ground them in the student's current draft and recent dialogue. "
+                "Chips must be student requests — NOT tutor questions. "
+                "Examples: 'I am not sure this evidence is strong enough', 'I want to test an alternative explanation', 'I found a source that challenges my claim'. "
+                "Output ONLY a JSON array of exactly 2 objects, each with 'title' (3-5 words) and 'prompt' (one natural student sentence). "
+                "No other text before or after the JSON."
+            )
+            user_prompt = (
+                f"Assignment Prompt:\n{assignment_prompt}\n\n"
+                f"Student's current draft (excerpt):\n{canvas_snippet or 'No content yet.'}\n\n"
+                f"Recent dialogue:\n{history_snippet}"
+            )
+            try:
+                gen = await llm_orchestrator.enhance(
+                    purpose="chip_continuation_intentions",
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    pseudonymous_seed=f"chips:cont:{student_id}:{canvas_snippet[:32]}",
+                    max_characters=400,
+                    max_tokens=120,
+                    allow_live=True,
+                    require_live=True,
+                )
+                raw = gen.content.strip()
+                raw = re.sub(r"^```[^\n]*\n?", "", raw).rstrip("`").strip()
+                chips = json.loads(raw)
+                launchers = [
+                    {"title": c.get("title", ""), "prompt": c.get("prompt", "")}
+                    for c in chips if c.get("title") and c.get("prompt")
+                ][:2]
+            except Exception:
+                launchers = []  # fail silently — no chips beats wrong chips
 
         capsules = []
-        student_input = (state.get("student_input") or "").strip()
         is_hint = state.get("is_hint_requested", False)
 
         # Action capsules must be earned: only formulate a transfer capsule when the
         # student has articulated substantive reasoning (enforcing Zero AI Ghostwriting).
-        claim_candidate = toulmin.get("claim") or ""
-        has_substantive_input = len(student_input) > 20 and not student_input.endswith("?")
-        has_substantive_block = bool((toulmin.get("has_warrant") or toulmin.get("has_evidence")) and len(claim_candidate) > 20)
+        claim_candidate = (toulmin.get("claim") or "").strip()
+        is_boilerplate = bool(
+            re.search(r"\b(?:working claim|provisional, bounded|completion guidance|assignment question)\b", claim_candidate, re.I)
+        )
+        is_intent_or_q = bool(
+            re.match(r"^\s*(?:i\s+(?:want|would like|need|wish|prefer|plan)\b|can\s+you\b|could\s+you\b|how\b|what\b|why\b|where\b|when\b|is\b|are\b|hi\b|hello\b|hey\b)", student_input, re.I)
+            or student_input.endswith("?")
+        )
 
-        if focused_id and not is_hint and (has_substantive_input or has_substantive_block):
-            claim_fragment = claim_candidate if (has_substantive_block and student_input.endswith("?")) else (claim_candidate or student_input)
+        has_substantive_input = (
+            len(student_input) > 25
+            and not is_intent_or_q
+            and not is_boilerplate
+        )
+        has_substantive_block = bool(
+            (toulmin.get("has_warrant") or toulmin.get("has_evidence"))
+            and len(claim_candidate) > 20
+            and not is_boilerplate
+        )
+
+        if focused_id and not is_hint and not is_boilerplate and (has_substantive_input or has_substantive_block):
+            claim_fragment = claim_candidate if (has_substantive_block and student_input.endswith("?")) else (student_input if has_substantive_input else claim_candidate)
             snippet = claim_fragment if len(claim_fragment) <= 180 else claim_fragment[:177] + "..."
             capsules.append({
                 "capsule_id": f"cap-{uuid4().hex[:8]}",
@@ -590,24 +746,34 @@ class SocraticTutorAgent:
             remediation_snippet = f"\nCorrection Notice from Answer-Isolation Critic: {remediation}\n"
 
         assignment_prompt = (state.get("assignment_meta") or {}).get("question_prompt") or "Analyze the historical problem grounded in assigned exhibits."
-        focused_text = state.get("focused_block_text") or "Canvas draft area"
+        focused_text = state.get("focused_block_text") or ""
+
+        assigned_sources = state.get("assigned_sources") or []
+        sources_snippet = ""
+        if assigned_sources:
+            sources_list = []
+            for s in assigned_sources[:4]:
+                author_str = f" by {s['author']}" if s.get("author") else ""
+                excerpt_str = f" — \"{s['excerpt']}\"" if s.get("excerpt") else ""
+                sources_list.append(f"- Exhibit: {s.get('title', 'Primary Source')}{author_str}{excerpt_str}")
+            sources_snippet = "Assigned Primary Sources / Exhibits in Course Pack:\n" + "\n".join(sources_list) + "\n\n"
 
         system_prompt = (
-            "You are an expert Socratic tutor in a university history seminar. "
-            "Your goal is to guide the student toward independent critical thinking, historical causation, and evidence-grounded analysis. "
-            "Engage conversationally and directly with the student's reasoning in the context of the ongoing dialogue. "
-            "If the student makes a claim, probe its causal warrant and evidentiary grounding against the assigned exhibits. "
-            "If the student asks a question, provides an informal idea, or proposes a strategy (such as combining recommended pillars), "
-            "respond naturally and constructively, connecting it back to the primary exhibits. "
-            "Never take casual or colloquial remarks literally (for instance, 'cool?' is an informal rhetorical check meaning 'sound good?', NOT a temperature reference). "
-            "Output exactly one focused, intellectually rigorous inquiry ending in a question mark. "
-            "Never ghostwrite the student's essay, give direct answers, or provide pre-written thesis statements."
+            "You are an expert Socratic tutor in a rigorous university history seminar. "
+            "Your goal is to guide the student toward independent critical thinking, historical causation, and evidence-grounded analysis.\n"
+            "STRICT PEDAGOGICAL CONSTRAINTS:\n"
+            "1. NO SYCOPHANCY: NEVER open with formulaic praise or filler validation. Do NOT say 'That's a focused direction!', 'That's a focused approach!', 'That's a crucial aspect!', 'Great question!', etc. Jump directly and conversationally into the inquiry.\n"
+            "2. SINGLE QUESTION ONLY: Ask strictly ONE focused, intellectually substantive question per turn. Never fire multiple questions, and do not append secondary inquiries with 'Additionally...', 'Furthermore...', 'What about...', or 'And how...'.\n"
+            "3. GROUND IN ASSIGNED EXHIBITS: When the student expresses interest in a period or topic (e.g. Delhi Sultanate, Mughal economy, British revenue), immediately steer them to the specific assigned exhibit in the course pack covering that topic, asking what specific historical observation or evidence they draw from it.\n"
+            "4. NEVER GHOSTWRITE: Do not write thesis statements or give direct answers. Guide the student to formulate their own claims from the sources.\n"
+            "5. NO LITERALISM ON SLANG: Never take casual rhetorical checks literally (e.g. 'cool?' means 'sound good?')."
         )
 
         user_prompt = (
             f"Assignment Question Prompt:\n{assignment_prompt}\n\n"
+            f"{sources_snippet}"
             f"{history_snippet}"
-            f"Active Canvas Block under Examination:\n{focused_text}\n\n"
+            f"Active Canvas Block under Examination:\n{focused_text or 'Canvas draft is currently blank.'}\n\n"
             f"Student's Latest Message:\n{student_input}\n\n"
             f"{target_guidance}"
             f"{remediation_snippet}"

@@ -26,12 +26,6 @@
     return found ? found.title : 'Consultation';
   });
 
-  const discussionStarters = [
-    { label: 'Stress-test my central thesis against counter-evidence', prompt: 'Challenge my central claim with historical counter-arguments from the assigned exhibits.' },
-    { label: 'Unpack unstated premises and causal assumptions', prompt: 'What implicit assumptions am I taking for granted in my current argument?' },
-    { label: 'Weigh structural debt versus liquidity panic in 1788', prompt: 'How do sovereign credit debt and the short-term banking panic compare as primary causes of the crisis?' },
-    { label: 'Construct causal warrant connecting Exhibit A to my claim', prompt: 'How does Necker\'s Compte Rendu data logically warrant my conclusion about crown solvency?' }
-  ];
 
   async function handleSend(e) {
     e?.preventDefault();
@@ -156,23 +150,6 @@
             Test competing hypotheses, unpack implicit premises, and formulate grounded causal warrants with your Socratic tutor.
           </p>
         </div>
-
-        <div class="discussion-starters-block">
-          <span class="starters-eyebrow">Suggested seminar inquiries:</span>
-          <div class="starters-list">
-            {#each discussionStarters as starter}
-              <button
-                type="button"
-                class="btn-scholastic-starter"
-                onclick={() => handleSelectStarter(starter.prompt)}
-                disabled={isBusy}
-              >
-                <span class="starter-symbol">§</span>
-                <span class="starter-label">{starter.label}</span>
-              </button>
-            {/each}
-          </div>
-        </div>
       </div>
     {:else}
       {#each turns as turn}
@@ -210,6 +187,26 @@
                     </button>
                   </div>
                 {/each}
+              </div>
+            {/if}
+
+            <!-- Suggested Inquiries: Dynamic state-contingent student intentions -->
+            {#if turn.prompt_launchers && turn.prompt_launchers.length > 0}
+              <div class="discussion-starters-block in-thread">
+                <span class="starters-eyebrow">Suggested inquiries:</span>
+                <div class="starters-list">
+                  {#each turn.prompt_launchers as launcher}
+                    <button
+                      type="button"
+                      class="btn-scholastic-starter"
+                      onclick={() => handleSelectStarter(launcher.prompt)}
+                      disabled={isBusy}
+                    >
+                      <span class="starter-symbol">§</span>
+                      <span class="starter-label">{launcher.title || launcher.prompt}</span>
+                    </button>
+                  {/each}
+                </div>
               </div>
             {/if}
 
@@ -595,6 +592,12 @@
     margin-top: 16px;
     padding-top: 14px;
     border-top: 1px solid var(--color-graphite-border);
+  }
+
+  .discussion-starters-block.in-thread {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed var(--color-graphite-border);
   }
 
   .starters-eyebrow {

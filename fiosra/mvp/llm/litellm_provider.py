@@ -94,6 +94,8 @@ class LiteLLMProvider:
             call_options["user"] = request.metadata["user"]
         if request.response_format:
             call_options["response_format"] = request.response_format
+        if self.provider_name == "openrouter":
+            call_options["extra_body"] = {"reasoning": {"effort": "none"}}
 
         started_at = time.perf_counter()
         try:
