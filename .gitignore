@@ -42,8 +42,13 @@ out/
 # Database / Local storage
 *.sqlite
 *.db
+*.dump
+*.cypher
 pgdata/
 storage/
+db_dumps/*
+!db_dumps/*.tar.gz
+
 
 # IDE & OS
 .DS_Store
