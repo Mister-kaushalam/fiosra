@@ -222,7 +222,7 @@ async def handle_dialogue_turn(
     discourse_phase = graph_result.get("discourse_phase", "substantive_inquiry")
     response_text = graph_result.get("final_verified_response") or graph_result.get("draft_response") or ""
     is_adversarial = discourse_phase == "adversarial"
-    hint_rung = graph_result.get("hint_rung") if (request.hint_requested and discourse_phase == "hint_scaffold") else None
+    hint_rung = graph_result.get("hint_rung") if (request.hint_requested and discourse_phase == "hint_scaffold") else engine_rung
     action_capsules = graph_result.get("action_capsules", []) if not request.hint_requested else []
     prompt_launchers = graph_result.get("prompt_launchers", [])
     learner_radar = graph_result.get("learner_radar")

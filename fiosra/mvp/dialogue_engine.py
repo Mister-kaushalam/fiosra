@@ -215,20 +215,17 @@ class SocraticDialogueEngine:
 
             text_lower = student_input.lower()
             if any(w in text_lower for w in ["counter", "challenge", "alternative", "against"]):
-                strat = "Challenge claim with historical counter-evidence"
-                resp = "If we test your claim against the assigned exhibits, what contradictory evidence or alternative institutional explanation presents the strongest challenge?"
+                strat = "Challenge claim with counter-evidence"
+                resp = "If we test your claim against the assigned exhibits, what contradictory evidence or alternative framework presents the strongest challenge?"
             elif any(w in text_lower for w in ["premise", "assumption", "presuppose", "unstated"]):
                 strat = "Unpack unstated premise and causal assumption"
-                resp = "What implicit premise are you taking for granted regarding the causal mechanisms connecting these institutional changes to the economic outcomes?"
+                resp = "What implicit premise are you taking for granted regarding the causal mechanisms connecting these actions to the observed outcomes?"
             elif any(w in text_lower for w in ["evidence", "ground", "source", "document", "exhibit", "citation"]):
                 strat = "Guide evidence grounding in assigned exhibits"
-                resp = "Which specific passage, fiscal table, or administrative record in the assigned exhibit best substantiates this interpretation over an alternative?"
-            elif any(w in text_lower for w in ["mughal", "delhi", "sultanate", "colonial", "british"]):
-                strat = "Targeted historical epoch inquiry"
-                resp = f"Focusing on this specific period in your analysis: what primary documentation or institutional reform best justifies your interpretation?"
+                resp = "Which specific passage, data point, or case record in the assigned exhibit best substantiates this interpretation over an alternative?"
             elif len(student_input.split()) <= 4:
                 strat = "Elaborate conceptual focus"
-                resp = f"How would you connect your focus on '{student_input.strip()}' to the central prompt regarding institutional adaptations and economic networks?"
+                resp = f"How would you connect your focus on '{student_input.strip()}' to the core questions and frameworks in the assignment prompt?"
             else:
                 rung_strategies = {
                     0: (
@@ -237,7 +234,7 @@ class SocraticDialogueEngine:
                     ),
                     1: (
                         "Conceptual nudge: Highlight foundational concepts without giving away steps.",
-                        f"Which specific primary evidence or historical distinction in the assigned exhibits supports this interpretation?",
+                        "Which specific evidence, data, or concept in the assigned exhibits supports this interpretation?",
                     ),
                     2: (
                         "Procedural guide: Point to concrete next analytical step.",
@@ -245,7 +242,7 @@ class SocraticDialogueEngine:
                     ),
                     3: (
                         "Worked analogy: Provide isomorphic model with different context.",
-                        "How can you synthesize these points into a qualified thesis that addresses alternative historical interpretations?",
+                        "How can you synthesize these points into a qualified thesis that addresses alternative interpretations?",
                     ),
                 }
                 strat, resp = rung_strategies.get(active_rung, rung_strategies[0])
@@ -281,13 +278,13 @@ class SocraticDialogueEngine:
         generation = await llm_orchestrator.enhance(
             purpose="socratic_dialogue_turn",
             system_prompt=(
-                "You are an expert Socratic tutor in a university history seminar. "
-                "Your pedagogical mission is to guide the student toward independent critical thinking and evidence-grounded historical analysis. "
+                f"You are an expert Socratic tutor in a university {domain} seminar. "
+                "Your pedagogical mission is to guide the student toward independent critical thinking and evidence-grounded analysis. "
                 "Engage directly and specifically with the student's message, claim, or question. "
                 "Output exactly one focused, intellectually rigorous Socratic inquiry ending in a question mark. "
                 "Never give away the final thesis, direct answers, or do the writing for the student. "
-                "Push the student to interrogate their assumptions, substantiate their claims with specific primary sources, "
-                "or explain the causal links between historical events."
+                "Push the student to interrogate their assumptions, substantiate their claims with specific exhibits, "
+                "or explain the causal links between principles and real-world outcomes."
                 + (f"\n\nStudent's learning context:\n{historical_context}" if historical_context else "")
             ),
             user_prompt=(
