@@ -16,8 +16,8 @@ help:
 	@echo "  make db-up      - Start PostgreSQL 16 + pgvector and Neo4j containers"
 	@echo "  make db-down    - Stop database containers"
 	@echo "  make db-seed    - Seed baseline curriculum & misconceptions (via seed_pipeline)"
-	@echo "  make db-dump    - Dump live PostgreSQL & Neo4j state into $(SNAPSHOT_TAR)"
-	@echo "  make db-restore - Restore PostgreSQL & Neo4j from $(DUMP_DIR)/ or snapshot archive"
+	@echo "  make db-dump    - Dump PostgreSQL, Neo4j & storage/ into $(SNAPSHOT_TAR)"
+	@echo "  make db-restore - Restore PostgreSQL, Neo4j & storage/ from $(DUMP_DIR)/ or snapshot"
 	@echo "  make lint       - Check code style with ruff"
 	@echo "  make clean      - Remove python caches and build artifacts"
 
