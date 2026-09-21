@@ -256,10 +256,21 @@ class CourseService:
             mid = str(a["module_id"])
             if mid not in assignments_by_module:
                 assignments_by_module[mid] = []
+            spec = a["spec"] if isinstance(a["spec"], dict) else {}
+            published = spec.get("published") or {}
+            task = published.get("task") or {}
+            raw_prompt = task.get("prompt") or spec.get("prompt") or ""
+            # Extract first paragraph as concise clean summary
+            first_para = raw_prompt.split("\n\n")[0] if raw_prompt else ""
+            clean_summary = first_para.replace("###", "").replace("#", "").strip()[:240]
+            rubric_items = published.get("public_rubric") or spec.get("rubric_criteria") or []
             assignments_by_module[mid].append({
                 "assignment_id": str(a["assignment_id"]),
-                "title": a["title"],
-                "status": a["spec"].get("status", "draft") if isinstance(a["spec"], dict) else "draft",
+                "title": published.get("title") or a["title"],
+                "status": spec.get("status", "draft"),
+                "summary": clean_summary,
+                "rubric_count": len(rubric_items),
+                "target_kcs": published.get("target_kcs") or spec.get("target_kcs") or [],
             })
 
         modules: list[ModuleResponse] = []
