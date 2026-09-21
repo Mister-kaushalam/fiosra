@@ -97,6 +97,9 @@ class PublishedAssignmentSpec(BaseModel):
     title: str
     purpose: str
     task: AssignmentTask
+    course_title: str | None = None
+    department: str | None = None
+    domain: str | None = None
     learning_goals: list[str] = Field(default_factory=list)
     source_pack: list[PublicSource] = Field(default_factory=list)
     public_rubric: list[PublicRubricCriterion] = Field(default_factory=list)
