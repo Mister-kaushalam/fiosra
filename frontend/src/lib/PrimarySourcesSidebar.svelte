@@ -1102,7 +1102,7 @@
                         <div class="fw-app"><strong>Guidance:</strong> {src.relevance_guidance}</div>
                       {/if}
                       {#if src.excerpt || src.passage}
-                        <blockquote class="src-excerpt">"{src.excerpt || src.passage}"</blockquote>
+                        <blockquote class="src-excerpt">{src.excerpt || src.passage}</blockquote>
                       {/if}
                       {#if src.citation}
                         <div class="crit-sub"><em>{src.citation}</em></div>
