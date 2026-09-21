@@ -308,6 +308,14 @@
     .sheet-page-2 {
       page-break-before: always;
       break-before: page;
+      page-break-after: always;
+      break-after: page;
+      padding-top: 2mm;
+      padding-bottom: 2mm;
+    }
+    .sheet-page-3 {
+      page-break-before: always;
+      break-before: page;
       padding-top: 2mm;
     }
     .sheet-page-break {
@@ -1078,7 +1086,7 @@
             <!-- Header for Page 2 -->
             <div class="page-continuation-header">
               <span>{displayCourse}{assignment?.published?.title && displayCourse !== assignment.published.title ? ` — ${assignment.published.title}` : ''}</span>
-              <span class="page-num-pill">Page 2 of 2</span>
+              <span class="page-num-pill">Page 2 of 3</span>
             </div>
 
             <!-- Section II: Assigned Primary Sources & Frameworks -->
@@ -1170,6 +1178,18 @@
                 </table>
               </section>
             {/if}
+          </div>
+
+          <!-- EXPLICIT PAGE BREAK BEFORE SECTION IV -->
+          <div class="sheet-page-break"></div>
+
+          <!-- PAGE 3: LEARNING GOALS & INTEGRITY -->
+          <div class="sheet-page sheet-page-3">
+            <!-- Header for Page 3 -->
+            <div class="page-continuation-header">
+              <span>{displayCourse}{assignment?.published?.title && displayCourse !== assignment.published.title ? ` — ${assignment.published.title}` : ''}</span>
+              <span class="page-num-pill">Page 3 of 3</span>
+            </div>
 
             <!-- Section IV: Learning Goals -->
             {#if displayGoalsList.length > 0}
@@ -2061,7 +2081,7 @@
   }
 
   .sheet-page-break::after {
-    content: 'PAGE BREAK (PAGE 2 OF 2 BEGINS)';
+    content: 'PAGE BREAK';
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 9.5px;
     font-weight: 800;
