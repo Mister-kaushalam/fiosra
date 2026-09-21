@@ -80,6 +80,9 @@ class LiteLLMProvider:
         if self.provider_name == "openai" and self.model.startswith("gpt-5"):
             call_options["max_completion_tokens"] = request.max_tokens
             call_options["reasoning_effort"] = "minimal"
+        elif self.provider_name == "gemini" or "gemini" in self.model:
+            call_options["temperature"] = 1.0
+            call_options["max_tokens"] = request.max_tokens
         else:
             call_options["temperature"] = request.temperature
             call_options["max_tokens"] = request.max_tokens

@@ -1,5 +1,5 @@
 <script>
-  import { onMount, tick, untrack } from 'svelte';
+  import { onMount, tick, untrack, onDestroy } from 'svelte';
   import * as pdfjsLib from 'pdfjs-dist';
   import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
   import 'pdfjs-dist/web/pdf_viewer.css';
@@ -35,6 +35,7 @@
     url = '',
     title = 'Document',
     searchTerm = '',
+    initialPage = 1,
     onQuoteEvidence = () => null,
     onMatchesChange = () => null,
   } = $props();
@@ -97,6 +98,15 @@
   let pdfHeadings = [];
   let activeHighlightedSpans = [];
   let searchDebounceTimer = null;
+  let pageObserver = null;
+
+  onDestroy(() => {
+    if (pageObserver) {
+      pageObserver.disconnect();
+      pageObserver = null;
+    }
+    if (searchDebounceTimer) clearTimeout(searchDebounceTimer);
+  });
 
   const HISTORICAL_ANCHORS = {
     mughal: ['mughal', 'akbar', 'babur', 'humayun', 'shah jahan', 'aurangzeb', 'jahangir'],
@@ -281,13 +291,59 @@
 
   async function renderAllPages() {
     if (!pdfDoc || !pagesContainer) return;
+    if (pageObserver) {
+      pageObserver.disconnect();
+      pageObserver = null;
+    }
     pagesContainer.innerHTML = '';
     renderedPages.clear();
     clearReverseIndex();
 
+    let defaultWidth = 800;
+    let defaultHeight = 1100;
+    try {
+      const p1 = await pdfDoc.getPage(1);
+      const vp = p1.getViewport({ scale });
+      defaultWidth = vp.width;
+      defaultHeight = vp.height;
+    } catch (e) {}
+
+    const frag = document.createDocumentFragment();
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      if (!pagesContainer) break;
-      await renderPage(pageNum);
+      const pageWrapper = document.createElement('div');
+      pageWrapper.className = 'pdf-page-wrapper';
+      pageWrapper.id = `pdf-page-${pageNum}`;
+      pageWrapper.dataset.pageNum = String(pageNum);
+      pageWrapper.style.width = `${defaultWidth}px`;
+      pageWrapper.style.minHeight = `${defaultHeight}px`;
+      frag.appendChild(pageWrapper);
+    }
+    pagesContainer.appendChild(frag);
+
+    const scrollContainer = pagesContainer.closest('.pdf-viewport-scroll') || null;
+
+    pageObserver = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          const p = parseInt(entry.target.dataset.pageNum, 10);
+          if (!isNaN(p) && !renderedPages.has(p)) {
+            renderPage(p, entry.target);
+          }
+        }
+      }
+    }, {
+      root: scrollContainer,
+      rootMargin: '600px 0px',
+    });
+
+    for (const child of pagesContainer.children) {
+      pageObserver.observe(child);
+    }
+
+    const startPage = (initialPage && initialPage >= 1 && initialPage <= numPages) ? initialPage : 1;
+    await renderPage(startPage);
+    if (startPage > 1) {
+      await scrollToPage(startPage);
     }
 
     if (searchTerm) {
@@ -373,42 +429,44 @@
     }
   }
 
-  async function renderPage(pageNum) {
-    if (!pdfDoc || !pagesContainer) return;
+  async function renderPage(pageNum, existingWrapper = null) {
+    if (!pdfDoc || !pagesContainer || renderedPages.has(pageNum)) return;
+    renderedPages.add(pageNum);
 
     try {
       const page = await pdfDoc.getPage(pageNum);
       if (!pagesContainer) return;
       const viewport = page.getViewport({ scale });
 
-      const pageWrapper = document.createElement('div');
-      pageWrapper.className = 'pdf-page-wrapper';
-      pageWrapper.id = `pdf-page-${pageNum}`;
+      const pageWrapper = existingWrapper || document.getElementById(`pdf-page-${pageNum}`);
+      if (!pageWrapper) return;
       pageWrapper.style.width = `${viewport.width}px`;
-      pageWrapper.style.height = `${viewport.height}px`;
+      pageWrapper.style.minHeight = `${viewport.height}px`;
 
       // 1. Render Canvas
-      const canvas = document.createElement('canvas');
-      canvas.className = 'pdf-page-canvas';
+      let canvas = pageWrapper.querySelector('canvas.pdf-page-canvas');
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        canvas.className = 'pdf-page-canvas';
+        pageWrapper.appendChild(canvas);
+      }
       const context = canvas.getContext('2d');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      pageWrapper.appendChild(canvas);
 
       await page.render({ canvasContext: context, viewport }).promise;
 
-      // Always append the rendered canvas to DOM immediately
-      if (!pagesContainer) return;
-      pagesContainer.appendChild(pageWrapper);
-      renderedPages.add(pageNum);
-
       // 2. Render TextLayer (enables text selection and search highlighting)
       try {
-        const textLayerDiv = document.createElement('div');
-        textLayerDiv.className = 'textLayer';
+        let textLayerDiv = pageWrapper.querySelector('div.textLayer');
+        if (!textLayerDiv) {
+          textLayerDiv = document.createElement('div');
+          textLayerDiv.className = 'textLayer';
+          pageWrapper.appendChild(textLayerDiv);
+        }
+        textLayerDiv.innerHTML = '';
         textLayerDiv.style.width = `${viewport.width}px`;
         textLayerDiv.style.height = `${viewport.height}px`;
-        pageWrapper.appendChild(textLayerDiv);
 
         const textContent = await page.getTextContent();
 
@@ -440,6 +498,7 @@
         console.warn(`Text layer skipped for page ${pageNum}:`, textErr);
       }
     } catch (err) {
+      renderedPages.delete(pageNum);
       console.warn(`Failed rendering page ${pageNum}:`, err);
     }
   }
@@ -629,6 +688,53 @@
     highlightMatch(currentMatchIndex);
   }
 
+  export async function scrollToPage(targetPage) {
+    if (!targetPage || !pdfDoc) return;
+    const p = Math.min(Math.max(1, targetPage), numPages);
+    currentPage = p;
+    await renderPage(p);
+    await tick();
+    const el = document.getElementById(`pdf-page-${p}`);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }
+
+  export async function scrollToCitation(citation) {
+    if (!citation || !pdfDoc) return;
+    // 1. Check section number (§1.2, §9.1, §12.1, §13.1, §17.2)
+    const secMatch = citation.match(/§\s*(\d+(?:\.\d+)?)/);
+    if (secMatch && pdfOutline.length > 0) {
+      const secNum = secMatch[1];
+      const found = pdfOutline.find((b) => b.title.startsWith(secNum) || b.title.includes(` ${secNum} `) || b.title.includes(`${secNum}.`));
+      if (found && found.pageNum) {
+        await scrollToPage(found.pageNum);
+        return;
+      }
+    }
+    // 2. Check title match in outline bookmarks
+    if (pdfOutline.length > 0) {
+      const lower = citation.toLowerCase();
+      const found = pdfOutline.find((b) => lower.includes(b.title.toLowerCase()) || b.title.toLowerCase().split(' ').some(w => w.length > 4 && lower.includes(w)));
+      if (found && found.pageNum) {
+        await scrollToPage(found.pageNum);
+        return;
+      }
+    }
+    // 3. Check page number (pp. 18 or p. 18)
+    const pageMatch = citation.match(/pp?\.?\s*(\d+)/i);
+    if (pageMatch) {
+      const bookPage = parseInt(pageMatch[1], 10);
+      const target = (numPages > 100 && bookPage < numPages - 14) ? bookPage + 14 : bookPage;
+      await scrollToPage(target);
+    }
+  }
+
+  export async function scrollToSection(sectionTitle) {
+    if (!sectionTitle || !pdfDoc) return;
+    return await scrollToCitation(sectionTitle);
+  }
+
   function handleMouseUp() {
     if (typeof window === 'undefined') return;
     const selection = window.getSelection();
@@ -720,15 +826,15 @@
     width: 100%;
     height: 100%;
     position: relative;
-    background: #e5e7eb;
+    background: var(--color-obsidian, #f8f8f5);
     overflow: hidden;
   }
 
   :global([data-theme="dark"]) .pdf-viewer-root {
-    background: #090d13;
+    background: var(--color-obsidian, #121418);
   }
 
-  /* Viewport Scroll: exact same feel as assignment brief scroll container */
+  /* Viewport Scroll: exact same feel as assignment brief and canvas scroll container */
   .pdf-viewport-scroll {
     flex: 1;
     min-height: 0;
@@ -738,11 +844,11 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    background: #e5e7eb;
+    background: var(--color-obsidian, #f8f8f5);
   }
 
   :global([data-theme="dark"]) .pdf-viewport-scroll {
-    background: #090d13;
+    background: var(--color-obsidian, #121418);
   }
 
   .pdf-pages-stack {

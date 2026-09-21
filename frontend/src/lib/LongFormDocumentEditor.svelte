@@ -31,6 +31,8 @@
     onDrawerStateChange = () => null,
     onPressureChange = () => null,
     onFocusedBlockChange = () => null,
+    isZenFullscreen = false,
+    onToggleZen = () => null,
   } = $props();
 
   const blockTypes = {
@@ -258,19 +260,7 @@
   let totalPages = $derived(Math.max(1, Object.keys(pagesMap).length));
   let isOutlineOpen = $state(false);
 
-  // Canvas Width / Zoom State (narrow | wide | max) - strictly preserves A4 aspect ratio (210/297)
-  let canvasWidthMode = $state(
-    (typeof localStorage !== 'undefined' && localStorage.getItem('fiosra_canvas_width_mode')) || 'wide'
-  );
-
-  function setCanvasWidthMode(mode) {
-    if (['narrow', 'wide', 'max'].includes(mode)) {
-      canvasWidthMode = mode;
-      try {
-        localStorage.setItem('fiosra_canvas_width_mode', mode);
-      } catch {}
-    }
-  }
+  // Canvas Width: Permanently Max (100% End-to-End A4)
 
   function saveCurrentPageEdits() {
     if (!editor) return;
@@ -1796,10 +1786,7 @@
   <!-- Main Canvas Pane (Pushes to left when chat drawer is open) -->
   <main class="editor-main-pane">
     <section 
-      class="minimal-notion-shell" 
-      class:canvas-narrow={canvasWidthMode === 'narrow'}
-      class:canvas-wide={canvasWidthMode === 'wide'}
-      class:canvas-max={canvasWidthMode === 'max'}
+      class="minimal-notion-shell canvas-max" 
       aria-label="Paginated A4 Socratic Canvas"
     >
       <!-- Minimalist Top Navigation & Status -->
@@ -1916,22 +1903,26 @@
         </div>
 
         <div class="toolbar-right">
-          <!-- Canvas Width (Zoom) Selector - Strictly Preserves A4 -->
-          <div class="canvas-zoom-control">
-            <span class="zoom-icon" aria-hidden="true">⤢</span>
-            <select 
-              id="canvas-width-dropdown"
-              class="canvas-zoom-select"
-              value={canvasWidthMode}
-              onchange={(e) => setCanvasWidthMode(e.currentTarget.value)}
-              title="Canvas Width (Narrow / Wide / Max)"
-              aria-label="Canvas Width"
-            >
-              <option value="narrow">Narrow</option>
-              <option value="wide">Wide</option>
-              <option value="max">Max</option>
-            </select>
-          </div>
+
+          <!-- Zen 3-Box Focus Mode Toggle (Icon only) -->
+          <button
+            type="button"
+            class="btn-zen-canvas-toggle"
+            class:active={isZenFullscreen}
+            onclick={onToggleZen}
+            title={isZenFullscreen ? 'Exit Zen Focus Mode (Esc or Fn+F)' : 'Zen 3-Box Focus Mode (Fn+F)'}
+            aria-label="Toggle Zen 3-Box Focus Mode"
+          >
+            {#if isZenFullscreen}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>
+              </svg>
+            {:else}
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+              </svg>
+            {/if}
+          </button>
 
           <div class="v-divider"></div>
 
@@ -1971,91 +1962,86 @@
         </aside>
       {/if}
 
-      <!-- Clean, Distraction-Free Notion-Style Page (Expansive A4 / Letter Canvas) -->
+      <!-- Pristine A4 Document Page (Strict A4 Aspect Ratio 210 / 297 with Integrated Header & Footer) -->
       <div class="document-page" class:epistemic-active={isEpistemicLens}>
         <div class="document-page-header">
           <span class="page-watermark">
-            Page {currentPageIndex} of {totalPages}
-            <span class="page-watermark-dim">• {canvasWidthMode.toUpperCase()}</span>
+            {#if totalPages > 1}
+              Page {currentPageIndex} of {totalPages}
+              <span class="page-watermark-dim">• A4</span>
+            {:else}
+              <span class="page-watermark-dim">A4</span>
+            {/if}
           </span>
         </div>
+
         <div bind:this={editorElement} class="notion-editor-container"></div>
-      </div>
 
-      <!-- Bottom Pagination Bar -->
-      <div class="canvas-pagination-bar" aria-label="Page Navigation">
-        <div class="pagination-controls">
-          <button 
-            type="button" 
-            class="page-nav-btn prev-btn" 
-            onclick={prevPage}
-            disabled={currentPageIndex <= 1}
-            title="Previous page"
-          >
-            ‹ Prev
-          </button>
-
-          <div class="page-numbers-group">
-            {#each Object.keys(pagesMap).map(Number).sort((a, b) => a - b) as p}
-              <button 
-                type="button" 
-                class="page-number-pill" 
-                class:active={p === currentPageIndex}
-                onclick={() => goToPage(p)}
-                title="Page {p}"
-              >
-                {p}
-              </button>
-            {/each}
+        <!-- Integrated A4 Document Footer (Inside the page, zero external margins) -->
+        <footer class="document-page-footer">
+          <div class="page-footer-stats">
+            <span>{wordCount.toLocaleString()} words</span>
+            <span>•</span>
+            <span>{readingTimeMin} min read</span>
+            {#if totalPages > 1}
+              <span>•</span>
+              <span>Page {currentPageIndex} of {totalPages}</span>
+            {/if}
+            {#if documentHeadings.length > 0}
+              <span>•</span>
+              <span>{documentHeadings.length} {documentHeadings.length === 1 ? 'section' : 'sections'}</span>
+            {/if}
+            {#if !disabled}
+              <span>•</span>
+              <button type="button" class="page-footer-add-btn" onclick={addNewBlankPage} title="Add a new page">＋ Add page</button>
+            {/if}
           </div>
 
-          <button 
-            type="button" 
-            class="page-nav-btn next-btn" 
-            onclick={nextPage}
-            disabled={currentPageIndex >= totalPages}
-            title="Next page"
-          >
-            Next ›
-          </button>
-
-          <div class="pagination-divider"></div>
-
-          <button 
-            type="button" 
-            class="pagination-add-page-btn" 
-            onclick={addNewBlankPage}
-            disabled={disabled}
-            title="Open a new blank page"
-          >
-            <span class="plus-sign">＋</span>
-            <span>Add Page</span>
-          </button>
-
           {#if totalPages > 1}
-            <button 
-              type="button" 
-              class="pagination-delete-page-btn" 
-              onclick={() => deletePage(currentPageIndex)}
-              disabled={disabled}
-              title="Delete current page ({currentPageIndex})"
-            >
-              <span>Delete Page</span>
-            </button>
+            <div class="page-footer-pagination">
+              <button 
+                type="button" 
+                class="page-nav-mini-btn" 
+                onclick={prevPage}
+                disabled={currentPageIndex <= 1}
+                title="Previous page"
+              >
+                ‹
+              </button>
+              {#each Object.keys(pagesMap).map(Number).sort((a, b) => a - b) as p}
+                <button 
+                  type="button" 
+                  class="page-mini-pill" 
+                  class:active={p === currentPageIndex}
+                  onclick={() => goToPage(p)}
+                  title="Go to Page {p}"
+                >
+                  {p}
+                </button>
+              {/each}
+              <button 
+                type="button" 
+                class="page-nav-mini-btn" 
+                onclick={nextPage}
+                disabled={currentPageIndex >= totalPages}
+                title="Next page"
+              >
+                ›
+              </button>
+              {#if totalPages > 1 && !disabled}
+                <button 
+                  type="button" 
+                  class="page-delete-mini-btn" 
+                  onclick={() => deletePage(currentPageIndex)}
+                  title="Delete current page ({currentPageIndex})"
+                >
+                  ✕
+                </button>
+              {/if}
+            </div>
           {/if}
-        </div>
+        </footer>
       </div>
-
-      <!-- Minimal Bottom Status Info -->
-      <footer class="minimal-footer">
-        <span>{wordCount.toLocaleString()} words</span>
-        <span>•</span>
-        <span>{readingTimeMin} min read</span>
-        <span>•</span>
-        <span>{totalPages} {totalPages === 1 ? 'page' : 'pages'}</span>
-        <span>•</span>
-        <span>{documentHeadings.length} {documentHeadings.length === 1 ? 'section' : 'sections'}</span>
-      </footer>
     </section>
   </main>
 
@@ -2308,80 +2294,50 @@
      Notion-Style Minimal Shell & Typography
      ------------------------------------------------------------- */
   .minimal-notion-shell {
-    margin: 0 auto;
-    --canvas-width: 980px;
-    --canvas-min-height: 1386px;
-    --canvas-font-size: 17px;
-    --canvas-padding: clamp(52px, 6vw, 76px) clamp(40px, 5.5vw, 64px);
-    max-width: min(var(--canvas-width, 980px), 100%);
+    margin: 0 auto 0;
+    padding-bottom: 0;
     width: 100%;
+    max-width: 100%;
+    --canvas-font-size: 17.5px;
+    --canvas-padding: clamp(40px, 4.5vw, 60px) clamp(36px, 4vw, 56px) clamp(20px, 2.5vw, 30px);
     display: flex;
     flex-direction: column;
-    gap: 16px;
-    transition: max-width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    gap: 0;
   }
 
-  .minimal-notion-shell.canvas-narrow {
-    --canvas-width: 800px;
-    --canvas-min-height: 1131px;
-    --canvas-font-size: 15.5px;
-    --canvas-padding: clamp(44px, 5vw, 64px) clamp(34px, 4.5vw, 54px);
-  }
-
-  .minimal-notion-shell.canvas-wide {
-    --canvas-width: 980px;
-    --canvas-min-height: 1386px;
-    --canvas-font-size: 17px;
-    --canvas-padding: clamp(52px, 6vw, 76px) clamp(40px, 5.5vw, 64px);
-  }
-
-  .minimal-notion-shell.canvas-max {
-    --canvas-width: 1200px;
-    --canvas-min-height: 1697px;
-    --canvas-font-size: 18.5px;
-    --canvas-padding: clamp(62px, 7vw, 88px) clamp(50px, 6.5vw, 78px);
-  }
-
-  .canvas-zoom-control {
+  .btn-zen-canvas-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
     background: var(--color-graphite, #ffffff);
     border: 1px solid var(--color-graphite-border, #e2e4dc);
     border-radius: var(--radius-xs, 4px);
-    padding: 2px 6px 2px 7px;
+    color: var(--color-slate-subtle, #64748b);
+    cursor: pointer;
     transition: all 0.15s ease;
-  }
-
-  .canvas-zoom-control:hover,
-  .canvas-zoom-control:focus-within {
-    border-color: var(--color-aurora, #0284c7);
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.08);
-  }
-
-  .zoom-icon {
-    font-size: 13px;
-    color: var(--color-slate-muted, #646a78);
     user-select: none;
     line-height: 1;
   }
 
-  .canvas-zoom-select {
-    background: transparent;
-    border: none;
-    outline: none;
-    font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, sans-serif);
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-heading, #121418);
-    cursor: pointer;
-    padding: 2px 2px 2px 0;
+  .btn-zen-canvas-toggle:hover {
+    border-color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #0284c7);
+    background: rgba(2, 132, 199, 0.08);
   }
 
-  .canvas-zoom-select option {
-    background: #ffffff;
-    color: #121418;
-    font-size: 12px;
+  .btn-zen-canvas-toggle.active {
+    background: rgba(45, 212, 191, 0.14);
+    border-color: rgba(45, 212, 191, 0.6);
+    color: var(--color-teal-dark, #0f766e);
+  }
+
+  :global([data-theme="dark"]) .btn-zen-canvas-toggle.active {
+    background: rgba(45, 212, 191, 0.2);
+    border-color: rgba(45, 212, 191, 0.6);
+    color: var(--color-teal-bright, #2dd4bf);
   }
 
   .minimal-toolbar {
@@ -2634,7 +2590,7 @@
     color: #78350f;
   }
 
-  /* Pristine Document Page (Strict A4 Aspect Ratio 210/297 with Dynamic Zoom) */
+  /* Pristine Document Page (Strict A4 Aspect Ratio 210 / 297 with Zero Bottom Margin) */
   .document-page {
     position: relative;
     background: var(--color-bone-surface, #ffffff);
@@ -2642,12 +2598,14 @@
     border-radius: var(--radius-lg, 12px);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     width: 100%;
-    max-width: var(--canvas-width, 820px);
-    min-height: var(--canvas-min-height, 1160px);
+    max-width: 100%;
     aspect-ratio: 210 / 297;
-    padding: var(--canvas-padding, clamp(48px, 6vw, 72px) clamp(36px, 5vw, 64px));
+    padding: var(--canvas-padding, clamp(48px, 6vw, 72px) clamp(36px, 5vw, 64px) clamp(20px, 3vw, 32px));
     transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
     box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 0 !important;
   }
 
   .document-page-header {
@@ -2671,128 +2629,113 @@
     margin-left: 4px;
   }
 
-  /* Bottom Pagination Bar */
-  .canvas-pagination-bar {
+  /* Integrated Document Page Footer (Inside A4 Page) */
+  .document-page-footer {
     display: flex;
-    justify-content: center;
     align-items: center;
-    margin: 20px 0 10px;
+    justify-content: space-between;
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--color-graphite-border, #e2e4dc);
+    font-size: 11px;
+    color: var(--color-slate-muted, #94a3b8);
     user-select: none;
   }
 
-  .pagination-controls {
-    display: inline-flex;
+  .page-footer-stats {
+    display: flex;
     align-items: center;
-    gap: 6px;
-    background: var(--color-bone-muted, #f4f5f0);
-    border: 1px solid var(--color-graphite-border, #e2e4dc);
-    border-radius: 30px;
-    padding: 4px 10px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    gap: 8px;
+    flex-wrap: wrap;
   }
 
-  .page-nav-btn {
+  .page-footer-add-btn {
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: 20px;
-    padding: 4px 10px;
-    font-size: 12px;
+    border: none;
+    font-size: inherit;
+    font-weight: 600;
+    color: var(--color-slate-light, #64748b);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    padding: 0;
+    transition: color 0.15s ease;
+  }
+
+  .page-footer-add-btn:hover {
+    color: #2563eb;
+  }
+
+  .page-footer-pagination {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+  }
+
+  .page-nav-mini-btn {
+    background: transparent;
+    border: 1px solid var(--color-graphite-border, #e2e4dc);
+    border-radius: 4px;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
     font-weight: 600;
     color: var(--color-heading, #121418);
     cursor: pointer;
-    transition: all 0.12s ease;
   }
 
-  .page-nav-btn:hover:not(:disabled) {
+  .page-nav-mini-btn:hover:not(:disabled) {
     background: var(--color-graphite-hover, #e8eae3);
-    border-color: var(--color-graphite-border, #cbd5e1);
   }
 
-  .page-nav-btn:disabled {
-    opacity: 0.35;
+  .page-nav-mini-btn:disabled {
+    opacity: 0.3;
     cursor: not-allowed;
   }
 
-  .page-numbers-group {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-  }
-
-  .page-number-pill {
-    min-width: 28px;
-    height: 28px;
-    padding: 0 6px;
-    border-radius: 14px;
-    background: transparent;
+  .page-mini-pill {
+    min-width: 22px;
+    height: 22px;
+    padding: 0 4px;
+    border-radius: 4px;
     border: 1px solid transparent;
-    font-size: 12px;
-    font-weight: 700;
+    background: transparent;
+    font-size: 11px;
+    font-weight: 600;
     color: var(--color-slate-light, #474d5a);
     cursor: pointer;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.12s ease;
   }
 
-  .page-number-pill:hover:not(.active) {
+  .page-mini-pill:hover:not(.active) {
     background: var(--color-graphite-hover, #e8eae3);
-    color: var(--color-heading, #121418);
   }
 
-  .page-number-pill.active {
+  .page-mini-pill.active {
     background: #2563eb;
     color: #ffffff;
-    border-color: #1d4ed8;
-    box-shadow: 0 1px 4px rgba(37, 99, 235, 0.35);
   }
 
-  .pagination-divider {
-    width: 1px;
-    height: 18px;
-    background: var(--color-graphite-border, #cbd5e1);
-    margin: 0 4px;
-  }
-
-  .pagination-add-page-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: var(--color-graphite, #ffffff);
-    border: 1px solid var(--color-graphite-border, #cbd5e1);
-    border-radius: 20px;
-    padding: 4px 10px;
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--color-heading, #121418);
-    cursor: pointer;
-    transition: all 0.12s ease;
-  }
-
-  .pagination-add-page-btn:hover:not(:disabled) {
-    background: #eff6ff;
-    border-color: #3b82f6;
-    color: #1d4ed8;
-  }
-
-  .pagination-delete-page-btn {
-    display: inline-flex;
-    align-items: center;
+  .page-delete-mini-btn {
     background: transparent;
-    border: 1px solid transparent;
-    border-radius: 20px;
-    padding: 4px 8px;
+    border: none;
     font-size: 11px;
-    font-weight: 600;
     color: #dc2626;
     cursor: pointer;
-    transition: all 0.12s ease;
+    margin-left: 2px;
+    padding: 2px 4px;
   }
 
-  .pagination-delete-page-btn:hover:not(:disabled) {
-    background: #fef2f2;
-    border-color: #fecaca;
+  .notion-editor-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
   }
 
   .notion-editor-container :global(.notion-minimal-prosemirror) {
@@ -2800,7 +2743,8 @@
     font-family: var(--font-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
     font-size: var(--canvas-font-size, 16.5px);
     line-height: 1.8;
-    min-height: calc(var(--canvas-min-height, 1160px) - 180px);
+    flex: 1;
+    min-height: 100%;
     outline: none;
     transition: font-size 0.2s ease;
   }
@@ -2920,7 +2864,9 @@
   .canvas-split-container {
     display: flex;
     width: 100%;
-    height: calc(100vh - 110px);
+    height: 100%;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
     position: relative;
     transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
@@ -3187,7 +3133,7 @@
     overflow-y: auto;
     display: flex;
     justify-content: center;
-    padding: 16px 20px 80px;
+    padding: 16px 20px 0;
     transition: all 0.28s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -4110,5 +4056,22 @@
     font-size: 12px;
     color: var(--color-slate-muted, #64748b);
     padding: 8px 0;
+  }
+
+  .footer-add-page-btn {
+    background: transparent;
+    border: none;
+    font-size: inherit;
+    font-weight: 600;
+    color: var(--color-slate-light, #64748b);
+    cursor: pointer;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    padding: 0;
+    transition: color 0.15s ease;
+  }
+
+  .footer-add-page-btn:hover {
+    color: #2563eb;
   }
 </style>

@@ -3,10 +3,13 @@ tests/test_socratic_agent_graph.py
 Tests for the Socratic Tutor Multi-Agent System wired via LangGraph.
 Validates:
 - Adversarial deflection
-- Normal Socratic progression
+- Normal Socratic progression via unified generation
 - Answer-Isolation Critic interception and loop
 - Checkpoint persistence across turns
+- LLM unavailability transparent failure
+- No phantom action capsules on exploratory turns
 """
+import json
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
@@ -29,7 +32,6 @@ def reset_llm_state():
 def mock_mcp_client():
     client = MagicMock()
     client.call_tool = AsyncMock()
-    # Default tool returns
     async def mock_call(tool_name, arguments):
         if tool_name == "query_student_belief_trajectory":
             return [{"concept": "feudalism", "status": "active"}]
@@ -51,12 +53,44 @@ def mock_mcp_client():
     return client
 
 
+def _make_structured_response(
+    student_move="substantive_claim",
+    claim_summary="Serfs were identical to chattel slaves",
+    tension="Legal status under feudal custom differs from chattel ownership",
+    response="What specific legal distinction does the charter draw between serf obligations and slave status?",
+    is_ready=False,
+):
+    """Helper to create a valid UniversalSocraticTurn JSON string."""
+    return json.dumps({
+        "student_move": student_move,
+        "student_claim_summary": claim_summary,
+        "unexamined_tension": tension,
+        "socratic_response": response,
+        "is_claim_ready_for_draft": is_ready,
+        "formulated_claim_for_draft": None,
+        "suggested_inquiries": [
+            {"title": "Examine the charter", "prompt": "I want to look at what the charter says about land rights."},
+            {"title": "Compare legal status", "prompt": "I want to compare the legal obligations of serfs and slaves."},
+        ]
+    })
+
+
 @pytest.mark.asyncio
-async def test_socratic_graph_normal_flow(mock_mcp_client):
+async def test_socratic_graph_normal_flow(mock_mcp_client, monkeypatch):
     """
     Tests standard pedagogical inquiry turn: adversarial check passes,
-    Socratic turn generated via MCP, approved by Critic.
+    unified generation produces structured output, approved by Critic.
     """
+    from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
+
+    async def mock_enhance(*args, **kwargs):
+        return GuardedGeneration(
+            content=_make_structured_response(),
+            metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
+
     tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
     critic = AnswerIsolationCriticAgent()
     checkpointer = MemorySaver()
@@ -80,10 +114,10 @@ async def test_socratic_graph_normal_flow(mock_mcp_client):
     # LLM-generated Socratic probe — must be non-empty and contain a question
     assert len(final_state["final_verified_response"]) > 20
     assert "?" in final_state["final_verified_response"]
-    assert "Taking your argument regarding" not in final_state["final_verified_response"]
     assert final_state["current_rung"] == 0
     assert final_state["penalty_score"] == 0.0
-    assert final_state["diagnosed_misconception"] is not None
+    # Unified generation populates discourse_phase from LLM classification
+    assert final_state["discourse_phase"] == "substantive_claim"
 
 
 @pytest.mark.asyncio
@@ -119,45 +153,44 @@ async def test_socratic_graph_adversarial_deflection(mock_mcp_client):
 
 
 @pytest.mark.asyncio
-async def test_socratic_graph_critic_rejection_and_remediation():
+async def test_socratic_graph_critic_rejection_and_remediation(monkeypatch):
     """
     Tests that when a draft contains a direct solution leak, the Answer-Isolation Critic
-    rejects it, causing a remediation cycle.
+    rejects it, causing a remediation cycle via unified_generation.
     """
+    from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
+
     mcp = MagicMock()
-    call_count = 0
+    mcp.call_tool = AsyncMock(return_value=[])
 
-    async def mock_call(tool_name, arguments):
-        nonlocal call_count
-        call_count += 1
-        return []
+    turn_attempt = 0
 
-    mcp.call_tool = AsyncMock(side_effect=mock_call)
+    async def mock_enhance(*args, **kwargs):
+        nonlocal turn_attempt
+        turn_attempt += 1
+        if turn_attempt == 1:
+            # First attempt: leaks the answer (critic should reject)
+            return GuardedGeneration(
+                content=_make_structured_response(
+                    response="The correct answer is Option B because of the 1215 charter.",
+                ),
+                metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
+            )
+        else:
+            # Second attempt: clean Socratic question (critic approves)
+            return GuardedGeneration(
+                content=_make_structured_response(
+                    response="Which specific provision of the 1215 charter addresses this?",
+                ),
+                metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
+            )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
 
     tutor = SocraticTutorAgent(mcp_client=mcp)
     critic = AnswerIsolationCriticAgent()
     checkpointer = MemorySaver()
     graph = create_socratic_tutor_graph(tutor_agent=tutor, critic_agent=critic, checkpointer=checkpointer)
-
-    # We mock tutor.generate_socratic_turn to leak on attempt 0 and fix on attempt 1
-    turn_attempt = 0
-    original_generate = tutor.generate_socratic_turn
-
-    async def simulated_generate(state):
-        nonlocal turn_attempt
-        turn_attempt += 1
-        if turn_attempt == 1:
-            return {
-                "draft_response": "The correct answer is Option B because of the 1215 charter.",
-                "current_rung": 1,
-            }
-        else:
-            return {
-                "draft_response": "Which specific provision of the 1215 charter addresses this?",
-                "current_rung": 1,
-            }
-
-    tutor.generate_socratic_turn = simulated_generate
 
     initial_state: TutorSessionState = {
         "session_id": "sess-103",
@@ -179,10 +212,20 @@ async def test_socratic_graph_critic_rejection_and_remediation():
 
 
 @pytest.mark.asyncio
-async def test_socratic_graph_state_persistence_across_turns(mock_mcp_client):
+async def test_socratic_graph_state_persistence_across_turns(mock_mcp_client, monkeypatch):
     """
     Tests that multi-turn dialogue maintains state in the checkpointer using thread_id.
     """
+    from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
+
+    async def mock_enhance(*args, **kwargs):
+        return GuardedGeneration(
+            content=_make_structured_response(),
+            metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
+        )
+
+    monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
+
     tutor = SocraticTutorAgent(mcp_client=mock_mcp_client)
     critic = AnswerIsolationCriticAgent()
     checkpointer = MemorySaver()
@@ -219,27 +262,21 @@ async def test_socratic_graph_state_persistence_across_turns(mock_mcp_client):
 @pytest.mark.asyncio
 async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_client, monkeypatch):
     """
-    Tests the 8-node LangGraph pipeline consuming the Pentagonal Context:
-    co-presence ingestion, Toulmin decomposition, cognitive work allocation,
-    and action packing into Action Capsules and Seminar Starters.
+    Tests the unified pipeline: co-presence ingestion, unified generation with
+    structured output, and action packing into Action Capsules and Seminar Starters.
     """
     from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
-    import json as _json
 
     async def mock_enhance(*args, **kwargs):
-        purpose = kwargs.get("purpose", "")
-        if purpose in ("chip_entry_intentions", "chip_continuation_intentions"):
-            chips = [
-                {"title": "I found key evidence", "prompt": "I found something in the sources that may support my claim."},
-                {"title": "I want to test alternatives", "prompt": "I want to explore a counter-explanation to my claim."},
-            ]
-            return GuardedGeneration(
-                content=_json.dumps(chips),
-                metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
-            )
         return GuardedGeneration(
-            content="This raises a key question about the causal warrant: what specific mechanism in Necker's data directly demonstrates sovereign insolvency?",
-            metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+            content=_make_structured_response(
+                student_move="substantive_claim",
+                claim_summary="The royal bankruptcy was caused by American War debt",
+                tension="Necker's budget data may overstate war costs relative to structural fiscal issues",
+                response="What specific mechanism in Necker's data directly demonstrates sovereign insolvency?",
+                is_ready=True,
+            ),
+            metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
         )
 
     monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
@@ -260,7 +297,7 @@ async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_
             }
         ],
         "focused_block_id": "block-para-1",
-        "student_input": "Why did the crown go bankrupt in 1788?",
+        "student_input": "The royal bankruptcy was caused by American War debt",
         "open_exhibit_id": "doc-necker-budget",
         "open_exhibit_page": 12,
         "current_rung": 0,
@@ -275,50 +312,45 @@ async def test_socratic_graph_pentagonal_context_and_epistemic_actions(mock_mcp_
     assert final_state["focused_block_id"] == "block-para-1"
     assert "American War debt" in final_state["focused_block_text"]
 
-    # 2. Verify Toulmin Decomposition
-    toulmin = final_state.get("toulmin_structure", {})
-    assert toulmin.get("has_warrant") is True
-    assert toulmin.get("has_evidence") is True
-    assert toulmin.get("stance") == "Grounded"
+    # 2. Verify LLM classified the student move
+    assert final_state["discourse_phase"] == "substantive_claim"
+    thoughts = final_state.get("thoughts_of_tutorbot", {})
+    assert thoughts.get("student_move") == "substantive_claim"
+    assert thoughts.get("unexamined_tension") is not None
 
-    # 3. Verify Cognitive Work Allocation
-    assert "intellectual_operation" in final_state
-
-    # 4. Verify Epistemic Action Packing
+    # 3. Verify Action Capsule (claim flagged as draft-ready)
     capsules = final_state.get("action_capsules", [])
     assert len(capsules) > 0
     assert capsules[0]["target_block_id"] == "block-para-1"
     assert capsules[0]["provenance"] == "action_capsule"
 
+    # 4. Verify Suggestion Chips from structured output
     launchers = final_state.get("prompt_launchers", [])
     assert len(launchers) >= 2
 
+    # 5. Verify Learner Radar
     radar = final_state.get("learner_radar", {})
     assert "stance" in radar
-    assert "Causal Grounding" in radar.get("dimension", "")
+    assert "Socratic Inquiry" in radar.get("dimension", "")
 
 
 @pytest.mark.asyncio
-async def test_socratic_graph_structural_scaffold_turn(mock_mcp_client, monkeypatch):
+async def test_socratic_graph_structural_request_turn(mock_mcp_client, monkeypatch):
     """
-    Tests that requests for structuring, outlining, or organizing the assignment
-    are routed to the structural scaffold node and return a live LLM-generated response.
-    The scaffold node no longer uses hardcoded pillar templates — it calls the LLM.
+    Tests that requests for structuring or outlining are handled by the unified
+    generation node (the LLM classifies the move as 'structural_request').
     """
     from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
 
-    mock_scaffold_response = (
-        "To build a rigorous argument, consider three analytical challenges: "
-        "First, what causal mechanism links administrative reform to fiscal outcomes? "
-        "Second, which specific exhibit best grounds your central claim? "
-        "Third, where does the evidence reveal limits or counter-pressures to your argument? "
-        "Which of these would you like to anchor your first section around?"
-    )
-
     async def mock_enhance(*args, **kwargs):
         return GuardedGeneration(
-            content=mock_scaffold_response,
-            metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+            content=_make_structured_response(
+                student_move="structural_request",
+                claim_summary=None,
+                tension="Structure must emerge from reasoning, not be imposed externally",
+                response="What is your initial instinct or rough answer to the assignment question?",
+            ),
+            metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
         )
 
     monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
@@ -332,7 +364,7 @@ async def test_socratic_graph_structural_scaffold_turn(mock_mcp_client, monkeypa
         "session_id": "sess-struct-1",
         "student_id": "student-struct",
         "question_id": "q-struct",
-        "student_input": "can you help me with structuring the assignment ?",
+        "student_input": "can you help me with structuring the assignment?",
         "current_rung": 0,
         "hint_requested": False,
         "verification_attempts": 0,
@@ -341,28 +373,29 @@ async def test_socratic_graph_structural_scaffold_turn(mock_mcp_client, monkeypa
     config = {"configurable": {"thread_id": "sess-struct-1"}}
     final_state = await graph.ainvoke(initial_state, config=config)
 
-    assert final_state["discourse_phase"] == "structural_scaffold"
+    assert final_state["discourse_phase"] == "structural_request"
     assert final_state["is_approved"] is True
-    # Should be LLM-generated — no hardcoded pillar template text
-    assert "Taking your argument regarding" not in final_state["final_verified_response"]
-    assert "three structural pillars" not in final_state["final_verified_response"]
-    assert len(final_state["final_verified_response"]) > 50
+    assert len(final_state["final_verified_response"]) > 20
     assert "?" in final_state["final_verified_response"]
 
 
 @pytest.mark.asyncio
 async def test_socratic_graph_acknowledgment_turn(mock_mcp_client, monkeypatch):
     """
-    Tests that conversational affirmations ('sure', 'ok', 'sounds good') are
-    routed to the acknowledgment node and generate a live LLM response that
-    naturally continues the dialogue rather than treating them as historical assertions.
+    Tests that conversational affirmations ('sure', 'ok') are handled by the unified
+    generation node (LLM classifies as 'seeking_clarity') rather than needing regex.
     """
     from fiosra.mvp.llm.orchestrator import GuardedGeneration, GenerationMetadata, llm_orchestrator
 
     async def mock_enhance(*args, **kwargs):
         return GuardedGeneration(
-            content="Great — which of those pillars would you like to anchor your first section around?",
-            metadata=GenerationMetadata(provider="openai", model="gpt-4o-mini", used_live_provider=True),
+            content=_make_structured_response(
+                student_move="seeking_clarity",
+                claim_summary=None,
+                tension="Student needs to select a specific aspect to analyze",
+                response="Which of those pillars would you like to anchor your first section around?",
+            ),
+            metadata=GenerationMetadata(provider="openai", model="gpt-4.1-mini", used_live_provider=True),
         )
 
     monkeypatch.setattr(llm_orchestrator, "enhance", mock_enhance)
@@ -388,12 +421,10 @@ async def test_socratic_graph_acknowledgment_turn(mock_mcp_client, monkeypatch):
     config = {"configurable": {"thread_id": "sess-ack-1"}}
     final_state = await graph.ainvoke(initial_state, config=config)
 
-    assert final_state["discourse_phase"] == "acknowledgment"
+    assert final_state["discourse_phase"] == "seeking_clarity"
     assert final_state["is_approved"] is True
-    # Verify it does NOT treat "sure" as a claim about being "sure"
+    # Verify it does NOT treat "sure" as a claim
     assert "Taking your argument regarding" not in final_state["final_verified_response"]
-    assert "stated that you're \"sure\"" not in final_state["final_verified_response"]
-    # LLM-generated acknowledgment — non-empty, contains a Socratic question
     assert len(final_state["final_verified_response"]) > 20
     assert "?" in final_state["final_verified_response"]
 
@@ -401,9 +432,8 @@ async def test_socratic_graph_acknowledgment_turn(mock_mcp_client, monkeypatch):
 @pytest.mark.asyncio
 async def test_socratic_graph_llm_unavailable_transparent_failure(mock_mcp_client, monkeypatch):
     """
-    Tests that when live LLM provider is unavailable or disconnected,
-    the graph fails transparently with LLMServiceUnavailableError rather than
-    producing canned pseudo-AI fallback text.
+    Tests that when live LLM provider is unavailable, the graph fails
+    transparently with LLMServiceUnavailableError.
     """
     from fiosra.mvp.llm.orchestrator import LLMServiceUnavailableError, llm_orchestrator
 
@@ -436,52 +466,46 @@ async def test_socratic_graph_llm_unavailable_transparent_failure(mock_mcp_clien
 
 @pytest.mark.asyncio
 async def test_no_phantom_action_capsules_on_exploratory_turns():
-    """Verify that exploratory student intents or boilerplate text produce 0 action capsules."""
+    """
+    Verify that exploratory student intents produce 0 action capsules.
+    In the new architecture, action capsules depend on thoughts_of_tutorbot
+    containing is_claim_ready_for_draft=True.
+    """
     tutor = SocraticTutorAgent()
 
-    # Case 1: Exploratory intent on blank canvas
+    # Case 1: Exploratory intent — no claim ready for draft
     state_exploratory: TutorSessionState = {
         "student_id": "stu-1",
-        "student_input": "I want to analyze primary sources from the Delhi Sultanate to understand its social changes.",
+        "student_input": "I want to analyze primary sources from the Delhi Sultanate.",
         "focused_block_id": None,
         "focused_block_text": "",
         "canvas_blocks": [],
         "dialogue_history": [],
+        "thoughts_of_tutorbot": {
+            "student_move": "focus_selection",
+            "is_claim_ready_for_draft": False,
+            "student_claim_summary": None,
+        },
     }
-    decomp = tutor.decompose_toulmin(state_exploratory)
-    state_exploratory["toulmin_structure"] = decomp["toulmin_structure"]
     actions = await tutor.pack_epistemic_actions(state_exploratory)
     assert actions["action_capsules"] == [], "Must produce zero action capsules on exploratory intent"
 
-    # Case 2: Template instruction in focused_block_text must NOT become an action capsule
-    state_boilerplate: TutorSessionState = {
-        "student_id": "stu-2",
-        "student_input": "I want to analyze primary sources from the Delhi Sultanate.",
-        "focused_block_id": "current-block",
-        "focused_block_text": "Working claim: State a provisional, bounded answer to the assignment question. Guidance: Write one claim.",
-        "canvas_blocks": [],
-        "dialogue_history": [],
-    }
-    decomp_bp = tutor.decompose_toulmin(state_boilerplate)
-    state_boilerplate["toulmin_structure"] = decomp_bp["toulmin_structure"]
-    actions_bp = await tutor.pack_epistemic_actions(state_boilerplate)
-    assert actions_bp["action_capsules"] == [], "Must never surface rubric template text as an action capsule"
-
-    # Case 3: Genuine student claim with active canvas block earns an action capsule
+    # Case 2: Substantive claim flagged as draft-ready earns a capsule
     state_claim: TutorSessionState = {
         "student_id": "stu-3",
-        "student_input": "Price controls under Alauddin Khalji were maintained through coercion because Barani notes superintendents whipped merchants.",
+        "student_input": "Price controls under Alauddin Khalji were maintained through coercion.",
         "focused_block_id": "paragraph-1",
         "focused_block_text": "",
         "canvas_blocks": [{"id": "paragraph-1", "text": ""}],
         "dialogue_history": [],
+        "thoughts_of_tutorbot": {
+            "student_move": "substantive_claim",
+            "is_claim_ready_for_draft": True,
+            "student_claim_summary": "Price controls under Alauddin Khalji were maintained through coercion because Barani notes superintendents whipped merchants.",
+        },
     }
-    decomp_claim = tutor.decompose_toulmin(state_claim)
-    state_claim["toulmin_structure"] = decomp_claim["toulmin_structure"]
     actions_claim = await tutor.pack_epistemic_actions(state_claim)
     assert len(actions_claim["action_capsules"]) == 1, "Substantive claim must earn exactly one action capsule"
     capsule = actions_claim["action_capsules"][0]
     assert "Alauddin Khalji" in capsule["suggested_student_text"]
     assert capsule["target_block_id"] == "paragraph-1"
-
-

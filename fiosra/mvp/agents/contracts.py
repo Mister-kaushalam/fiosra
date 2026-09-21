@@ -6,7 +6,7 @@ Defines explicit state schemas, critic verification verdicts, and telemetry pack
 from __future__ import annotations
 
 from typing import Any, TypedDict
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # -------------------------------------------------------------------------
@@ -55,6 +55,84 @@ class LearnerRadarState(BaseModel):
     epistemic_stance: str = Field(default="Exploring Premise", description="Current stance: Exploring Premise, Challenging Monocausal, Grounding Evidence")
     scaffolding_tier: int = Field(default=0, description="Rung 0 (Inquiry), Rung 1 (Spotlight), Rung 2 (Sentence Frame)")
     milestone_summary: str = Field(default="", description="e.g. '1 warrant needed for submission readiness'")
+
+
+class UniversalSocraticTurn(BaseModel):
+    """
+    Structured domain-agnostic cognitive output from the Socratic Tutor Agent.
+    Returned as structured JSON from a single LLM call that simultaneously
+    classifies the student's move, reasons about the tension to probe,
+    and generates the Socratic response.
+    """
+    model_config = ConfigDict(extra="ignore")
+
+    student_move: str = Field(
+        description=(
+            "Classify the student's latest message into exactly one of: "
+            "'orientation' (greeting, meta-question, or opening), "
+            "'focus_selection' (choosing a topic, aspect, or angle to explore), "
+            "'substantive_claim' (making an argument, proposal, decision, or interpretation), "
+            "'seeking_clarity' (expressing uncertainty, asking for step-by-step guidance, or affirming readiness to continue), "
+            "'structural_request' (asking about essay structure, outlining, or brainstorming)."
+        )
+    )
+    student_claim_summary: str | None = Field(
+        default=None,
+        description="The core assertion, decision, or thesis articulated by the student, or null if none."
+    )
+    unexamined_tension: str = Field(
+        description=(
+            "The key analytical tension, trade-off, contradictory evidence, or competing constraint "
+            "in the assigned materials that the student has not yet addressed. "
+            "This drives what your Socratic question will probe."
+        )
+    )
+    socratic_response: str = Field(
+        description=(
+            "A natural, conversational 1-3 sentence Socratic response ending with exactly one question mark. "
+            "Must directly engage with the student's latest message. "
+            "Never give advice, recommendations, or direct answers."
+        )
+    )
+    is_claim_ready_for_draft: bool = Field(
+        default=False,
+        description="True ONLY if the student formulated a reasoned, self-contained thesis or claim ready for their draft."
+    )
+    formulated_claim_for_draft: str | None = Field(
+        default=None,
+        description="The student's insight formatted cleanly as an academic draft sentence, or null."
+    )
+    suggested_inquiries: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Exactly 2 first-person student follow-up prompts. "
+            "Each object has 'title' (3-5 words) and 'prompt' (one natural student sentence). "
+            "These are student intentions, NOT tutor questions."
+        )
+    )
+
+    def to_graph_state(self) -> dict[str, Any]:
+        """Map structured LLM output to TutorSessionState fields."""
+        launchers = []
+        for item in self.suggested_inquiries[:2]:
+            if isinstance(item, dict):
+                launchers.append(item)
+            elif hasattr(item, "model_dump"):
+                launchers.append(item.model_dump())
+        return {
+            "draft_response": self.socratic_response,
+            "discourse_phase": self.student_move,
+            "prompt_launchers": launchers,
+            "hint_rung": None,
+            "penalty_score": 0.0,
+            "thoughts_of_tutorbot": {
+                "student_move": self.student_move,
+                "student_claim_summary": self.student_claim_summary,
+                "unexamined_tension": self.unexamined_tension,
+                "is_claim_ready_for_draft": self.is_claim_ready_for_draft,
+                "strategy_selected": "Unified LLM structured Socratic generation",
+            },
+        }
 
 
 # -------------------------------------------------------------------------

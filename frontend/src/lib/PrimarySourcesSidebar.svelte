@@ -31,6 +31,8 @@
         target_kc: s.target_kc || s.kc || 'KC_EVIDENCE',
         source_url: s.source_url || s.url || s.download_url || null,
         relevance_guidance: s.relevance_guidance || '',
+        page: s.page || s.pageNum || null,
+        section: s.section || '',
       }));
     }
     return [];
@@ -48,6 +50,8 @@
           source_url: src.source_url,
           sections: [],
         });
+      } else if (!docMap.get(docKey).source_url && src.source_url) {
+        docMap.get(docKey).source_url = src.source_url;
       }
       docMap.get(docKey).sections.push(src);
     }
@@ -55,10 +59,17 @@
   });
 
   let selectedDocIndex = $state(0);
-  let activeDoc = $derived(documents[selectedDocIndex] || documents[0] || null);
+  let activeDoc = $derived(
+    (documents[selectedDocIndex]?.source_url ? documents[selectedDocIndex] : null) ||
+    documents.find((d) => d.source_url) ||
+    documents[selectedDocIndex] ||
+    documents[0] ||
+    null
+  );
 
   // Search State
   let pdfViewerRef = $state(null);
+  let initialViewerPage = $state(1);
   let matchInfo = $state({ current: 0, total: 0 });
   let searchQuery = $state('');
   let activeSearchTerm = $state('');
@@ -94,15 +105,323 @@
   }
 
   function printAssignmentSheet() {
-    window.print();
+    const sheet = document.querySelector('.academic-sheet');
+    if (!sheet) {
+      window.print();
+      return;
+    }
+
+    let printFrame = document.getElementById('print-brief-frame');
+    if (printFrame) {
+      printFrame.remove();
+    }
+    printFrame = document.createElement('iframe');
+    printFrame.id = 'print-brief-frame';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.style.visibility = 'hidden';
+    document.body.appendChild(printFrame);
+
+    const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document;
+    const assignmentTitle = assignment?.title || 'Academic Assignment Brief';
+
+    frameDoc.open();
+    frameDoc.write(`<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${assignmentTitle}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 16mm 18mm 18mm 18mm;
+    }
+    * {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: #ffffff;
+      color: #1f2937;
+      font-family: "Georgia", Georgia, "Times New Roman", serif;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .academic-sheet {
+      width: 100%;
+      max-width: 100%;
+      background: #ffffff;
+      padding: 0;
+      margin: 0;
+    }
+    .sheet-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      border-bottom: 2px solid #111827;
+      padding-bottom: 12px;
+      margin-bottom: 18px;
+    }
+    .inst-logo {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1px;
+      color: #4b5563;
+    }
+    .inst-course {
+      font-size: 15px;
+      font-weight: bold;
+      color: #111827;
+      margin-top: 2px;
+    }
+    .sheet-meta {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      color: #4b5563;
+      line-height: 1.5;
+      text-align: right;
+    }
+    .sheet-meta span {
+      font-weight: bold;
+      color: #111827;
+    }
+    .sheet-title-block {
+      margin-bottom: 18px;
+    }
+    .sheet-title-block h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #111827;
+      margin: 0 0 6px;
+      line-height: 1.25;
+    }
+    .sheet-purpose {
+      font-size: 13px;
+      font-style: italic;
+      color: #4b5563;
+      margin: 0;
+      line-height: 1.5;
+    }
+    .sheet-section {
+      margin-bottom: 20px;
+      page-break-inside: avoid;
+    }
+    .sheet-sec-title {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      color: #111827;
+      border-bottom: 1px solid #e5e7eb;
+      padding-bottom: 4px;
+      margin: 0 0 10px;
+    }
+    .sheet-task-prompt {
+      font-size: 13.5px;
+      line-height: 1.6;
+      color: #1f2937;
+      margin: 0;
+    }
+    .sheet-requirements, .sheet-goals-list, .sheet-checklist {
+      font-size: 12.5px;
+      line-height: 1.6;
+      color: #374151;
+      padding-left: 20px;
+      margin: 8px 0 0;
+    }
+    .sheet-goals-list, .sheet-checklist {
+      list-style: none;
+      padding-left: 4px;
+    }
+    .sheet-sources-table {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .sheet-source-row {
+      background: #f9fafb;
+      border: 1px solid #e5e7eb;
+      border-left: 3px solid #374151;
+      border-radius: 4px;
+      padding: 10px 12px;
+      page-break-inside: avoid;
+    }
+    .src-meta strong {
+      font-size: 12.5px;
+      color: #111827;
+      display: block;
+    }
+    .src-guide {
+      font-size: 11.5px;
+      color: #6b7280;
+      font-style: italic;
+      display: block;
+      margin-top: 2px;
+    }
+    .src-excerpt {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #374151;
+      margin: 6px 0;
+      padding-left: 8px;
+      border-left: 2px solid #cbd5e1;
+    }
+    .sheet-rubric-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      margin-top: 8px;
+    }
+    .sheet-rubric-table th, .sheet-rubric-table td {
+      border: 1px solid #d1d5db;
+      padding: 6px 8px;
+      vertical-align: top;
+      text-align: left;
+    }
+    .sheet-rubric-table th {
+      background: #f3f4f6;
+      color: #111827;
+      font-weight: 700;
+    }
+    .sheet-rubric-table tr {
+      page-break-inside: avoid;
+    }
+    .weight-tag {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 700;
+      background: #e5e7eb;
+      color: #374151;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-left: 4px;
+    }
+    .sheet-concept-tag {
+      display: inline-block;
+      font-size: 9.5px;
+      font-weight: 600;
+      color: #6d28d9;
+      background: #f3e8ff;
+      border: 1px solid #e9d5ff;
+      padding: 1px 4px;
+      border-radius: 3px;
+      margin-top: 3px;
+    }
+    .lvl-title {
+      font-weight: 700;
+      display: block;
+      color: #111827;
+      font-size: 10px;
+      margin-bottom: 2px;
+    }
+    .lvl-desc {
+      font-size: 10px;
+      color: #4b5563;
+      line-height: 1.3;
+    }
+    .crit-sub {
+      font-size: 10px;
+      color: #6b7280;
+      margin-top: 2px;
+    }
+    .sheet-footer {
+      border-top: 1px solid #e5e7eb;
+      margin-top: 16px;
+      padding-top: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 11px;
+      color: #6b7280;
+    }
+    .sheet-integrity-statement strong {
+      color: #111827;
+    }
+    .no-print {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  <article class="academic-sheet">
+    ${sheet.innerHTML}
+  </article>
+</body>
+</html>`);
+    frameDoc.close();
+
+    setTimeout(() => {
+      try {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+      } catch (e) {
+        console.error('Frame print failed, falling back to window.print():', e);
+        window.print();
+      }
+    }, 300);
   }
 
-  function switchToSource(sourceTitle) {
+  function printSourcePdf() {
+    if (!activeDoc?.source_url) return;
+    let printFrame = document.getElementById('print-pdf-source-frame');
+    if (printFrame) {
+      printFrame.remove();
+    }
+    printFrame = document.createElement('iframe');
+    printFrame.id = 'print-pdf-source-frame';
+    printFrame.style.position = 'fixed';
+    printFrame.style.right = '0';
+    printFrame.style.bottom = '0';
+    printFrame.style.width = '0';
+    printFrame.style.height = '0';
+    printFrame.style.border = '0';
+    printFrame.style.visibility = 'hidden';
+    document.body.appendChild(printFrame);
+
+    let hasPrinted = false;
+    const triggerPrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
+      try {
+        printFrame.contentWindow.focus();
+        printFrame.contentWindow.print();
+      } catch {
+        window.open(activeDoc.source_url, '_blank');
+      }
+    };
+
+    printFrame.onload = triggerPrint;
+    printFrame.src = activeDoc.source_url;
+    // Timeout fallback if onload doesn't trigger for PDF plugin
+    setTimeout(triggerPrint, 1200);
+  }
+
+  function switchToSource(sourceTitle, src = null) {
     if (sourceTitle) {
       const idx = documents.findIndex((d) => d.title === sourceTitle);
       if (idx >= 0) selectedDocIndex = idx;
     }
     activeTab = 'sources';
+
+    const targetPage = src?.page || src?.pageNum || null;
+    if (targetPage) {
+      initialViewerPage = targetPage;
+      setTimeout(() => {
+        pdfViewerRef?.scrollToPage(targetPage);
+      }, 120);
+    } else if (src?.citation) {
+      setTimeout(() => {
+        pdfViewerRef?.scrollToCitation(src.citation);
+      }, 120);
+    }
   }
 </script>
 
@@ -119,7 +438,7 @@
         type="button"
         class="collapsed-tab-btn"
         class:active={activeTab === 'assignment'}
-        onclick={() => { activeTab = 'assignment'; onToggleExpand(); }}
+        onclick={() => { activeTab = 'assignment'; onToggleCollapse(false); }}
         title="Open Assignment Brief"
         aria-label="Open Assignment Brief"
       >
@@ -130,7 +449,7 @@
         type="button"
         class="collapsed-tab-btn"
         class:active={activeTab === 'sources'}
-        onclick={() => { activeTab = 'sources'; onToggleExpand(); }}
+        onclick={() => { activeTab = 'sources'; onToggleCollapse(false); }}
         title="Open Primary Sources"
         aria-label="Open Primary Sources"
       >
@@ -139,25 +458,20 @@
 
       <button
         type="button"
-        class="btn-collapsed-expand"
-        onclick={onToggleExpand}
-        title="Expand Document Reader"
-        aria-label="Expand Document Reader"
+        class="btn-expand-sidebar"
+        onclick={() => onToggleCollapse(false)}
+        title="Expand Primary Sources"
+        aria-label="Expand Primary Sources"
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polyline points="15 3 21 3 21 9"></polyline>
-          <polyline points="9 21 3 21 3 15"></polyline>
-          <line x1="21" y1="3" x2="14" y2="10"></line>
-          <line x1="3" y1="21" x2="10" y2="14"></line>
-        </svg>
+        ▶
       </button>
 
       <div
         class="vertical-title"
-        onclick={onToggleExpand}
+        onclick={() => onToggleCollapse(false)}
         role="button"
         tabindex="0"
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggleExpand(); }}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') onToggleCollapse(false); }}
       >
         {activeTab === 'assignment' ? 'ASSIGNMENT BRIEF' : 'PRIMARY SOURCES'}
       </div>
@@ -201,12 +515,22 @@
             type="button"
             class="btn-header-action"
             onclick={printAssignmentSheet}
-            title="Save as PDF / Print Assignment"
-            aria-label="Save as PDF / Print Assignment"
+            title="Save Handout as PDF / Print Brief"
+            aria-label="Save Handout as PDF / Print Brief"
           >
             <span style="font-size: 13px;">🖨️</span>
           </button>
         {:else if activeDoc?.source_url}
+          <!-- Print PDF Source Document -->
+          <button
+            type="button"
+            class="btn-header-action"
+            onclick={printSourcePdf}
+            title="Print PDF Document"
+            aria-label="Print PDF Document"
+          >
+            <span style="font-size: 13px;">🖨️</span>
+          </button>
           <!-- Open PDF External Fullscreen -->
           <a
             href={activeDoc.source_url}
@@ -225,31 +549,15 @@
           </a>
         {/if}
 
-        <!-- Expand / Collapse to sidebar Toggle -->
+        <!-- Collapse to Left Toggle (matching Socratic Gutter's collapse toggle) -->
         <button
           type="button"
-          class="btn-header-action"
-          onclick={onToggleExpand}
-          title={isExpanded ? 'Collapse to sidebar' : 'Expand to max width'}
-          aria-label={isExpanded ? 'Collapse to sidebar' : 'Expand to max width'}
+          class="btn-collapse-toggle"
+          onclick={() => onToggleCollapse(true)}
+          title="Collapse sources to left"
+          aria-label="Collapse sources to left"
         >
-          {#if isExpanded}
-            <!-- Collapse Symbol -->
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="4 14 10 14 10 20"></polyline>
-              <polyline points="20 10 14 10 14 4"></polyline>
-              <line x1="14" y1="10" x2="21" y2="3"></line>
-              <line x1="3" y1="21" x2="10" y2="14"></line>
-            </svg>
-          {:else}
-            <!-- Expand Symbol -->
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <polyline points="15 3 21 3 21 9"></polyline>
-              <polyline points="9 21 3 21 3 15"></polyline>
-              <line x1="21" y1="3" x2="14" y2="10"></line>
-              <line x1="3" y1="21" x2="10" y2="14"></line>
-            </svg>
-          {/if}
+          ◀
         </button>
       </div>
     </div>
@@ -257,16 +565,6 @@
     {#if activeTab === 'assignment'}
       <!-- TAB 1: ACADEMIC ASSIGNMENT BRIEF (Printable Handout Format) -->
       <div class="assignment-scroll-container">
-        <div class="pdf-control-bar no-print">
-          <div class="pdf-info">
-            <span class="pdf-info-tag">📄 Academic Handout</span>
-            <small>Ready to distribute or save as PDF via your browser print dialog.</small>
-          </div>
-          <button type="button" class="btn-print-action" onclick={printAssignmentSheet}>
-            🖨️ Save as PDF / Print
-          </button>
-        </div>
-
         <article class="academic-sheet print-target">
           <!-- Sheet Header -->
           <header class="sheet-header">
@@ -321,19 +619,10 @@
                     <button
                       type="button"
                       class="btn-open-source-pdf"
-                      onclick={() => switchToSource(src.title)}
+                      onclick={() => switchToSource(src.title, src)}
                     >
                       📕 Read in PDF Viewer ↗
                     </button>
-                    {#if onQuoteEvidence && (src.excerpt || src.passage)}
-                      <button
-                        type="button"
-                        class="btn-quote-source"
-                        onclick={() => onQuoteEvidence({ text: src.excerpt || src.passage, title: src.title, page: 1 })}
-                      >
-                        ✍️ Quote to Canvas
-                      </button>
-                    {/if}
                   </div>
                 </div>
               {/each}
@@ -437,6 +726,7 @@
             url={activeDoc.source_url}
             title={activeDoc.title}
             searchTerm={activeSearchTerm}
+            initialPage={initialViewerPage}
             {onQuoteEvidence}
             onMatchesChange={handleMatchesChange}
           />
@@ -514,16 +804,16 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
-    background: var(--color-obsidian, #ffffff);
-    border-right: 1px solid var(--color-graphite-border, #e2e8f0);
+    background: var(--color-obsidian, #f8f8f5);
+    border-right: 1px solid var(--color-graphite-border, #e2e4dc);
     position: relative;
     overflow: hidden;
     transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   :global([data-theme="dark"]) .evidentiary-well {
-    background: #0d1117;
-    border-color: #30363d;
+    background: var(--color-obsidian, #121418);
+    border-color: var(--color-graphite-border, #262a33);
   }
 
   .evidentiary-well.collapsed {
@@ -537,16 +827,16 @@
     align-items: center;
     justify-content: space-between;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--color-graphite-border, #e2e8f0);
-    background: rgba(248, 250, 252, 0.95);
+    border-bottom: 1px solid var(--color-graphite-border, #e2e4dc);
+    background: var(--color-graphite, #ffffff);
     backdrop-filter: blur(8px);
     flex-shrink: 0;
     z-index: 10;
   }
 
   :global([data-theme="dark"]) .well-header {
-    background: rgba(22, 27, 34, 0.95);
-    border-color: #30363d;
+    background: var(--color-bone-surface, #1e2229);
+    border-color: var(--color-graphite-border, #262a33);
   }
 
   /* Dual Sidebar Tabs */
@@ -714,26 +1004,54 @@
     font-size: 1rem;
   }
 
-  .btn-collapsed-expand {
+  .btn-collapse-toggle {
     background: transparent;
     border: 1px solid var(--color-graphite-border, #cbd5e1);
     border-radius: 4px;
     color: var(--color-slate-subtle, #64748b);
-    width: 26px;
+    width: 24px;
     height: 24px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    font-size: 0.7rem;
     transition: all 0.15s ease;
   }
 
-  :global([data-theme="dark"]) .btn-collapsed-expand {
+  :global([data-theme="dark"]) .btn-collapse-toggle {
     border-color: #30363d;
     color: #8b949e;
   }
 
-  .btn-collapsed-expand:hover {
+  .btn-collapse-toggle:hover {
+    color: var(--color-aurora, #0284c7);
+    border-color: var(--color-aurora, #0284c7);
+    background: rgba(2, 132, 199, 0.08);
+  }
+
+  .btn-expand-sidebar {
+    background: transparent;
+    border: 1px solid var(--color-graphite-border, #cbd5e1);
+    border-radius: 4px;
+    color: var(--color-slate-subtle, #64748b);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 0.72rem;
+    margin-top: 4px;
+    transition: all 0.15s ease;
+  }
+
+  :global([data-theme="dark"]) .btn-expand-sidebar {
+    border-color: #30363d;
+    color: #8b949e;
+  }
+
+  .btn-expand-sidebar:hover {
     color: var(--color-aurora, #0284c7);
     border-color: var(--color-aurora, #0284c7);
     background: rgba(2, 132, 199, 0.08);
@@ -789,12 +1107,12 @@
     width: 100%;
     flex: 1;
     min-height: 0;
-    background: #e5e7eb;
+    background: var(--color-obsidian, #f8f8f5);
     position: relative;
   }
 
   :global([data-theme="dark"]) .pdf-reader-frame-container {
-    background: #090d13;
+    background: var(--color-obsidian, #121418);
   }
 
   /* Floating Bottom AI Search Pill (Zero Unnecessary Borders or Boxes) */
@@ -969,70 +1287,12 @@
   .assignment-scroll-container {
     flex: 1;
     overflow-y: auto;
-    background: #e5e7eb;
+    background: var(--color-obsidian, #f8f8f5);
     padding: 20px 24px 60px 24px;
   }
 
   :global([data-theme="dark"]) .assignment-scroll-container {
-    background: #090d13;
-  }
-
-  .pdf-control-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-    background: #ffffff;
-    padding: 8px 14px;
-    border-radius: 8px;
-    border: 1px solid #d1d5db;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
-  }
-
-  :global([data-theme="dark"]) .pdf-control-bar {
-    background: #161b22;
-    border-color: #30363d;
-  }
-
-  .pdf-info {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .pdf-info-tag {
-    font-size: 0.75rem;
-    font-weight: 700;
-    color: #1f2937;
-  }
-
-  :global([data-theme="dark"]) .pdf-info-tag {
-    color: #f0f6fc;
-  }
-
-  .pdf-info small {
-    font-size: 0.7rem;
-    color: #6b7280;
-  }
-
-  :global([data-theme="dark"]) .pdf-info small {
-    color: #8b949e;
-  }
-
-  .btn-print-action {
-    background: var(--color-aurora, #0284c7);
-    color: #ffffff;
-    border: none;
-    border-radius: 6px;
-    padding: 5px 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s ease;
-  }
-
-  .btn-print-action:hover {
-    background: #0369a1;
+    background: var(--color-obsidian, #121418);
   }
 
   .academic-sheet {
@@ -1184,7 +1444,7 @@
     margin-top: 8px;
   }
 
-  .btn-open-source-pdf, .btn-quote-source {
+  .btn-open-source-pdf {
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
     font-size: 11px;
     font-weight: 600;
@@ -1193,9 +1453,6 @@
     cursor: pointer;
     border: 1px solid transparent;
     transition: all 0.15s ease;
-  }
-
-  .btn-open-source-pdf {
     background: rgba(2, 132, 199, 0.1);
     color: #0284c7;
     border-color: rgba(2, 132, 199, 0.25);
@@ -1203,17 +1460,6 @@
 
   .btn-open-source-pdf:hover {
     background: #0284c7;
-    color: #ffffff;
-  }
-
-  .btn-quote-source {
-    background: rgba(16, 185, 129, 0.1);
-    color: #059669;
-    border-color: rgba(16, 185, 129, 0.25);
-  }
-
-  .btn-quote-source:hover {
-    background: #059669;
     color: #ffffff;
   }
 
@@ -1226,22 +1472,22 @@
   }
 
   .sheet-rubric-table th, .sheet-rubric-table td {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-graphite-border, #e2e4dc);
     padding: 7px 8px;
     vertical-align: top;
     text-align: left;
   }
 
   .sheet-rubric-table th {
-    background: #f3f4f6;
-    color: #111827;
+    background: var(--color-bone-muted, #f4f5f0);
+    color: var(--color-heading, #111827);
     font-weight: 700;
   }
 
   .weight-tag {
     display: inline-block;
-    background: #e5e7eb;
-    color: #111827;
+    background: var(--color-graphite-hover, #e8eae3);
+    color: var(--color-heading, #111827);
     font-size: 10px;
     font-weight: bold;
     padding: 1px 4px;
@@ -1299,23 +1545,43 @@
       color: #000000 !important;
       padding: 0 !important;
       margin: 0 !important;
+      overflow: visible !important;
+      height: auto !important;
     }
-    :global(.top-nav-bar),
+    :global(.workspace-header),
     :global(.workspace-topbar),
+    :global(.top-nav-bar),
     :global(.workbench-col-canvas),
     :global(.workbench-col-gutter),
+    :global(.workbench-resizer-handle),
+    :global(.canvas-tab-wrapper),
+    :global(.collapsed-sidebar-strip),
     .well-header,
     .no-print,
+    .doc-switcher-bar,
+    .pdf-reader-frame-container,
     .bottom-ai-search-anchor {
       display: none !important;
     }
+    :global(.student-workspace-shell),
+    :global(.workspace-viewport),
+    :global(.workspace-content-body),
+    :global(.in-situ-workbench-grid),
+    :global(.workbench-col-sources),
     .evidentiary-well {
+      display: block !important;
+      position: static !important;
       width: 100% !important;
+      height: auto !important;
+      overflow: visible !important;
       border: none !important;
+      margin: 0 !important;
+      padding: 0 !important;
       background: #ffffff !important;
     }
     .assignment-scroll-container {
       overflow: visible !important;
+      height: auto !important;
       padding: 0 !important;
       background: #ffffff !important;
     }

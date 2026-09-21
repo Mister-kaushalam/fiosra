@@ -126,7 +126,7 @@ async def handle_dialogue_turn(
         doc_state = await learning_document_service.get_state(request.session_id, session_token)
         if doc_state and getattr(doc_state, "blocks", None):
             canvas_blocks = [
-                {"id": b.block_id, "text": b.plaintext or "", "role": b.block_type}
+                {"id": str(b.block_id), "text": b.plaintext or "", "role": b.block_type}
                 for b in doc_state.blocks
                 if (b.plaintext or "").strip()
             ]
@@ -143,7 +143,7 @@ async def handle_dialogue_turn(
                 "excerpt": s.excerpt[:300] if getattr(s, "excerpt", None) else "",
             })
 
-    focused_block_id = canvas_blocks[0]["id"] if canvas_blocks else None
+    focused_block_id = str(canvas_blocks[0]["id"]) if canvas_blocks else None
     focused_block_text = canvas_blocks[0]["text"] if canvas_blocks else ""
 
     from fiosra.mvp.agents.graph import socratic_tutor_graph
@@ -177,7 +177,6 @@ async def handle_dialogue_turn(
         "focused_block_text": focused_block_text,
         "section_guidance": active_section_context or "",
         "assigned_sources": assigned_sources,
-        "toulmin_structure": {},
         "adversarial_flag": False,
         "adversarial_reason": None,
         "temporal_context": [],
@@ -193,7 +192,7 @@ async def handle_dialogue_turn(
         "prompt_launchers": [],
         "learner_radar": {},
         "penalty_score": 0.0,
-        "discourse_phase": "substantive_inquiry",
+        "discourse_phase": "",
         "hint_ladder": active_hint_ladder,
         "hint_rung": None,
     }

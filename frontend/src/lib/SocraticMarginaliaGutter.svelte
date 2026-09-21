@@ -1,6 +1,7 @@
 <script>
   let {
     probes = [],
+    documentBlocks = [],
     activeProbeId = '',
     focusedBlockId = '',
     focusedBlockOffsetTop = 0,
@@ -35,14 +36,42 @@
     qualification: { label: 'Nuance & Scope', icon: '🎯', color: 'var(--color-slate-light, #64748b)' },
   };
 
-  // Visible probes: exclude dismissed, sort offered first, then deferred, then responded
+  let blockIndexMap = $derived.by(() => {
+    const map = new Map();
+    (documentBlocks || []).forEach((b, idx) => {
+      if (b.block_id) map.set(b.block_id, idx);
+    });
+    return map;
+  });
+
+  // Probes belonging to the currently focused paragraph
+  let focusedBlockProbes = $derived.by(() => {
+    if (!focusedBlockId) return [];
+    return probes.filter((p) => p && p.status !== 'dismissed' && p.block_id === focusedBlockId);
+  });
+
+  // Visible probes: prioritize active focused paragraph at top, then status, then document reading order
   let visibleProbes = $derived.by(() => {
-    return probes
-      .filter((p) => p && p.status !== 'dismissed')
-      .sort((a, b) => {
-        const order = { offered: 1, deferred: 2, responded: 3 };
-        return (order[a.status] || 99) - (order[b.status] || 99);
-      });
+    const list = probes.filter((p) => p && p.status !== 'dismissed');
+    return list.sort((a, b) => {
+      // 1. Probes for the currently focused paragraph always float to the top
+      if (focusedBlockId) {
+        const aActive = a.block_id === focusedBlockId;
+        const bActive = b.block_id === focusedBlockId;
+        if (aActive && !bActive) return -1;
+        if (!aActive && bActive) return 1;
+      }
+
+      // 2. Status: offered first, then deferred, then responded
+      const order = { offered: 1, deferred: 2, responded: 3 };
+      const statusDiff = (order[a.status] || 99) - (order[b.status] || 99);
+      if (statusDiff !== 0) return statusDiff;
+
+      // 3. Document reading order
+      const aIdx = blockIndexMap.get(a.block_id) ?? 999;
+      const bIdx = blockIndexMap.get(b.block_id) ?? 999;
+      return aIdx - bIdx;
+    });
   });
 
   let activeProbeCount = $derived(
@@ -103,13 +132,15 @@
 
   <!-- Contextual status banner indicating current block alignment -->
   {#if focusedBlockId}
-    <div class="focus-context-banner" class:has-probe={!!currentBlockProbe}>
-      {#if currentBlockProbe}
+    <div class="focus-context-banner" class:has-probe={focusedBlockProbes.length > 0}>
+      {#if focusedBlockProbes.length > 0}
         <span class="context-icon">🎯</span>
-        <span class="context-text">Inquiry matches current paragraph</span>
+        <span class="context-text">
+          {focusedBlockProbes.length === 1 ? '1 inquiry' : `${focusedBlockProbes.length} inquiries`} for active paragraph
+        </span>
       {:else}
         <span class="context-icon">✍️</span>
-        <span class="context-text">Paragraph active · No open inquiries here</span>
+        <span class="context-text">Active paragraph · No inquiries yet (state a claim or reason to prompt a Socratic nudge)</span>
       {/if}
     </div>
   {/if}

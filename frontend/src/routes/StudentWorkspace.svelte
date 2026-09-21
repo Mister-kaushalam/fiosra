@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import LongFormDocumentEditor from '../lib/LongFormDocumentEditor.svelte';
   import RightWorkbenchGutter from '../lib/RightWorkbenchGutter.svelte';
   import PrimarySourcesSidebar from '../lib/PrimarySourcesSidebar.svelte';
@@ -15,12 +15,76 @@
   } from '../lib/session.js';
   import { learnerErrorSummary, responseErrorDetails } from '../lib/api-error.js';
 
-  let isSourcesCollapsed = $state(false);
-  let isSourcesExpanded = $state(true);
+  let isSourcesCollapsed = $state(true);
+  let isSourcesExpanded = $state(false);
   let isGutterCollapsed = $state(true);
   let activeGutterTab = $state('marginalia'); // 'marginalia' | 'agent'
   let isTutorChatDrawerOpen = $state(false);
   let isMacroBusy = $state(false);
+  let isZenFullscreen = $state(false);
+  let savedLayoutState = $state(null);
+
+  // Draggable sidebar widths (Margin Sliders)
+  let sourcesWidth = $state(
+    (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_sources_width'))) || 480
+  );
+  let gutterWidth = $state(
+    (typeof localStorage !== 'undefined' && Number(localStorage.getItem('fiosra_gutter_width'))) || 440
+  );
+  let isResizingLeft = $state(false);
+  let isResizingRight = $state(false);
+
+  function startResizeLeft(e) {
+    e.preventDefault();
+    isResizingLeft = true;
+    const startX = e.clientX;
+    const startWidth = sourcesWidth;
+
+    function onPointerMove(moveEvent) {
+      const deltaX = moveEvent.clientX - startX;
+      const maxAllowed = Math.max(300, window.innerWidth - 450);
+      const newWidth = Math.min(maxAllowed, Math.max(260, startWidth + deltaX));
+      sourcesWidth = Math.round(newWidth);
+    }
+
+    function onPointerUp() {
+      isResizingLeft = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      try {
+        localStorage.setItem('fiosra_sources_width', String(sourcesWidth));
+      } catch {}
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
+
+  function startResizeRight(e) {
+    e.preventDefault();
+    isResizingRight = true;
+    const startX = e.clientX;
+    const startWidth = gutterWidth;
+
+    function onPointerMove(moveEvent) {
+      const deltaX = startX - moveEvent.clientX;
+      const maxAllowed = Math.max(300, window.innerWidth - 450);
+      const newWidth = Math.min(maxAllowed, Math.max(260, startWidth + deltaX));
+      gutterWidth = Math.round(newWidth);
+    }
+
+    function onPointerUp() {
+      isResizingRight = false;
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      try {
+        localStorage.setItem('fiosra_gutter_width', String(gutterWidth));
+      } catch {}
+    }
+
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+  }
 
   // Socratic Consultation Chat Threads
   let chatSessions = $state([
@@ -99,12 +163,19 @@
   let sourceLookupResults = $state({});
   let sourceActionBusy = $state(false);
 
+  function handleToggleSourcesCollapse(val) {
+    const willCollapse = val !== undefined ? val : !isSourcesCollapsed;
+    isSourcesCollapsed = willCollapse;
+    if (!willCollapse) {
+      isSourcesExpanded = true;
+    }
+  }
+
   function handleToggleSourcesExpand() {
     if (isSourcesExpanded && !isSourcesCollapsed) {
       // It is currently expanded. Collapse it back to sidebar completely so canvas is visible!
       isSourcesExpanded = false;
       isSourcesCollapsed = true;
-      isGutterCollapsed = false;
     } else {
       // Expand fully to 40% width, and collapse gutter to right!
       isSourcesExpanded = true;
@@ -999,7 +1070,110 @@
     })
   );
 
+  function enterZenFullscreen() {
+    if (isZenFullscreen) return;
+    savedLayoutState = {
+      isSourcesCollapsed,
+      isSourcesExpanded,
+      isGutterCollapsed,
+    };
+    isSourcesCollapsed = true;
+    isSourcesExpanded = false;
+    isGutterCollapsed = true;
+    isZenFullscreen = true;
+
+    if (typeof document !== 'undefined') {
+      document.body.classList.add('fiosra-zen-mode');
+      const rootEl = document.documentElement;
+      if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+        if (rootEl.requestFullscreen) {
+          rootEl.requestFullscreen().catch(() => {});
+        } else if (rootEl.webkitRequestFullscreen) {
+          rootEl.webkitRequestFullscreen();
+        }
+      }
+      window.dispatchEvent(new CustomEvent('fiosra:zen-change', { detail: { active: true } }));
+    }
+  }
+
+  function exitZenFullscreen() {
+    if (!isZenFullscreen) return;
+    isZenFullscreen = false;
+
+    if (typeof document !== 'undefined') {
+      document.body.classList.remove('fiosra-zen-mode');
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      } else if (document.webkitFullscreenElement) {
+        document.webkitExitFullscreen();
+      }
+      window.dispatchEvent(new CustomEvent('fiosra:zen-change', { detail: { active: false } }));
+    }
+
+    if (savedLayoutState) {
+      isSourcesCollapsed = savedLayoutState.isSourcesCollapsed;
+      isSourcesExpanded = savedLayoutState.isSourcesExpanded;
+      isGutterCollapsed = savedLayoutState.isGutterCollapsed;
+      savedLayoutState = null;
+    }
+  }
+
+  function toggleZenFullscreen() {
+    if (isZenFullscreen) {
+      exitZenFullscreen();
+    } else {
+      enterZenFullscreen();
+    }
+  }
+
+  function isTypingTarget(target) {
+    if (!target) return false;
+    const tagName = target.tagName ? target.tagName.toUpperCase() : '';
+    if (tagName === 'INPUT' || tagName === 'TEXTAREA' || tagName === 'SELECT') return true;
+    if (target.isContentEditable) return true;
+    if (typeof target.closest === 'function') {
+      if (target.closest('[contenteditable="true"], .prose-mirror, .cm-editor, input, textarea, [role="textbox"]')) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function handleWorkspaceKeyDown(e) {
+    if (e.key === 'Escape') {
+      if (isTutorPanelOpen) isTutorPanelOpen = false;
+      if (isZenFullscreen) {
+        exitZenFullscreen();
+        e.preventDefault();
+        return;
+      }
+    }
+
+    const isCmdShiftF = (e.metaKey || e.ctrlKey) && e.shiftKey && (e.key === 'f' || e.key === 'F');
+    const isF11 = e.key === 'F11';
+    const isStandaloneF = (e.key === 'f' || e.key === 'F') && !e.metaKey && !e.ctrlKey && !e.altKey && !isTypingTarget(e.target);
+
+    if (isCmdShiftF || isF11 || isStandaloneF) {
+      e.preventDefault();
+      toggleZenFullscreen();
+    }
+  }
+
+  const handleNativeFullscreenChange = () => {
+    const isNative = Boolean(document.fullscreenElement || document.webkitFullscreenElement);
+    if (!isNative && isZenFullscreen) {
+      exitZenFullscreen();
+    }
+  };
+
+  function handleToggleZenEvent() {
+    toggleZenFullscreen();
+  }
+
   onMount(async () => {
+    document.addEventListener('fullscreenchange', handleNativeFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleNativeFullscreenChange);
+    window.addEventListener('fiosra:toggle-zen', handleToggleZenEvent);
     try {
       await loadAssignment();
     } catch (err) {
@@ -1009,14 +1183,21 @@
     }
   });
 
+  onDestroy(() => {
+    window.removeEventListener('fiosra:toggle-zen', handleToggleZenEvent);
+    if (typeof document !== 'undefined') {
+      document.removeEventListener('fullscreenchange', handleNativeFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleNativeFullscreenChange);
+      if (isZenFullscreen) {
+        document.body.classList.remove('fiosra-zen-mode');
+        window.dispatchEvent(new CustomEvent('fiosra:zen-change', { detail: { active: false } }));
+      }
+    }
+  });
+
 </script>
 
-<svelte:window onkeydown={(e) => {
-  if (e.key === 'Escape') {
-    if (isTutorPanelOpen) isTutorPanelOpen = false;
-    if (isSessionRegisterOpen) isSessionRegisterOpen = false;
-  }
-}} />
+<svelte:window onkeydown={handleWorkspaceKeyDown} />
 
 {#if isLoading}
   <main class="loading-view">
@@ -1050,7 +1231,7 @@
     </div>
   </main>
 {:else}
-  <div class="workspace-viewport">
+  <div class="workspace-viewport" class:zen-mode={isZenFullscreen}>
     <!-- Workspace Content Body -->
     <div class="workspace-content-body">
       <!-- ============================================================ -->
@@ -1060,16 +1241,20 @@
         <div
           class="in-situ-workbench-grid"
           class:sources-collapsed={isSourcesCollapsed}
-          class:sources-expanded={isSourcesExpanded && !isSourcesCollapsed}
+          class:sources-expanded={!isSourcesCollapsed}
           class:gutter-collapsed={isGutterCollapsed}
           class:gutter-wide={activeGutterTab === 'trace' && !isGutterCollapsed}
           class:gutter-open={!isGutterCollapsed}
+          class:is-resizing={isResizingLeft || isResizingRight}
+          style="--sources-width: {isSourcesCollapsed ? '48px' : `${sourcesWidth}px`}; --gutter-width: {isGutterCollapsed ? '44px' : `${gutterWidth}px`};"
         >
           <!-- Zone 1: Primary Source Exhibits / Evidentiary Well -->
           <div
             class="workbench-col-sources"
             class:collapsed={isSourcesCollapsed}
-            class:expanded={isSourcesExpanded && !isSourcesCollapsed}
+            class:expanded={!isSourcesCollapsed}
+            class:no-transition={isResizingLeft}
+            style="width: var(--sources-width);"
           >
             <PrimarySourcesSidebar
               sources={assignmentSources}
@@ -1077,12 +1262,28 @@
               courseTitle={published?.domain || 'Department of Historical Studies'}
               courseId={courseId}
               isCollapsed={isSourcesCollapsed}
-              isExpanded={isSourcesExpanded && !isSourcesCollapsed}
-              onToggleCollapse={handleToggleSourcesExpand}
+              isExpanded={!isSourcesCollapsed}
+              onToggleCollapse={handleToggleSourcesCollapse}
               onToggleExpand={handleToggleSourcesExpand}
               onQuoteEvidence={handleQuoteEvidenceFromSidebar}
             />
           </div>
+
+          <!-- Left Margin Slider (Draggable Split-Resizer) -->
+          {#if !isSourcesCollapsed}
+            <div
+              class="workbench-resizer-handle resizer-left"
+              class:is-dragging={isResizingLeft}
+              onpointerdown={startResizeLeft}
+              ondblclick={() => sourcesWidth = 480}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize left sources sidebar"
+              title="Drag to resize sources sidebar (Double-click to reset to 480px)"
+            >
+              <div class="resizer-knob"></div>
+            </div>
+          {/if}
 
           <!-- Zone 2: Structured Reasoning Canvas -->
           <main class="workbench-col-canvas">
@@ -1122,18 +1323,39 @@
                 onDrawerStateChange={(open) => isDrawerOpen = open}
                 onPressureChange={(p) => oraclePressure = p}
                 onFocusedBlockChange={handleFocusedBlockChange}
+                isZenFullscreen={isZenFullscreen}
+                onToggleZen={toggleZenFullscreen}
               />
             {/if}
           </main>
+
+          <!-- Right Margin Slider (Draggable Split-Resizer) -->
+          {#if !isGutterCollapsed}
+            <div
+              class="workbench-resizer-handle resizer-right"
+              class:is-dragging={isResizingRight}
+              onpointerdown={startResizeRight}
+              ondblclick={() => gutterWidth = 440}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize right AI tutor sidebar"
+              title="Drag to resize AI tutor sidebar (Double-click to reset to 440px)"
+            >
+              <div class="resizer-knob"></div>
+            </div>
+          {/if}
 
           <!-- Zone 3: Socratic Gutter (Marginalia + Agent + Engagement Trace Tabs) -->
           <div
             class="workbench-col-gutter"
             class:collapsed={isGutterCollapsed}
             class:wide={activeGutterTab === 'trace' && !isGutterCollapsed}
+            class:no-transition={isResizingRight}
+            style="width: var(--gutter-width);"
           >
             <RightWorkbenchGutter
               {probes}
+              documentBlocks={canonicalBlocks}
               activeProbeId={activeProbeId}
               focusedBlockId={fiosraContext.activeBlockId}
               focusedBlockOffsetTop={fiosraContext.activeBlockOffsetTop}
@@ -1280,12 +1502,47 @@
 {/if}
 
 <style>
+  :global(body.fiosra-zen-mode) {
+    overflow: hidden !important;
+  }
+
   .workspace-viewport {
+    position: relative;
     display: flex;
     flex-direction: column;
     height: calc(100vh - 56px);
     background: var(--color-obsidian);
     overflow: hidden;
+  }
+
+  .workspace-viewport.zen-mode {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    height: 100vh !important;
+    max-height: 100vh !important;
+    z-index: 9999;
+  }
+
+  .workspace-viewport.zen-mode .workspace-content-body {
+    height: 100% !important;
+    max-height: 100% !important;
+    flex: 1 1 100%;
+  }
+
+  .workspace-viewport.zen-mode .canvas-tab-wrapper {
+    height: 100% !important;
+    max-height: 100% !important;
+    flex: 1 1 100%;
+  }
+
+  .workspace-viewport.zen-mode .in-situ-workbench-grid {
+    height: 100% !important;
+    max-height: 100% !important;
+    flex: 1 1 100%;
   }
 
 
@@ -1539,43 +1796,40 @@
   }
 
   .in-situ-workbench-grid {
-    display: grid;
-    /* Default: sources expanded to 40%, gutter collapsed to 44px rail */
-    grid-template-columns: clamp(620px, 40vw, 780px) minmax(0, 1fr) 44px;
+    display: flex;
+    flex-direction: row;
     width: 100%;
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    transition: grid-template-columns 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
   }
 
-  /* Sources Collapsed (slim 48px rail on left) + Gutter Collapsed (44px rail on right): Canvas is full width */
-  .in-situ-workbench-grid.sources-collapsed.gutter-collapsed {
-    grid-template-columns: 48px minmax(0, 1fr) 44px;
+  .in-situ-workbench-grid.is-resizing {
+    user-select: none !important;
+    cursor: col-resize !important;
   }
 
-  /* Sources Expanded (40% width on left) + Gutter Collapsed (44px rail on right) */
-  .in-situ-workbench-grid.sources-expanded.gutter-collapsed,
-  .in-situ-workbench-grid.gutter-collapsed {
-    grid-template-columns: clamp(620px, 40vw, 780px) minmax(0, 1fr) 44px;
+  .in-situ-workbench-grid.is-resizing :global(*) {
+    user-select: none !important;
+    pointer-events: none !important;
   }
 
-  /* Gutter Open (Agent / Marginalia / Trace taking exact same 40% width on right) */
-  .in-situ-workbench-grid.sources-collapsed.gutter-open,
-  .in-situ-workbench-grid.gutter-open {
-    grid-template-columns: 48px minmax(0, 1fr) clamp(620px, 40vw, 780px);
-  }
-
-  /* If both explicitly open/expanded */
-  .in-situ-workbench-grid.sources-expanded.gutter-open {
-    grid-template-columns: clamp(520px, 35vw, 660px) minmax(0, 1fr) clamp(520px, 35vw, 660px);
+  .in-situ-workbench-grid.is-resizing .workbench-resizer-handle {
+    pointer-events: auto !important;
   }
 
   .workbench-col-sources {
     height: 100%;
     min-height: 0;
     overflow: hidden;
-    transition: width 0.2s ease;
+    flex-shrink: 0;
+    flex-grow: 0;
+    transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .workbench-col-sources.no-transition {
+    transition: none !important;
   }
 
   .workbench-col-sources.collapsed {
@@ -1583,9 +1837,11 @@
   }
 
   .workbench-col-canvas {
+    flex: 1 1 0;
+    min-width: 320px;
     height: 100%;
     min-height: 0;
-    overflow-y: auto;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     position: relative;
@@ -1596,29 +1852,88 @@
     height: 100%;
     min-height: 0;
     overflow: hidden;
+    flex-shrink: 0;
+    flex-grow: 0;
     position: relative;
-    transition: width 0.2s ease;
+    transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .workbench-col-gutter.no-transition {
+    transition: none !important;
   }
 
   .workbench-col-gutter.collapsed {
     width: 44px;
   }
 
+  /* Resizer Handles (Margin Sliders) */
+  .workbench-resizer-handle {
+    width: 10px;
+    margin: 0 -5px;
+    height: 100%;
+    cursor: col-resize;
+    position: relative;
+    z-index: 30;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    user-select: none;
+    touch-action: none;
+  }
+
+  .workbench-resizer-handle::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 4px;
+    width: 2px;
+    background: var(--color-graphite-border, #e2e4dc);
+    transition: all 0.15s ease;
+  }
+
+  .workbench-resizer-handle:hover::before,
+  .workbench-resizer-handle.is-dragging::before {
+    background: #2563eb;
+    width: 3px;
+    left: 3.5px;
+    box-shadow: 0 0 8px rgba(37, 99, 235, 0.4);
+  }
+
+  .resizer-knob {
+    width: 4px;
+    height: 36px;
+    border-radius: 4px;
+    background: var(--color-slate-muted, #94a3b8);
+    opacity: 0;
+    transition: opacity 0.15s ease, background 0.15s ease, height 0.15s ease;
+    z-index: 2;
+  }
+
+  .workbench-resizer-handle:hover .resizer-knob,
+  .workbench-resizer-handle.is-dragging .resizer-knob {
+    opacity: 1;
+    background: #2563eb;
+    height: 52px;
+  }
+
   @media (max-width: 1200px) {
-    .in-situ-workbench-grid {
-      grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
-    }
     .workbench-col-sources {
       display: none;
+    }
+    .resizer-left {
+      display: none !important;
     }
   }
 
   @media (max-width: 860px) {
-    .in-situ-workbench-grid {
-      grid-template-columns: 1fr;
-    }
     .workbench-col-gutter {
       display: none;
+    }
+    .resizer-right {
+      display: none !important;
     }
   }
 
