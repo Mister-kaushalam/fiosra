@@ -115,11 +115,18 @@ class UniversalSocraticTurn(BaseModel):
         launchers = []
         for item in self.suggested_inquiries[:2]:
             if isinstance(item, dict):
-                launchers.append(item)
+                title = item.get("title") or item.get("prompt", "")
+                prompt = item.get("prompt") or item.get("title", "")
+                launchers.append({"title": str(title).strip(), "prompt": str(prompt).strip()})
             elif isinstance(item, str):
-                launchers.append({"title": item[:30], "prompt": item})
+                cleaned = item.strip()
+                launchers.append({"title": cleaned, "prompt": cleaned})
             elif hasattr(item, "model_dump"):
-                launchers.append(item.model_dump())
+                dumped = item.model_dump()
+                if isinstance(dumped, dict):
+                    title = dumped.get("title") or dumped.get("prompt", "")
+                    prompt = dumped.get("prompt") or dumped.get("title", "")
+                    launchers.append({"title": str(title).strip(), "prompt": str(prompt).strip()})
         return {
             "draft_response": self.socratic_response,
             "discourse_phase": self.student_move,
