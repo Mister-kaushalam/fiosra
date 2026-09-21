@@ -834,6 +834,21 @@
   async function handleMacroSendMessage(studentInput, hintRequested = false) {
     if (!sessionId || isMacroBusy) return;
     isMacroBusy = true;
+    let sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
+    if (sessionIdx < 0 && chatSessions.length > 0) {
+      sessionIdx = 0;
+    }
+    // Render student message immediately in chat
+    if (sessionIdx >= 0) {
+      chatSessions[sessionIdx].turns = [
+        ...chatSessions[sessionIdx].turns,
+        { role: 'student', text: studentInput }
+      ];
+      if (chatSessions[sessionIdx].title.startsWith('Consultation') && chatSessions[sessionIdx].turns.length <= 2) {
+        const snippet = studentInput.slice(0, 30).trim();
+        if (snippet) chatSessions[sessionIdx].title = snippet.length >= 28 ? `${snippet}…` : snippet;
+      }
+    }
     try {
       const prompt = assignment?.published?.task?.prompt || assignment?.task?.prompt || assignment?.prompt || 'Explore structural historical causation';
       const qId = assignment?.question_id || 'q1';
@@ -853,32 +868,23 @@
       });
       if (!res.ok) throw new Error(await responseError(res, 'Dialogue service unavailable'));
       const data = await res.json();
-      const newTurns = [
-        { role: 'student', text: studentInput },
-        {
-          role: 'tutor',
-          text: data.response_text,
-          thoughts: data.thoughts_of_tutorbot,
-          hint_rung: data.hint_rung,
-          is_adversarial: data.is_adversarial,
-          action_capsules: data.action_capsules || [],
-          radar: data.learner_radar || null,
-          prompt_launchers: data.prompt_launchers || [],
-        }
-      ];
-      const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
+      const tutorTurn = {
+        role: 'tutor',
+        text: data.response_text,
+        thoughts: data.thoughts_of_tutorbot,
+        hint_rung: data.hint_rung,
+        is_adversarial: data.is_adversarial,
+        action_capsules: data.action_capsules || [],
+        radar: data.learner_radar || null,
+        prompt_launchers: data.prompt_launchers || [],
+      };
       if (sessionIdx >= 0) {
-        chatSessions[sessionIdx].turns = [...chatSessions[sessionIdx].turns, ...newTurns];
-        if (chatSessions[sessionIdx].title.startsWith('Consultation') && chatSessions[sessionIdx].turns.length <= 2) {
-          const snippet = studentInput.slice(0, 30).trim();
-          if (snippet) chatSessions[sessionIdx].title = snippet.length >= 28 ? `${snippet}…` : snippet;
-        }
+        chatSessions[sessionIdx].turns = [...chatSessions[sessionIdx].turns, tutorTurn];
       }
       fiosraContext.setEpistemicState(null, data.hint_rung);
       await loadSessionEvents();
     } catch (err) {
       console.error('Macro dialogue error:', err);
-      const sessionIdx = chatSessions.findIndex((cs) => cs.id === activeChatSessionId);
       if (sessionIdx >= 0) {
         const errorTurn = {
           role: 'tutor',
@@ -890,7 +896,6 @@
         };
         chatSessions[sessionIdx].turns = [
           ...chatSessions[sessionIdx].turns,
-          { role: 'student', text: studentInput },
           errorTurn
         ];
       }

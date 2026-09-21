@@ -33,6 +33,7 @@
     if (!inputMessage.trim() || isBusy) return;
     const msg = inputMessage.trim();
     inputMessage = '';
+    scrollToBottom();
     await onSendMessage(msg, false);
     scrollToBottom();
   }
@@ -60,7 +61,7 @@
   }
 
   $effect(() => {
-    if (turns.length > 0) {
+    if (turns.length > 0 || isBusy) {
       scrollToBottom();
     }
   });
