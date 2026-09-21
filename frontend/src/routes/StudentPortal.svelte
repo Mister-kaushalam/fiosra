@@ -35,10 +35,8 @@
       availableCourses = nonInternalCourses.filter(
         (course) => !course.is_enrolled && (course.is_available || (course.modules && course.modules.length > 0))
       );
-      // Auto-expand curriculum for first enrolled course
-      if (enrolledCourses.length > 0) {
-        expandedCourseCurriculum = new Set([enrolledCourses[0].course_id]);
-      }
+      // Keep collapsed by default for compact, non-bulky layout
+      expandedCourseCurriculum = new Set();
     } catch (err) {
       console.error('Failed to fetch courses:', err);
     } finally {
@@ -138,7 +136,7 @@
           {:else}
             You are enrolled in {enrolledCourses.length} course{enrolledCourses.length === 1 ? '' : 's'} for Fall 2026.
             {#if enrolledCourses.length > 0 && getFirstAssignment(enrolledCourses[0])}
-              Next milestone due: <strong>{getFirstAssignment(enrolledCourses[0]).title}</strong>.
+              Active milestone: <strong>{getFirstAssignment(enrolledCourses[0]).title}</strong>.
             {:else}
               Explore your courses and curriculum roadmap below.
             {/if}
@@ -162,9 +160,9 @@
       <div class="enrolled-courses-stack">
         {#if isLoading}
           <div class="student-course-card skeleton-card">
-            <div style="height: 18px; width: 80px; background: var(--pill-hover); border-radius: 4px;"></div>
-            <div style="height: 28px; width: 60%; background: var(--pill-hover); border-radius: 6px; margin-top: 10px;"></div>
-            <div style="height: 60px; width: 100%; background: var(--pill-hover); border-radius: 6px; margin-top: 12px;"></div>
+            <div style="height: 16px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
+            <div style="height: 24px; width: 50%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
+            <div style="height: 40px; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 10px;"></div>
           </div>
         {:else if enrolledCourses.length > 0}
           {#each enrolledCourses as c (c.course_id)}
@@ -174,102 +172,80 @@
             {@const totalAssigns = mods.reduce((sum, m) => sum + (m.assignments ? m.assignments.length : 0), 0) || c.assignments_count || 1}
 
             <div class="student-course-card enrolled-card">
-              <!-- Card Header Row -->
+              <!-- Compact Top Header Row -->
               <div class="card-top-row">
                 <div class="card-titles">
                   <div class="meta-badge-strip">
                     <span class="course-meta-code">{c.domain || 'BUSINESS & MANAGEMENT'}</span>
-                    <span class="badge badge-success">Active Enrolled</span>
+                    <span class="badge-status-enrolled">Active Enrolled</span>
                   </div>
                   <h2 class="course-title">{c.title}</h2>
                   <div class="instructor-line">
-                    Faculty: <strong>{c.created_by || 'Prof. Somerville'}</strong> • <strong>{mods.length} Modules</strong> • <strong>{totalAssigns} Published Tasks</strong>
+                    Faculty: <strong>{c.created_by || 'Prof. Somerville'}</strong>
+                    <span class="meta-dot">•</span>
+                    <strong>{mods.length} Modules</strong>
+                    <span class="meta-dot">•</span>
+                    <strong>{totalAssigns} Assignments</strong>
                   </div>
                 </div>
 
                 <div class="card-quick-actions">
                   <a
                     href="#/student/home?course_id={c.course_id}"
-                    class="btn btn-secondary btn-view-map"
+                    class="btn-course-map"
                   >
-                    🗺️ View Course Map →
+                    Course Map →
                   </a>
                   {#if firstAssign}
                     <a
                       href="#/student?course_id={c.course_id}&assignment_id={firstAssign.assignment_id}"
-                      class="btn btn-primary btn-resume-cta"
+                      class="btn-resume-cta"
                     >
-                      ✍️ Resume Canvas →
+                      Resume Canvas →
                     </a>
                   {/if}
                 </div>
               </div>
 
-              <!-- Visual Module Progression Tracker -->
-              {#if mods.length > 0}
-                <div class="module-progression-track">
-                  <div class="track-header">
-                    <span class="track-label">Curriculum Progression &amp; Modular Path:</span>
-                    <span class="track-status">Module 1 Active (1 of {mods.length} in progress)</span>
-                  </div>
-                  <div class="module-steps-strip">
-                    {#each mods as mod, mIdx}
-                      {@const isFirst = mIdx === 0}
-                      <div class="step-segment" class:step-active={isFirst} class:step-future={!isFirst}>
-                        <span class="step-num">M{mod.position || (mIdx + 1)}</span>
-                        <span class="step-title">{mod.title}</span>
-                      </div>
-                    {/each}
-                  </div>
+              <!-- Compact Single-Line Active Milestone Strip -->
+              <div class="compact-task-strip">
+                <div class="task-strip-left">
+                  <span class="task-pulse-dot">●</span>
+                  <span class="task-strip-label">ACTIVE MILESTONE:</span>
+                  <span class="task-strip-name">{firstAssign ? firstAssign.title : 'Primary Source Inquiries'}</span>
+                  {#if firstAssign}
+                    <span class="task-strip-pills">Module 1 • ~400w • 5 Rubrics</span>
+                  {/if}
                 </div>
-              {/if}
 
-              <!-- Active Task Highlight -->
-              {#if firstAssign}
-                <div class="active-task-box">
-                  <div class="task-box-left">
-                    <span class="active-task-label">CURRENT ACTIVE REASONING MILESTONE</span>
-                    <div class="active-task-title">{firstAssign.title}</div>
-                    <div class="active-task-meta">
-                      ⏱️ Sectional Scaffold Active • 5 Rubric Criteria Tracked • ~400 Words Target
-                    </div>
-                  </div>
-                  <a
-                    href="#/student?course_id={c.course_id}&assignment_id={firstAssign.assignment_id}"
-                    class="btn-task-direct"
-                  >
-                    Open Task ↗
-                  </a>
-                </div>
-              {/if}
-
-              <!-- Expandable Curriculum Breakdown (Modules & Assignments) -->
-              <div class="curriculum-accordion-toggle">
-                <button
-                  type="button"
-                  class="toggle-curriculum-btn"
-                  onclick={() => toggleCurriculum(c.course_id)}
-                >
-                  <span>{isCurriculumOpen ? '▾ Hide' : '▸ Explore'} Course Curriculum ({mods.length} Modules, {totalAssigns} Assignments)</span>
-                </button>
-
-                <div class="footer-aux-links">
+                <div class="task-strip-right">
+                  {#if mods.length > 0}
+                    <button
+                      type="button"
+                      class="btn-toggle-curriculum"
+                      onclick={() => toggleCurriculum(c.course_id)}
+                      aria-expanded={isCurriculumOpen}
+                    >
+                      {isCurriculumOpen ? '▴ Hide Modules' : `▾ View ${mods.length} Modules (${totalAssigns} Tasks)`}
+                    </button>
+                  {/if}
                   <button
                     class="link-drop"
                     onclick={() => dropCourse(c.course_id)}
                     disabled={droppingId === c.course_id}
                   >
-                    {droppingId === c.course_id ? 'Dropping...' : 'Drop Course'}
+                    {droppingId === c.course_id ? 'Dropping...' : 'Drop'}
                   </button>
                 </div>
               </div>
 
+              <!-- Expandable Curriculum Drawer (Only visible on click) -->
               {#if isCurriculumOpen && mods.length > 0}
                 <div class="portal-curriculum-drawer">
                   {#each mods as mod, mIdx}
                     <div class="drawer-module-row">
                       <div class="drawer-mod-header">
-                        <span class="mod-pill">Module {mod.position || (mIdx + 1)}</span>
+                        <span class="mod-pill">M{mod.position || (mIdx + 1)}</span>
                         <strong class="drawer-mod-name">{mod.title}</strong>
                         <span class="drawer-assign-count">({mod.assignments ? mod.assignments.length : 0} tasks)</span>
                       </div>
@@ -283,7 +259,7 @@
                                 <span class="assign-index">Task {mIdx + 1}.{aIdx + 1}:</span>
                                 <span class="assign-name">{assign.title}</span>
                                 {#if isThisActive}
-                                  <span class="badge badge-success" style="font-size: 10px; padding: 2px 6px;">Active</span>
+                                  <span class="badge-mini-active">Active</span>
                                 {/if}
                               </div>
                               <a
@@ -364,18 +340,18 @@
       <div class="courses-grid">
         {#if isLoading}
           <div class="student-course-card skeleton-card">
-            <div style="height: 18px; width: 80px; background: var(--pill-hover); border-radius: 4px;"></div>
-            <div style="height: 24px; width: 60%; background: var(--pill-hover); border-radius: 4px; margin-top: 8px;"></div>
+            <div style="height: 16px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
+            <div style="height: 22px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
           </div>
         {:else if filteredAvailableCourses.length > 0}
-          {#each filteredAvailableCourses.slice(0, 12) as c (c.course_id)}
+          {#each filteredAvailableCourses.slice(0, 8) as c (c.course_id)}
             <div class="student-course-card available-card">
               <div class="card-top-row">
                 <div>
                   <span class="course-meta-code">{c.domain || 'ACADEMIC'}</span>
                   <h2 class="available-course-title">{c.title}</h2>
                 </div>
-                <span class="badge badge-neutral">Open</span>
+                <span class="badge-open">Open</span>
               </div>
 
               <div class="instructor-line">
@@ -384,14 +360,14 @@
 
               {#if c.syllabus_context}
                 <p class="course-synopsis">
-                  {c.syllabus_context.slice(0, 140)}{c.syllabus_context.length > 140 ? '...' : ''}
+                  {c.syllabus_context.slice(0, 130)}{c.syllabus_context.length > 130 ? '...' : ''}
                 </p>
               {/if}
 
               <div class="card-footer">
                 <span></span>
                 <button
-                  class="btn btn-enroll"
+                  class="btn-enroll"
                   onclick={() => enrollInCourse(c.course_id)}
                   disabled={enrollingId === c.course_id}
                 >
@@ -401,7 +377,7 @@
             </div>
           {/each}
         {:else}
-          <div class="empty-state-card" style="border-left-color: var(--color-slate-muted);">
+          <div class="empty-state-card">
             <p class="empty-desc" style="margin: 0;">
               No matching courses found. Try adjusting your search query or filter.
             </p>
@@ -415,67 +391,69 @@
 
 <style>
   .portal-page {
-    background-color: var(--color-obsidian);
+    background-color: #f8fafc;
     min-height: calc(100vh - 56px);
-    color: var(--color-slate-bright);
+    color: #1e293b;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   }
 
   .portal-main {
-    max-width: 1060px;
+    max-width: 1040px;
     margin: 0 auto;
-    padding: 32px 24px 80px 24px;
+    padding: 28px 24px 70px 24px;
     display: flex;
     flex-direction: column;
-    gap: 36px;
+    gap: 28px;
   }
 
   .greeting-banner {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--color-graphite-border);
-    padding-bottom: 24px;
-    gap: 20px;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 18px;
+    gap: 16px;
     flex-wrap: wrap;
   }
 
   .greeting-name {
-    font-family: var(--font-brand);
-    font-size: 26px;
+    font-size: 24px;
     font-weight: 700;
-    color: var(--color-heading);
+    color: #0f172a;
     margin: 0;
+    letter-spacing: -0.3px;
   }
 
   .greeting-sub {
-    font-size: 14px;
-    color: var(--color-slate-light);
-    margin: 6px 0 0 0;
+    font-size: 13.5px;
+    color: #64748b;
+    margin: 4px 0 0 0;
   }
 
   .portfolio-pill {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    padding: 8px 16px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    padding: 7px 14px;
     border-radius: 999px;
-    font-size: 13px;
-    color: var(--color-slate-bright);
+    font-size: 12.5px;
+    color: #1e293b;
     text-decoration: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
     transition: all 0.15s ease;
   }
 
   .portfolio-pill:hover {
-    border-color: var(--color-horizon-blue);
-    background: var(--pill-hover);
+    border-color: #d97706;
+    background: #fffbeb;
   }
 
   .section-block {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 14px;
   }
 
   .section-header {
@@ -488,276 +466,250 @@
 
   .section-eyebrow {
     font-size: 11px;
-    font-weight: 700;
-    color: var(--color-horizon-bright);
+    font-weight: 800;
+    color: #d97706;
     text-transform: uppercase;
     letter-spacing: 0.6px;
   }
 
   .section-count {
     font-size: 12px;
-    color: var(--color-slate-muted);
+    color: #64748b;
     font-weight: 500;
-    margin-left: 8px;
+    margin-left: 6px;
   }
 
   .enrolled-courses-stack {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 16px;
   }
 
+  /* Sleek, Non-Bulky, Light Enrolled Course Card */
   .student-course-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
-    padding: 24px 28px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    gap: 18px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+    gap: 12px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .student-course-card:hover {
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.07);
   }
 
   .enrolled-card {
-    border-left: 4px solid var(--color-horizon-blue);
+    border-left: 4px solid #d97706;
   }
 
   .card-top-row {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 20px;
+    gap: 16px;
     flex-wrap: wrap;
   }
 
   .card-titles {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 3px;
     flex: 1;
-    min-width: 280px;
+    min-width: 260px;
   }
 
   .meta-badge-strip {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .course-meta-code {
-    font-size: 10.5px;
-    font-weight: 700;
+    font-size: 10px;
+    font-weight: 800;
     letter-spacing: 0.8px;
     text-transform: uppercase;
-    color: var(--color-horizon-bright);
+    color: #d97706;
+  }
+
+  .badge-status-enrolled {
+    font-size: 10px;
+    font-weight: 700;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+    padding: 1px 7px;
+    border-radius: 999px;
   }
 
   .course-title {
-    font-family: var(--font-brand);
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 700;
-    color: var(--color-heading);
+    color: #0f172a;
     margin: 0;
     line-height: 1.25;
   }
 
   .instructor-line {
-    font-size: 13px;
-    color: var(--color-slate-light);
+    font-size: 12.5px;
+    color: #64748b;
+  }
+
+  .meta-dot {
+    margin: 0 4px;
+    color: #cbd5e1;
   }
 
   .card-quick-actions {
     display: flex;
     align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
+    gap: 8px;
+    flex-shrink: 0;
   }
 
-  .btn-view-map {
-    padding: 9px 16px;
-    font-size: 13px;
+  .btn-course-map {
+    padding: 7px 13px;
+    font-size: 12px;
     font-weight: 600;
-    border-radius: var(--radius-md);
+    color: #1e293b;
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-course-map:hover {
+    background: #f1f5f9;
+    border-color: #94a3b8;
   }
 
   .btn-resume-cta {
-    padding: 9px 18px;
-    font-size: 13px;
+    padding: 7px 15px;
+    font-size: 12px;
     font-weight: 600;
-    border-radius: var(--radius-md);
+    color: #ffffff;
+    background: #d97706;
+    border: 1px solid #b45309;
+    border-radius: 6px;
+    text-decoration: none;
+    transition: background 0.15s ease;
+    white-space: nowrap;
   }
 
-  /* Module Stepper */
-  .module-progression-track {
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 14px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
+  .btn-resume-cta:hover {
+    background: #b45309;
   }
 
-  .track-header {
+  /* Compact Active Milestone Strip */
+  .compact-task-strip {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 9px 14px;
     display: flex;
     justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .task-strip-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12.5px;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
+
+  .task-pulse-dot {
     font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
+    color: #059669;
+  }
+
+  .task-strip-label {
+    font-size: 10px;
+    font-weight: 800;
+    color: #64748b;
     letter-spacing: 0.5px;
   }
 
-  .track-label {
-    color: var(--color-horizon-bright);
-  }
-
-  .track-status {
-    color: var(--color-slate-muted);
-  }
-
-  .module-steps-strip {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-  }
-
-  .step-segment {
-    flex: 1;
-    min-width: 140px;
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    padding: 8px 12px;
-    border-radius: var(--radius-sm);
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .step-segment.step-active {
-    border-color: var(--color-horizon-blue);
-    background: rgba(59, 130, 246, 0.1);
-  }
-
-  .step-num {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--color-horizon-bright);
-  }
-
-  .step-title {
-    font-size: 11.5px;
-    color: var(--color-slate-bright);
+  .task-strip-name {
     font-weight: 600;
+    color: #0f172a;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
-  /* Active Task Box */
-  .active-task-box {
-    background: rgba(30, 41, 59, 0.75);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 14px 18px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-  }
-
-  .task-box-left {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .active-task-label {
-    font-size: 10px;
-    font-weight: 800;
-    color: var(--color-signal-green-dark);
-    letter-spacing: 0.5px;
-  }
-
-  .active-task-title {
-    font-family: var(--font-brand);
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .active-task-meta {
-    font-size: 12px;
-    color: var(--color-slate-light);
-  }
-
-  .btn-task-direct {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--color-horizon-bright);
-    text-decoration: none;
-    padding: 6px 12px;
-    border-radius: var(--radius-sm);
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
+  .task-strip-pills {
+    font-size: 11px;
+    color: #64748b;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    padding: 2px 7px;
+    border-radius: 4px;
     white-space: nowrap;
   }
 
-  .btn-task-direct:hover {
-    background: var(--pill-hover);
-  }
-
-  /* Drawer */
-  .curriculum-accordion-toggle {
+  .task-strip-right {
     display: flex;
-    justify-content: space-between;
     align-items: center;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 12px;
+    gap: 12px;
+    flex-shrink: 0;
   }
 
-  .toggle-curriculum-btn {
+  .btn-toggle-curriculum {
     background: none;
     border: none;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
-    color: var(--color-horizon-bright);
+    color: #2563eb;
     cursor: pointer;
     padding: 0;
   }
 
-  .toggle-curriculum-btn:hover {
+  .btn-toggle-curriculum:hover {
     text-decoration: underline;
   }
 
   .link-drop {
     background: none;
     border: none;
-    color: var(--color-slate-muted);
-    font-size: 12px;
+    color: #94a3b8;
+    font-size: 11.5px;
     cursor: pointer;
+    padding: 0;
   }
 
   .link-drop:hover {
     color: #ef4444;
   }
 
+  /* Clean Light Curriculum Drawer */
   .portal-curriculum-drawer {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 12px 16px;
     display: flex;
     flex-direction: column;
-    gap: 12px;
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 16px 20px;
+    gap: 10px;
+    margin-top: 2px;
   }
 
   .drawer-module-row {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--color-graphite-border);
+    gap: 6px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e2e8f0;
   }
 
   .drawer-module-row:last-child {
@@ -772,148 +724,169 @@
   }
 
   .mod-pill {
-    font-size: 10px;
+    font-size: 9.5px;
     font-weight: 800;
-    background: var(--pill-bg);
-    color: var(--color-slate-light);
-    padding: 2px 6px;
+    background: #e2e8f0;
+    color: #475569;
+    padding: 1px 5px;
     border-radius: 3px;
   }
 
   .drawer-mod-name {
-    font-size: 13.5px;
-    color: var(--color-heading);
+    font-size: 12.5px;
+    color: #0f172a;
+    font-weight: 600;
   }
 
   .drawer-assign-count {
-    font-size: 11.5px;
-    color: var(--color-slate-muted);
+    font-size: 11px;
+    color: #94a3b8;
   }
 
   .drawer-assign-list {
     display: flex;
     flex-direction: column;
-    gap: 6px;
-    margin-left: 16px;
+    gap: 4px;
+    margin-left: 14px;
   }
 
   .drawer-assign-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 6px 12px;
-    background: var(--color-graphite);
-    border-radius: var(--radius-sm);
-    gap: 12px;
+    padding: 5px 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    gap: 10px;
   }
 
   .drawer-assign-item.item-active {
-    border-left: 3px solid var(--color-horizon-blue);
+    border-left: 3px solid #d97706;
   }
 
   .assign-info {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     min-width: 0;
   }
 
   .assign-index {
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
-    color: var(--color-horizon-bright);
+    color: #d97706;
   }
 
   .assign-name {
-    font-size: 12.5px;
-    color: var(--color-slate-bright);
+    font-size: 12px;
+    color: #1e293b;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
   }
 
+  .badge-mini-active {
+    font-size: 9.5px;
+    font-weight: 700;
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
   .btn-drawer-launch {
-    font-size: 11.5px;
+    font-size: 11px;
     font-weight: 600;
-    color: var(--color-horizon-bright);
+    color: #2563eb;
     text-decoration: none;
-    padding: 3px 8px;
+    padding: 2px 7px;
     border-radius: 4px;
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
     white-space: nowrap;
   }
 
   .btn-drawer-launch:hover {
-    background: var(--pill-hover);
+    background: #e2e8f0;
   }
 
   /* Catalog & Filters */
   .catalog-filters {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     flex-wrap: wrap;
   }
 
   .filter-search-input {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    color: var(--color-slate-bright);
-    padding: 6px 12px;
-    font-size: 13px;
-    border-radius: var(--radius-md);
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #1e293b;
+    padding: 5px 10px;
+    font-size: 12.5px;
+    border-radius: 6px;
     outline: none;
-    width: 180px;
+    width: 170px;
   }
 
   .filter-search-input:focus {
-    border-color: var(--color-horizon-blue);
+    border-color: #d97706;
   }
 
   .category-pills {
     display: flex;
-    gap: 6px;
+    gap: 5px;
   }
 
   .cat-pill {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    color: var(--color-slate-muted);
-    font-size: 11.5px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    color: #64748b;
+    font-size: 11px;
     font-weight: 600;
-    padding: 4px 10px;
+    padding: 3px 9px;
     border-radius: 999px;
     cursor: pointer;
   }
 
   .cat-pill.active {
-    background: var(--color-horizon-blue);
+    background: #d97706;
     color: #ffffff;
-    border-color: var(--color-horizon-blue);
+    border-color: #d97706;
   }
 
   .courses-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(310px, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+    gap: 14px;
   }
 
   .available-card {
-    padding: 20px 22px;
+    padding: 16px 18px;
   }
 
   .available-course-title {
-    font-family: var(--font-brand);
-    font-size: 17px;
+    font-size: 15.5px;
     font-weight: 700;
-    color: var(--color-heading);
+    color: #0f172a;
     margin: 0;
   }
 
+  .badge-open {
+    font-size: 10px;
+    font-weight: 700;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    padding: 1px 6px;
+    border-radius: 4px;
+  }
+
   .course-synopsis {
-    font-size: 12.5px;
-    color: var(--color-slate-muted);
+    font-size: 12px;
+    color: #64748b;
     line-height: 1.4;
     margin: 0;
   }
@@ -922,49 +895,49 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 10px;
     margin-top: auto;
   }
 
   .btn-enroll {
-    padding: 6px 14px;
-    font-size: 12px;
+    padding: 5px 12px;
+    font-size: 11.5px;
     font-weight: 600;
-    background: var(--color-horizon-blue);
+    background: #d97706;
     color: #ffffff;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: 4px;
     cursor: pointer;
   }
 
   .btn-enroll:hover {
-    opacity: 0.9;
+    background: #b45309;
   }
 
   .empty-state-card {
-    background: var(--color-graphite);
-    border: 1px dashed var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 36px 24px;
+    background: #ffffff;
+    border: 1px dashed #cbd5e1;
+    border-radius: 8px;
+    padding: 30px 20px;
     text-align: center;
-    color: var(--color-slate-muted);
+    color: #64748b;
   }
 
   .empty-icon {
-    font-size: 32px;
-    margin-bottom: 8px;
+    font-size: 28px;
+    margin-bottom: 6px;
   }
 
   .empty-title {
-    font-size: 16px;
+    font-size: 15px;
     font-weight: 700;
-    color: var(--color-heading);
-    margin: 0 0 6px 0;
+    color: #0f172a;
+    margin: 0 0 4px 0;
   }
 
   .empty-desc {
-    font-size: 13px;
+    font-size: 12.5px;
     margin: 0;
   }
 </style>
