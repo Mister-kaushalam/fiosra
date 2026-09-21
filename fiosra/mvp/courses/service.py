@@ -122,12 +122,40 @@ class CourseService:
         # during application startup.
         from fiosra.mvp.assignment_designer.generator import assignment_generator
 
+        import re
+
         courses = await cls.list_courses()
         enrolled_course_ids = {
             str(course.course_id) for course in await cls.list_enrolled_courses(student_id)
         }
+        seen_titles: set[str] = set()
         catalog: list[dict[str, Any]] = []
         for course in courses:
+            title = course.title or ""
+            creator = course.created_by or ""
+            # Filter out automated test courses, canvas test runs, and test fixtures
+            if (
+                "test" in creator.lower()
+                or "test" in title.lower()
+                or "canvas" in title.lower()
+                or "corpus" in title.lower()
+                or "workflow" in title.lower()
+                or bool(re.search(r"[0-9a-f]{6,}", title, re.IGNORECASE))
+                or "auto_graph" in creator.lower()
+                or "prof_graph" in creator.lower()
+                or "prof_teacher" in creator.lower()
+            ):
+                continue
+
+            norm_title = title.strip().lower()
+            if norm_title in seen_titles:
+                continue
+            seen_titles.add(norm_title)
+
+            # Only include courses with curriculum modules configured
+            if not course.modules or len(course.modules) == 0:
+                continue
+
             public_assignments = await assignment_generator.list_public_assignments(
                 course_id=course.course_id,
                 status="published",
