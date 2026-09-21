@@ -1264,7 +1264,7 @@
             <PrimarySourcesSidebar
               sources={assignmentSources}
               assignment={published || assignment}
-              courseTitle={published?.domain || 'Department of Historical Studies'}
+              courseTitle={published?.course_title || assignment?.course_title || published?.title || assignment?.title || ''}
               courseId={courseId}
               isCollapsed={isSourcesCollapsed}
               isExpanded={!isSourcesCollapsed}

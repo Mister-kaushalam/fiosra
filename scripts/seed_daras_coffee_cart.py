@@ -350,6 +350,9 @@ async def seed_postgres() -> uuid.UUID:
             "target_kcs": ["c8", "c2", "c1"],
             "published": {
                 "title": PUBLISHED_TITLE,
+                "course_title": "BUS C150: Principles of Marketing",
+                "department": "Department of Marketing & Strategic Management",
+                "domain": "Marketing and Business",
                 "purpose": "Formulate cohesive strategic advice on Product, Price, Place, and Promotion for an on-campus coffee cart, demonstrating how marketing mix decisions constrain and reinforce one another.",
                 "learning_goals": [
                     "Identify the four Ps of the marketing mix and explain what each one covers (§1.2, p. 18).",

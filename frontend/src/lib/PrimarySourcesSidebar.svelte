@@ -101,8 +101,142 @@
   function clearSearch() {
     searchQuery = '';
     activeSearchTerm = '';
-    iframeKey += 1;
   }
+
+  let displayDomain = $derived(
+    assignment?.domain ||
+    assignment?.published?.domain ||
+    assignment?.spec?.domain ||
+    ''
+  );
+
+  let displayDepartment = $derived(
+    assignment?.department ||
+    assignment?.published?.department ||
+    assignment?.spec?.department ||
+    (courseTitle && courseTitle.toLowerCase().includes('department') ? courseTitle : '') ||
+    (displayDomain ? `Department of ${displayDomain}` : '')
+  );
+
+  let displayCourse = $derived(
+    assignment?.course_title ||
+    assignment?.published?.course_title ||
+    assignment?.spec?.course_title ||
+    courseTitle ||
+    assignment?.title ||
+    assignment?.published?.title ||
+    'Academic Inquiry'
+  );
+
+  let parsedCasePrompt = $derived.by(() => {
+    const raw = assignment?.task?.prompt || assignment?.published?.task?.prompt || assignment?.prompt || '';
+    if (!raw) {
+      return { narrative: '', sections: [] };
+    }
+
+    // Split by markdown headings starting with '### '
+    const parts = raw.split(/\n(?=###\s+)/);
+    const narrative = parts[0].replace(/^###\s+.*?\n/, '').trim();
+    const sections = [];
+
+    for (let i = 1; i < parts.length; i++) {
+      const part = parts[i].trim();
+      if (!part) continue;
+      const lines = part.split('\n');
+      const headingLine = lines[0].replace(/^###\s+/, '').trim();
+      const bodyLines = lines.slice(1);
+
+      const items = [];
+      let calloutText = '';
+      let isTable = false;
+      let isMetricGrid = false;
+
+      for (const line of bodyLines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+
+        if (
+          trimmed.toLowerCase().startsWith('the catch:') ||
+          trimmed.toLowerCase().startsWith('note:') ||
+          trimmed.toLowerCase().startsWith('constraint:')
+        ) {
+          calloutText = trimmed;
+          continue;
+        }
+
+        // Detect bullet or numbered items: '• ', '- ', '1. '
+        const bulletMatch = trimmed.match(/^([•\-\*]|\d+\.)\s*(.*)$/);
+        if (bulletMatch) {
+          const itemText = bulletMatch[2].trim();
+
+          // Pipe-separated table row: 'col1 | col2 | col3'
+          if (itemText.includes('|')) {
+            isTable = true;
+            const cols = itemText.split('|').map((c) => c.trim());
+            items.push({ type: 'row', cols });
+          }
+          // Metric key-value card: 'Value — Label' or 'Value - Label'
+          else if (itemText.includes('—') || itemText.includes(' - ')) {
+            isMetricGrid = true;
+            const sep = itemText.includes('—') ? '—' : ' - ';
+            const [val, ...rest] = itemText.split(sep);
+            items.push({ type: 'metric', value: val.trim(), label: rest.join(sep).trim() });
+          }
+          // Standard bullet item
+          else {
+            items.push({ type: 'bullet', text: itemText });
+          }
+        } else {
+          items.push({ type: 'text', text: trimmed });
+        }
+      }
+
+      sections.push({
+        title: headingLine,
+        isTable,
+        isMetricGrid: isMetricGrid && !isTable,
+        items,
+        calloutText,
+      });
+    }
+
+    return {
+      narrative,
+      sections,
+    };
+  });
+
+  let displaySourcesList = $derived(
+    assignment?.source_pack ||
+    assignment?.published?.source_pack ||
+    sources ||
+    []
+  );
+
+  let displayRubricList = $derived(
+    assignment?.public_rubric ||
+    assignment?.published?.public_rubric ||
+    assignment?.spec?.rubric ||
+    []
+  );
+
+  let displayGoalsList = $derived(
+    assignment?.learning_goals ||
+    assignment?.published?.learning_goals ||
+    []
+  );
+
+  let displayChecklist = $derived(
+    assignment?.completion_checklist ||
+    assignment?.published?.completion_checklist ||
+    []
+  );
+
+  let displayRequirements = $derived(
+    assignment?.task?.requirements ||
+    assignment?.published?.task?.requirements ||
+    []
+  );
 
   function printAssignmentSheet() {
     const sheet = document.querySelector('.academic-sheet');
@@ -127,7 +261,7 @@
     document.body.appendChild(printFrame);
 
     const frameDoc = printFrame.contentDocument || printFrame.contentWindow.document;
-    const assignmentTitle = assignment?.title || 'Academic Assignment Brief';
+    const assignmentTitle = assignment?.published?.title || assignment?.title || 'Academic Assignment Brief';
 
     frameDoc.open();
     frameDoc.write(`<!DOCTYPE html>
@@ -138,7 +272,7 @@
   <style>
     @page {
       size: A4 portrait;
-      margin: 16mm 18mm 18mm 18mm;
+      margin: 10mm 12mm 10mm 12mm;
     }
     * {
       box-sizing: border-box;
@@ -149,10 +283,10 @@
       margin: 0;
       padding: 0;
       background: #ffffff;
-      color: #1f2937;
+      color: #111827;
       font-family: "Georgia", Georgia, "Times New Roman", serif;
-      font-size: 13px;
-      line-height: 1.5;
+      font-size: 11px;
+      line-height: 1.42;
     }
     .academic-sheet {
       width: 100%;
@@ -161,189 +295,456 @@
       padding: 0;
       margin: 0;
     }
+    .sheet-page {
+      position: relative;
+      box-sizing: border-box;
+      background: #ffffff;
+    }
+    .sheet-page-1 {
+      page-break-after: always;
+      break-after: page;
+      padding-bottom: 2mm;
+    }
+    .sheet-page-2 {
+      page-break-before: always;
+      break-before: page;
+      padding-top: 2mm;
+    }
+    .sheet-page-break {
+      page-break-before: always;
+      break-before: page;
+      height: 0;
+      margin: 0;
+      padding: 0;
+      border: none;
+      visibility: hidden;
+    }
     .sheet-header {
       display: flex;
       justify-content: space-between;
       align-items: flex-start;
-      border-bottom: 2px solid #111827;
-      padding-bottom: 12px;
-      margin-bottom: 18px;
+      border-bottom: 2px solid #0f172a;
+      padding-bottom: 8px;
+      margin-bottom: 10px;
     }
     .inst-logo {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 11px;
+      font-size: 10px;
       font-weight: 800;
-      letter-spacing: 1px;
-      color: #4b5563;
+      letter-spacing: 1.2px;
+      color: #475569;
     }
     .inst-course {
-      font-size: 15px;
-      font-weight: bold;
-      color: #111827;
+      font-size: 14px;
+      font-weight: 800;
+      color: #0f172a;
       margin-top: 2px;
+    }
+    .inst-dept {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 10.5px;
+      color: #64748b;
+      margin-top: 1px;
     }
     .sheet-meta {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 11px;
-      color: #4b5563;
-      line-height: 1.5;
+      font-size: 9.5px;
+      color: #475569;
+      line-height: 1.45;
       text-align: right;
     }
     .sheet-meta span {
-      font-weight: bold;
-      color: #111827;
+      font-weight: 700;
+      color: #0f172a;
     }
     .sheet-title-block {
-      margin-bottom: 18px;
+      margin-bottom: 10px;
     }
     .sheet-title-block h1 {
-      font-size: 22px;
+      font-size: 18px;
       font-weight: 800;
-      color: #111827;
-      margin: 0 0 6px;
-      line-height: 1.25;
+      color: #0f172a;
+      margin: 0 0 3px;
+      line-height: 1.2;
     }
     .sheet-purpose {
-      font-size: 13px;
+      font-size: 11px;
       font-style: italic;
-      color: #4b5563;
+      color: #475569;
       margin: 0;
-      line-height: 1.5;
+      line-height: 1.4;
     }
     .sheet-section {
-      margin-bottom: 20px;
+      margin-bottom: 11px;
       page-break-inside: avoid;
+    }
+    .sheet-sec-heading {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 3px;
+      margin-bottom: 7px;
+    }
+    .sec-num {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9px;
+      font-weight: 800;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 1px 5px;
+      border-radius: 2px;
+      letter-spacing: 0.5px;
     }
     .sheet-sec-title {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 12px;
+      font-size: 11px;
       font-weight: 800;
-      letter-spacing: 0.5px;
+      letter-spacing: 0.4px;
       text-transform: uppercase;
-      color: #111827;
-      border-bottom: 1px solid #e5e7eb;
-      padding-bottom: 4px;
-      margin: 0 0 10px;
-    }
-    .sheet-task-prompt {
-      font-size: 13.5px;
-      line-height: 1.6;
-      color: #1f2937;
+      color: #0f172a;
       margin: 0;
     }
-    .sheet-requirements, .sheet-goals-list, .sheet-checklist {
-      font-size: 12.5px;
-      line-height: 1.6;
-      color: #374151;
-      padding-left: 20px;
-      margin: 8px 0 0;
+    .sheet-narrative-text {
+      font-size: 11px;
+      line-height: 1.45;
+      color: #1e293b;
+      margin: 0 0 8px;
     }
-    .sheet-goals-list, .sheet-checklist {
+    .sub-sec-title {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 10px;
+      font-weight: 700;
+      color: #334155;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+      margin: 6px 0 4px;
+    }
+    .economics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .metric-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 5px 7px;
+    }
+    .metric-label {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+    }
+    .metric-val {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 13px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 1px 0;
+    }
+    .metric-note {
+      font-size: 8.5px;
+      color: #475569;
+      line-height: 1.25;
+    }
+    .sheet-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5px;
+      margin-bottom: 8px;
+    }
+    .sheet-table th, .sheet-table td {
+      border: 1px solid #cbd5e1;
+      padding: 4px 6px;
+      vertical-align: middle;
+      text-align: left;
+    }
+    .sheet-table th {
+      background: #f1f5f9;
+      color: #0f172a;
+      font-weight: 700;
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+    .badge-accent {
+      font-weight: 700;
+      color: #0369a1;
+    }
+    .text-muted-sm {
+      color: #475569;
+      font-size: 9px;
+    }
+    .survey-boundary-block {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .survey-box {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-left: 3px solid #0284c7;
+      border-radius: 4px;
+      padding: 5px 8px;
+    }
+    .survey-hdr {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 3px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5px;
+    }
+    .sample-tag {
+      font-size: 8.5px;
+      color: #64748b;
+    }
+    .survey-list {
       list-style: none;
-      padding-left: 4px;
+      padding: 0;
+      margin: 0;
+      font-size: 9px;
+      line-height: 1.35;
+      color: #334155;
     }
-    .sheet-sources-table {
+    .constraint-callout {
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-left: 3px solid #d97706;
+      border-radius: 4px;
+      padding: 5px 8px;
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      justify-content: center;
     }
-    .sheet-source-row {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-left: 3px solid #374151;
+    .callout-badge {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 8.5px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      color: #92400e;
+    }
+    .constraint-callout p {
+      margin: 2px 0 0;
+      font-size: 9.5px;
+      font-weight: 600;
+      color: #78350f;
+      line-height: 1.3;
+    }
+    .ground-rules-box {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
       border-radius: 4px;
-      padding: 10px 12px;
-      page-break-inside: avoid;
+      padding: 6px 8px;
     }
-    .src-meta strong {
-      font-size: 12.5px;
-      color: #111827;
-      display: block;
+    .rules-title {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #0f172a;
+      text-transform: uppercase;
+      margin-bottom: 4px;
+      letter-spacing: 0.3px;
     }
-    .src-guide {
-      font-size: 11.5px;
-      color: #6b7280;
-      font-style: italic;
-      display: block;
-      margin-top: 2px;
+    .rules-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
     }
-    .src-excerpt {
-      font-size: 12px;
-      line-height: 1.5;
-      color: #374151;
-      margin: 6px 0;
-      padding-left: 8px;
-      border-left: 2px solid #cbd5e1;
+    .rule-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 5px;
+      font-size: 9px;
+      line-height: 1.35;
+      color: #334155;
+    }
+    .rule-index {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 8px;
+      font-weight: 800;
+      background: #e2e8f0;
+      color: #334155;
+      border-radius: 50%;
+      width: 14px;
+      height: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    /* Page 2 Elements */
+    .page-continuation-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1.5px solid #0f172a;
+      padding-bottom: 4px;
+      margin-bottom: 10px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #475569;
+    }
+    .page-num-pill {
+      background: #0f172a;
+      color: #ffffff;
+      padding: 1px 6px;
+      border-radius: 3px;
+      font-size: 8.5px;
+    }
+    .frameworks-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+    .framework-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-left: 3px solid #475569;
+      border-radius: 4px;
+      padding: 5px 7px;
+    }
+    .fw-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 2px;
+    }
+    .fw-sec {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 8.5px;
+      font-weight: 800;
+      color: #0f172a;
+      background: #e2e8f0;
+      padding: 0 4px;
+      border-radius: 2px;
+    }
+    .fw-concept {
+      font-size: 8px;
+      font-weight: 600;
+      color: #64748b;
+    }
+    .fw-title {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 9.5px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 2px;
+    }
+    .fw-app {
+      font-size: 8.5px;
+      line-height: 1.35;
+      color: #475569;
     }
     .sheet-rubric-table {
       width: 100%;
       border-collapse: collapse;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 11px;
-      margin-top: 8px;
+      font-size: 9px;
+      margin-bottom: 8px;
     }
     .sheet-rubric-table th, .sheet-rubric-table td {
-      border: 1px solid #d1d5db;
-      padding: 6px 8px;
+      border: 1px solid #cbd5e1;
+      padding: 4px 6px;
       vertical-align: top;
       text-align: left;
     }
     .sheet-rubric-table th {
-      background: #f3f4f6;
-      color: #111827;
+      background: #f1f5f9;
+      color: #0f172a;
       font-weight: 700;
+      font-size: 8.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
     }
     .sheet-rubric-table tr {
       page-break-inside: avoid;
     }
     .weight-tag {
       display: inline-block;
-      font-size: 9.5px;
-      font-weight: 700;
-      background: #e5e7eb;
-      color: #374151;
-      padding: 1px 4px;
-      border-radius: 3px;
-      margin-left: 4px;
+      font-size: 8.5px;
+      font-weight: 800;
+      background: #e2e8f0;
+      color: #1e293b;
+      padding: 0 4px;
+      border-radius: 2px;
+      margin-left: 3px;
     }
-    .sheet-concept-tag {
-      display: inline-block;
-      font-size: 9.5px;
-      font-weight: 600;
-      color: #6d28d9;
-      background: #f3e8ff;
-      border: 1px solid #e9d5ff;
-      padding: 1px 4px;
-      border-radius: 3px;
-      margin-top: 3px;
+    .crit-sub {
+      font-size: 8px;
+      color: #64748b;
+      margin-top: 1px;
+      line-height: 1.25;
     }
     .lvl-title {
       font-weight: 700;
       display: block;
-      color: #111827;
-      font-size: 10px;
-      margin-bottom: 2px;
+      color: #0f172a;
+      font-size: 8.5px;
+      margin-bottom: 1px;
     }
     .lvl-desc {
-      font-size: 10px;
-      color: #4b5563;
+      font-size: 8px;
+      color: #475569;
       line-height: 1.3;
     }
-    .crit-sub {
-      font-size: 10px;
-      color: #6b7280;
-      margin-top: 2px;
+    .goals-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 10px;
+      margin-bottom: 8px;
     }
-    .sheet-footer {
-      border-top: 1px solid #e5e7eb;
-      margin-top: 16px;
-      padding-top: 10px;
+    .goal-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 5px;
+      font-size: 8.5px;
+      line-height: 1.35;
+      color: #334155;
+    }
+    .goal-check {
+      color: #15803d;
+      font-weight: bold;
+      font-size: 9px;
+      flex-shrink: 0;
+    }
+    .integrity-card {
+      background: #f8fafc;
+      border: 1px solid #cbd5e1;
+      border-left: 3px solid #0f172a;
+      border-radius: 4px;
+      padding: 6px 8px;
+    }
+    .integrity-title {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      font-size: 11px;
-      color: #6b7280;
+      font-size: 9px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 2px;
     }
-    .sheet-integrity-statement strong {
-      color: #111827;
+    .integrity-text {
+      font-size: 8.5px;
+      line-height: 1.35;
+      color: #475569;
+      margin-bottom: 6px;
+    }
+    .sign-block {
+      display: flex;
+      justify-content: space-between;
+      border-top: 1px dashed #cbd5e1;
+      padding-top: 4px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      font-size: 8.5px;
+      color: #64748b;
     }
     .no-print {
       display: none !important;
@@ -566,138 +967,260 @@
       <!-- TAB 1: ACADEMIC ASSIGNMENT BRIEF (Printable Handout Format) -->
       <div class="assignment-scroll-container">
         <article class="academic-sheet print-target">
-          <!-- Sheet Header -->
-          <header class="sheet-header">
-            <div class="sheet-institution">
-              <div class="inst-logo">FIOSRA ACADEMIC LMS</div>
-              <div class="inst-course">{courseTitle || 'Department of Historical Studies'}</div>
+          <!-- PAGE 1 OF 2: CASE BRIEF & OPERATIONAL DATA -->
+          <div class="sheet-page sheet-page-1">
+            <!-- Sheet Header -->
+            <header class="sheet-header">
+              <div class="sheet-institution">
+                <div class="inst-logo">FIOSRA ACADEMIC LMS</div>
+                <div class="inst-course">{displayCourse}</div>
+                {#if displayDepartment}
+                  <div class="inst-dept">{displayDepartment}</div>
+                {/if}
+              </div>
+              <div class="sheet-meta">
+                {#if displayDomain}
+                  <div><span>Domain:</span> {displayDomain}</div>
+                {/if}
+                <div><span>Deliverable:</span> {assignment?.task?.deliverable || assignment?.published?.task?.deliverable || 'Argumentative Work'}</div>
+                {#if assignment?.task?.scope || assignment?.published?.task?.scope}
+                  <div><span>Scope:</span> {assignment?.task?.scope || assignment?.published?.task?.scope}</div>
+                {/if}
+                <div><span>Academic Term:</span> Current Active Session</div>
+              </div>
+            </header>
+
+            <!-- Title Block -->
+            <div class="sheet-title-block">
+              <h1>{assignment?.published?.title || assignment?.title || 'Assignment Brief'}</h1>
+              {#if assignment?.purpose || assignment?.published?.purpose}
+                <p class="sheet-purpose">{assignment?.purpose || assignment?.published?.purpose}</p>
+              {/if}
             </div>
-            <div class="sheet-meta">
-              <div><span>Domain:</span> {assignment?.domain || 'Historical Inquiry'}</div>
-              <div><span>Deliverable:</span> {assignment?.task?.deliverable || 'Argumentative Essay'}</div>
-              <div><span>Scope:</span> {assignment?.task?.scope || 'Course scope'}</div>
-            </div>
-          </header>
 
-          <!-- Title Block -->
-          <div class="sheet-title-block">
-            <h1>{assignment?.title || 'Milestone Assignment'}</h1>
-            {#if assignment?.purpose}
-              <p class="sheet-purpose">{assignment.purpose}</p>
-            {/if}
-          </div>
+            <!-- Section I: Case Narrative & Operational Data -->
+            <section class="sheet-section">
+              <div class="sheet-sec-heading">
+                <span class="sec-num">SECTION I</span>
+                <h2 class="sheet-sec-title">Case Narrative &amp; Prompt Specification</h2>
+              </div>
+              {#if parsedCasePrompt.narrative}
+                <p class="sheet-narrative-text">{parsedCasePrompt.narrative}</p>
+              {/if}
 
-          <!-- Section I: Task Inquiries & Instructions -->
-          <section class="sheet-section">
-            <h2 class="sheet-sec-title">I. Task Inquiries &amp; Instructions</h2>
-            <p class="sheet-task-prompt">{assignment?.task?.prompt || 'Explore the assigned historical materials to build your central thesis and argument.'}</p>
-            {#if assignment?.task?.requirements && assignment.task.requirements.length > 0}
-              <ul class="sheet-requirements">
-                {#each assignment.task.requirements as req}
-                  <li>{req}</li>
-                {/each}
-              </ul>
-            {/if}
-          </section>
-
-          <!-- Section II: Assigned Primary Source Materials -->
-          <section class="sheet-section">
-            <h2 class="sheet-sec-title">II. Assigned Primary Source Materials</h2>
-            <div class="sheet-sources-table">
-              {#each (assignment?.source_pack || sources || []) as src, idx}
-                <div class="sheet-source-row">
-                  <div class="src-meta">
-                    <strong>Source {idx + 1}: {src.title || `Reading ${idx + 1}`}</strong>
-                    {#if src.relevance_guidance}
-                      <span class="src-guide">{src.relevance_guidance}</span>
+              <!-- Dynamic Exhibits Parsed from Case Prompt -->
+              {#each parsedCasePrompt.sections as sec}
+                <div class="sub-sec-title">{sec.title}</div>
+                {#if sec.isMetricGrid}
+                  <div class="economics-grid">
+                    {#each sec.items as m}
+                      <div class="metric-card">
+                        <div class="metric-val">{m.value}</div>
+                        <div class="metric-note">{m.label}</div>
+                      </div>
+                    {/each}
+                  </div>
+                {:else if sec.isTable}
+                  <table class="sheet-table">
+                    <tbody>
+                      {#each sec.items as row}
+                        <tr>
+                          {#each row.cols as col, cIdx}
+                            <td class:badge-accent={cIdx === 1} class:text-muted-sm={cIdx > 1}>
+                              {#if cIdx === 0}<strong>{col}</strong>{:else}{col}{/if}
+                            </td>
+                          {/each}
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                {:else}
+                  <div class="survey-boundary-block">
+                    <div class="survey-box" style="grid-column: span {sec.calloutText ? 1 : 2};">
+                      <ul class="survey-list">
+                        {#each sec.items as it}
+                          <li>• {it.text}</li>
+                        {/each}
+                      </ul>
+                    </div>
+                    {#if sec.calloutText}
+                      <div class="constraint-callout">
+                        <span class="callout-badge">CASE NOTE &amp; BOUNDARY</span>
+                        <p>{sec.calloutText}</p>
+                      </div>
                     {/if}
                   </div>
-                  {#if src.excerpt || src.passage}
-                    <blockquote class="src-excerpt">"{src.excerpt || src.passage}"</blockquote>
-                  {/if}
-                  <div class="src-action-row no-print">
-                    <button
-                      type="button"
-                      class="btn-open-source-pdf"
-                      onclick={() => switchToSource(src.title, src)}
-                    >
-                      📕 Read in PDF Viewer ↗
-                    </button>
+                {/if}
+              {/each}
+
+              <!-- Ground Rules & Strategic Requirements -->
+              {#if displayRequirements.length > 0}
+                <div class="ground-rules-box">
+                  <div class="rules-title">Strategic Mandate &amp; Deliverable Requirements:</div>
+                  <div class="rules-grid">
+                    {#each displayRequirements as rule, rIdx}
+                      <div class="rule-item">
+                        <span class="rule-index">{rIdx + 1}</span>
+                        <span class="rule-text">{rule}</span>
+                      </div>
+                    {/each}
                   </div>
                 </div>
-              {/each}
+              {/if}
+            </section>
+          </div>
+
+          <!-- EXPLICIT PAGE BREAK FOR 2-PAGE PRINT HANDOUT -->
+          <div class="sheet-page-break"></div>
+
+          <!-- PAGE 2 OF 2: SOURCES, RUBRIC & INTEGRITY -->
+          <div class="sheet-page sheet-page-2">
+            <!-- Header for Page 2 -->
+            <div class="page-continuation-header">
+              <span>{displayCourse} — {assignment?.published?.title || assignment?.title || 'Assignment Brief'}</span>
+              <span class="page-num-pill">Page 2 of 2</span>
             </div>
-          </section>
 
-          <!-- Section III: Evaluation Rubric Criteria (100%) -->
-          {#if assignment?.public_rubric && assignment.public_rubric.length > 0}
-            <section class="sheet-section">
-              <h2 class="sheet-sec-title">III. Evaluation Rubric Criteria (100%)</h2>
-              <table class="sheet-rubric-table">
-                <thead>
-                  <tr>
-                    <th style="width: 28%;">Criterion &amp; Weight</th>
-                    <th style="width: 24%;">Developing</th>
-                    <th style="width: 24%;">Secure</th>
-                    <th style="width: 24%;">Strong</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {#each assignment.public_rubric as crit}
-                    <tr>
-                      <td>
-                        <strong>{crit.title}</strong>
-                        {#if crit.weight}
-                          <span class="weight-tag">{crit.weight}%</span>
+            <!-- Section II: Assigned Primary Sources & Frameworks -->
+            {#if displaySourcesList.length > 0}
+              <section class="sheet-section">
+                <div class="sheet-sec-heading">
+                  <span class="sec-num">SECTION II</span>
+                  <h2 class="sheet-sec-title">Assigned Primary Sources &amp; Theoretical Materials</h2>
+                </div>
+                <div class="frameworks-grid">
+                  {#each displaySourcesList as src, sIdx}
+                    <div class="framework-card">
+                      <div class="fw-top">
+                        <span class="fw-sec">{src.section || `Source ${sIdx + 1}`}</span>
+                        {#if src.page}
+                          <span class="fw-concept">Page {src.page}</span>
                         {/if}
-                        {#if crit.concept_label || crit.concept_id}
-                          <div class="sheet-concept-tag">⚡ {crit.concept_label || crit.concept_id}</div>
-                        {/if}
-                        {#if crit.description}
-                          <div class="crit-sub">{crit.description}</div>
-                        {/if}
-                      </td>
-                      {#each (crit.levels || []) as lvl}
-                        <td>
-                          <span class="lvl-title">{lvl.label}:</span>
-                          <span class="lvl-desc">{lvl.description}</span>
-                        </td>
-                      {/each}
-                    </tr>
+                      </div>
+                      <div class="fw-title">{src.title}</div>
+                      {#if src.relevance_guidance}
+                        <div class="fw-app"><strong>Guidance:</strong> {src.relevance_guidance}</div>
+                      {/if}
+                      {#if src.excerpt || src.passage}
+                        <blockquote class="src-excerpt">"{src.excerpt || src.passage}"</blockquote>
+                      {/if}
+                      {#if src.citation}
+                        <div class="crit-sub"><em>{src.citation}</em></div>
+                      {/if}
+                      <div class="src-action-row no-print">
+                        <button
+                          type="button"
+                          class="btn-open-source-pdf"
+                          onclick={() => switchToSource(src.title, src)}
+                        >
+                          📕 Read in PDF Viewer ↗
+                        </button>
+                      </div>
+                    </div>
                   {/each}
-                </tbody>
-              </table>
-            </section>
-          {/if}
-
-          <!-- Section IV: Learning Goals -->
-          {#if assignment?.learning_goals && assignment.learning_goals.length > 0}
-            <section class="sheet-section">
-              <h2 class="sheet-sec-title">IV. Milestone Learning Goals</h2>
-              <ul class="sheet-goals-list">
-                {#each assignment.learning_goals as goal}
-                  <li>✓ {goal}</li>
-                {/each}
-              </ul>
-            </section>
-          {/if}
-
-          <!-- Section V: Readiness Checklist & Honor Notice -->
-          <section class="sheet-section">
-            <h2 class="sheet-sec-title">V. Readiness Checklist &amp; Honor Notice</h2>
-            {#if assignment?.completion_checklist && assignment.completion_checklist.length > 0}
-              <ul class="sheet-checklist">
-                {#each assignment.completion_checklist as item}
-                  <li>◻ {item}</li>
-                {/each}
-              </ul>
+                </div>
+              </section>
             {/if}
+
+            <!-- Section III: Evaluation Rubric Criteria (100% Total) -->
+            {#if displayRubricList.length > 0}
+              <section class="sheet-section">
+                <div class="sheet-sec-heading">
+                  <span class="sec-num">SECTION III</span>
+                  <h2 class="sheet-sec-title">Evaluation Rubric Criteria (100% Total)</h2>
+                </div>
+                <table class="sheet-rubric-table">
+                  <thead>
+                    <tr>
+                      <th style="width: 26%;">Criterion &amp; Weight</th>
+                      <th style="width: 24%;">Developing</th>
+                      <th style="width: 25%;">Secure / Merit</th>
+                      <th style="width: 25%;">Strong / Distinction</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {#each displayRubricList as crit}
+                      <tr>
+                        <td>
+                          <strong>{crit.title}</strong>
+                          {#if crit.weight}
+                            <span class="weight-tag">{crit.weight}%</span>
+                          {/if}
+                          {#if crit.description}
+                            <div class="crit-sub">{crit.description}</div>
+                          {/if}
+                        </td>
+                        {#if crit.levels && crit.levels.length >= 3}
+                          {#each crit.levels.slice(0, 3) as lvl}
+                            <td>
+                              <span class="lvl-title">{lvl.label}</span>
+                              <span class="lvl-desc">{lvl.description}</span>
+                            </td>
+                          {/each}
+                        {:else if crit.levels && crit.levels.length > 0}
+                          {#each crit.levels as lvl}
+                            <td>
+                              <span class="lvl-title">{lvl.label}</span>
+                              <span class="lvl-desc">{lvl.description}</span>
+                            </td>
+                          {/each}
+                        {:else}
+                          <td colspan="3" class="lvl-desc">{crit.description || 'Assessed according to course standards.'}</td>
+                        {/if}
+                      </tr>
+                    {/each}
+                  </tbody>
+                </table>
+              </section>
+            {/if}
+
+            <!-- Section IV: Learning Goals -->
+            {#if displayGoalsList.length > 0}
+              <section class="sheet-section">
+                <div class="sheet-sec-heading">
+                  <span class="sec-num">SECTION IV</span>
+                  <h2 class="sheet-sec-title">Milestone Learning Goals</h2>
+                </div>
+                <div class="goals-grid">
+                  {#each displayGoalsList as goal}
+                    <div class="goal-item">
+                      <span class="goal-check">✓</span>
+                      <span class="goal-text">{goal}</span>
+                    </div>
+                  {/each}
+                </div>
+              </section>
+            {/if}
+
+            <!-- Section V: Academic Integrity Notice & Readiness Checklist -->
             <footer class="sheet-footer">
-              <div class="sheet-integrity-statement">
-                <strong>🔒 Academic Integrity Notice:</strong> {assignment?.integrity_notice || 'Your educator evaluates the final submission. Use course materials responsibly and cite sources.'}
+              {#if displayChecklist.length > 0}
+                <div class="ground-rules-box" style="margin-bottom: 8px;">
+                  <div class="rules-title">Submission Readiness Checklist:</div>
+                  <div class="rules-grid">
+                    {#each displayChecklist as item}
+                      <div class="rule-item">
+                        <span class="rule-index">◻</span>
+                        <span class="rule-text">{item}</span>
+                      </div>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
+              <div class="integrity-card">
+                <div class="integrity-title">
+                  <span>🔒 Academic Integrity &amp; Original Authorship Notice</span>
+                </div>
+                <div class="integrity-text">
+                  {assignment?.integrity_notice || assignment?.published?.integrity_notice || 'Your educator evaluates the final submission. All calculations, analysis, and arguments must represent your original reasoning. Cite assigned course frameworks where theoretical support is invoked.'}
+                </div>
+                <div class="sign-block">
+                  <div class="sign-line">Candidate Signature: ____________________________________</div>
+                  <div class="sign-line">Submission Date: ____________________</div>
+                </div>
               </div>
             </footer>
-          </section>
+          </div>
         </article>
       </div>
     {:else}
@@ -1525,6 +2048,383 @@
     font-size: 10.5px;
     color: #4b5563;
     line-height: 1.35;
+  }
+
+  .sheet-page {
+    position: relative;
+    box-sizing: border-box;
+    background: #ffffff;
+  }
+
+  .sheet-page-break {
+    border-top: 2px dashed #cbd5e1;
+    margin: 32px 0 28px;
+    position: relative;
+    text-align: center;
+  }
+
+  .sheet-page-break::after {
+    content: 'PAGE BREAK (PAGE 2 OF 2 BEGINS)';
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.8px;
+    color: #94a3b8;
+    background: #ffffff;
+    padding: 0 12px;
+    position: relative;
+    top: -8px;
+  }
+
+  .sheet-sec-heading {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border-bottom: 1.5px solid #0f172a;
+    padding-bottom: 4px;
+    margin-bottom: 12px;
+  }
+
+  .sec-num {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 10px;
+    font-weight: 800;
+    background: #0f172a;
+    color: #ffffff;
+    padding: 2px 6px;
+    border-radius: 3px;
+    letter-spacing: 0.5px;
+  }
+
+  .sheet-narrative-text {
+    font-size: 13.5px;
+    line-height: 1.65;
+    color: #1e293b;
+    margin: 0 0 14px;
+  }
+
+  .sub-sec-title {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #334155;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 12px 0 6px;
+  }
+
+  .economics-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .metric-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .metric-label {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 9.5px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+  }
+
+  .metric-val {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 16px;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 2px 0;
+  }
+
+  .metric-note {
+    font-size: 9.5px;
+    color: #475569;
+    line-height: 1.35;
+  }
+
+  .sheet-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    margin-bottom: 14px;
+  }
+
+  .sheet-table th, .sheet-table td {
+    border: 1px solid #cbd5e1;
+    padding: 6px 8px;
+    vertical-align: middle;
+    text-align: left;
+  }
+
+  .sheet-table th {
+    background: #f1f5f9;
+    color: #0f172a;
+    font-weight: 700;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  .badge-accent {
+    font-weight: 700;
+    color: #0284c7;
+  }
+
+  .text-muted-sm {
+    color: #64748b;
+    font-size: 10.5px;
+  }
+
+  .survey-boundary-block {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .survey-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 3px solid #0284c7;
+    border-radius: 6px;
+    padding: 8px 12px;
+  }
+
+  .survey-hdr {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+  }
+
+  .sample-tag {
+    font-size: 9.5px;
+    color: #64748b;
+  }
+
+  .survey-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    font-size: 11px;
+    line-height: 1.5;
+    color: #334155;
+  }
+
+  .constraint-callout {
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-left: 3px solid #d97706;
+    border-radius: 6px;
+    padding: 8px 12px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .callout-badge {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 9.5px;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    color: #92400e;
+  }
+
+  .constraint-callout p {
+    margin: 4px 0 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: #78350f;
+    line-height: 1.4;
+  }
+
+  .ground-rules-box {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 8px;
+  }
+
+  .rules-title {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0f172a;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+    letter-spacing: 0.4px;
+  }
+
+  .rules-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+  }
+
+  .rule-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    font-size: 11px;
+    line-height: 1.45;
+    color: #334155;
+  }
+
+  .rule-index {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 9.5px;
+    font-weight: 800;
+    background: #e2e8f0;
+    color: #334155;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+
+  .page-continuation-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1.5px solid #0f172a;
+    padding-bottom: 6px;
+    margin-bottom: 14px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #475569;
+  }
+
+  .page-num-pill {
+    background: #0f172a;
+    color: #ffffff;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 9.5px;
+  }
+
+  .frameworks-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-bottom: 14px;
+  }
+
+  .framework-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 3px solid #475569;
+    border-radius: 6px;
+    padding: 8px 10px;
+  }
+
+  .fw-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 4px;
+  }
+
+  .fw-sec {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 9.5px;
+    font-weight: 800;
+    color: #0f172a;
+    background: #e2e8f0;
+    padding: 1px 5px;
+    border-radius: 3px;
+  }
+
+  .fw-concept {
+    font-size: 9px;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .fw-title {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 3px;
+  }
+
+  .fw-app {
+    font-size: 10px;
+    line-height: 1.45;
+    color: #475569;
+  }
+
+  .goals-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px 14px;
+    margin-bottom: 14px;
+  }
+
+  .goal-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font-size: 10.5px;
+    line-height: 1.45;
+    color: #334155;
+  }
+
+  .goal-check {
+    color: #15803d;
+    font-weight: bold;
+    font-size: 11px;
+    flex-shrink: 0;
+  }
+
+  .integrity-card {
+    background: #f8fafc;
+    border: 1px solid #cbd5e1;
+    border-left: 3px solid #0f172a;
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-top: 10px;
+  }
+
+  .integrity-title {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 11px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-bottom: 4px;
+  }
+
+  .integrity-text {
+    font-size: 10.5px;
+    line-height: 1.45;
+    color: #475569;
+    margin-bottom: 8px;
+  }
+
+  .sign-block {
+    display: flex;
+    justify-content: space-between;
+    border-top: 1px dashed #cbd5e1;
+    padding-top: 6px;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    font-size: 10px;
+    color: #64748b;
   }
 
   .sheet-footer {
