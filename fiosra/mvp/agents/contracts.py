@@ -102,11 +102,10 @@ class UniversalSocraticTurn(BaseModel):
         default=None,
         description="The student's insight formatted cleanly as an academic draft sentence, or null."
     )
-    suggested_inquiries: list[dict[str, Any]] = Field(
+    suggested_inquiries: list[Any] = Field(
         default_factory=list,
         description=(
             "Exactly 2 first-person student follow-up prompts. "
-            "Each object has 'title' (3-5 words) and 'prompt' (one natural student sentence). "
             "These are student intentions, NOT tutor questions."
         )
     )
@@ -116,9 +115,18 @@ class UniversalSocraticTurn(BaseModel):
         launchers = []
         for item in self.suggested_inquiries[:2]:
             if isinstance(item, dict):
-                launchers.append(item)
+                title = item.get("title") or item.get("prompt", "")
+                prompt = item.get("prompt") or item.get("title", "")
+                launchers.append({"title": str(title).strip(), "prompt": str(prompt).strip()})
+            elif isinstance(item, str):
+                cleaned = item.strip()
+                launchers.append({"title": cleaned, "prompt": cleaned})
             elif hasattr(item, "model_dump"):
-                launchers.append(item.model_dump())
+                dumped = item.model_dump()
+                if isinstance(dumped, dict):
+                    title = dumped.get("title") or dumped.get("prompt", "")
+                    prompt = dumped.get("prompt") or dumped.get("title", "")
+                    launchers.append({"title": str(title).strip(), "prompt": str(prompt).strip()})
         return {
             "draft_response": self.socratic_response,
             "discourse_phase": self.student_move,

@@ -19,6 +19,7 @@
 
   let inputMessage = $state('');
   let messagesContainer = $state(null);
+  let textareaEl = $state(null);
   let isThreadMenuOpen = $state(false);
 
   let activeSessionTitle = $derived.by(() => {
@@ -32,6 +33,7 @@
     if (!inputMessage.trim() || isBusy) return;
     const msg = inputMessage.trim();
     inputMessage = '';
+    scrollToBottom();
     await onSendMessage(msg, false);
     scrollToBottom();
   }
@@ -45,6 +47,9 @@
   function handleSelectStarter(prompt) {
     if (isBusy) return;
     inputMessage = prompt;
+    if (textareaEl) {
+      textareaEl.focus();
+    }
   }
 
   function scrollToBottom() {
@@ -56,7 +61,7 @@
   }
 
   $effect(() => {
-    if (turns.length > 0) {
+    if (turns.length > 0 || isBusy) {
       scrollToBottom();
     }
   });
@@ -211,8 +216,9 @@
                       <button
                         type="button"
                         class="btn-scholastic-starter"
-                        onclick={() => handleSelectStarter(launcher.prompt)}
+                        onclick={() => handleSelectStarter(launcher.prompt || launcher.title)}
                         disabled={isBusy}
+                        title={launcher.prompt || launcher.title}
                       >
                         <span class="starter-label">{launcher.title || launcher.prompt}</span>
                         <span class="starter-arrow">→</span>
@@ -272,6 +278,7 @@
 
     <form class="agent-input-dock" onsubmit={handleSend}>
       <textarea
+        bind:this={textareaEl}
         bind:value={inputMessage}
         placeholder="Discuss your thesis, test a premise, or explore evidence..."
         rows="1"
@@ -862,16 +869,19 @@
 
   .btn-scholastic-starter {
     background: rgba(2, 132, 199, 0.04);
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    border: 1px solid rgba(2, 132, 199, 0.18);
     border-radius: 8px;
-    padding: 7px 11px;
+    padding: 8px 12px;
     text-align: left;
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 8px;
+    gap: 10px;
+    width: 100%;
+    box-sizing: border-box;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.18s ease;
+    box-shadow: 0 1px 2px rgba(2, 132, 199, 0.04);
   }
 
   :global([data-theme="dark"]) .btn-scholastic-starter {
@@ -880,16 +890,22 @@
   }
 
   .btn-scholastic-starter:hover:not(:disabled) {
-    background: rgba(2, 132, 199, 0.12);
-    border-color: rgba(2, 132, 199, 0.5);
-    transform: translateX(2px);
+    background: rgba(2, 132, 199, 0.11);
+    border-color: rgba(2, 132, 199, 0.45);
+  }
+
+  .btn-scholastic-starter:focus-visible {
+    outline: 2px solid var(--color-aurora, #0284c7);
+    outline-offset: 1px;
   }
 
   .starter-label {
-    font-size: 0.78rem;
+    font-size: 0.8rem;
     font-weight: 500;
     color: var(--color-heading, #0f172a);
-    line-height: 1.35;
+    line-height: 1.4;
+    flex: 1;
+    word-break: break-word;
   }
 
   :global([data-theme="dark"]) .starter-label {
@@ -898,9 +914,14 @@
 
   .starter-arrow {
     color: var(--color-aurora, #0284c7);
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     font-weight: 700;
     flex-shrink: 0;
+    transition: transform 0.18s ease;
+  }
+
+  .btn-scholastic-starter:hover:not(:disabled) .starter-arrow {
+    transform: translateX(3px);
   }
 
   /* Metacognitive Progress Rule */
