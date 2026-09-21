@@ -1077,7 +1077,7 @@
           <div class="sheet-page sheet-page-2">
             <!-- Header for Page 2 -->
             <div class="page-continuation-header">
-              <span>{displayCourse} — {assignment?.published?.title || assignment?.title || 'Assignment Brief'}</span>
+              <span>{displayCourse}{assignment?.published?.title && displayCourse !== assignment.published.title ? ` — ${assignment.published.title}` : ''}</span>
               <span class="page-num-pill">Page 2 of 2</span>
             </div>
 
@@ -1098,14 +1098,11 @@
                         {/if}
                       </div>
                       <div class="fw-title">{src.title}</div>
+                      {#if src.citation}
+                        <div class="crit-sub">{src.citation}</div>
+                      {/if}
                       {#if src.relevance_guidance}
                         <div class="fw-app"><strong>Guidance:</strong> {src.relevance_guidance}</div>
-                      {/if}
-                      {#if src.excerpt || src.passage}
-                        <blockquote class="src-excerpt">{src.excerpt || src.passage}</blockquote>
-                      {/if}
-                      {#if src.citation}
-                        <div class="crit-sub"><em>{src.citation}</em></div>
                       {/if}
                       <div class="src-action-row no-print">
                         <button
