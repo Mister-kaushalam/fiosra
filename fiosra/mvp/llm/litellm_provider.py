@@ -73,7 +73,7 @@ class LiteLLMProvider:
                 {"role": "user", "content": request.user_prompt},
             ],
             "timeout": timeout_seconds,
-            "num_retries": 0,
+            "num_retries": 2,
         }
         # GPT-5 models reject the legacy max_tokens/temperature combination.
         # Other LiteLLM providers retain the OpenAI-compatible defaults.
