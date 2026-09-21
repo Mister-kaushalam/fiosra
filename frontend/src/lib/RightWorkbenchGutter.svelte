@@ -5,6 +5,7 @@
 
   let {
     probes = [],
+    documentBlocks = [],
     activeProbeId = '',
     focusedBlockId = '',
     focusedBlockOffsetTop = 0,
@@ -163,6 +164,7 @@
       {#if activeTab === 'marginalia'}
         <SocraticMarginaliaGutter
           {probes}
+          {documentBlocks}
           {activeProbeId}
           {focusedBlockId}
           {focusedBlockOffsetTop}

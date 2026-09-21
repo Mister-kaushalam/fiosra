@@ -1,5 +1,5 @@
 <script>
-  import { onMount } from 'svelte';
+  import { onMount, onDestroy } from 'svelte';
   import { push } from 'svelte-spa-router';
 
   let {
@@ -63,8 +63,12 @@
     } catch {
       // ignore network errors
     }
+  });
 
-    return () => window.removeEventListener('hashchange', handleHashChange);
+  onDestroy(() => {
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('hashchange', handleHashChange);
+    }
   });
 
   let parsed = $derived.by(() => {
@@ -503,6 +507,8 @@
     background: var(--pill-active-bg);
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   }
+
+
 
   .role-switch-btn {
     display: inline-flex;

@@ -37,15 +37,39 @@
     '/student/trace': StudentTrace,
     '*': Courses,
   };
+
+  let isZenMode = $state(false);
+
+  function syncZenMode() {
+    isZenMode = Boolean(document.fullscreenElement) || (typeof document !== 'undefined' && document.body.classList.contains('fiosra-zen-mode'));
+  }
+
+  $effect(() => {
+    document.addEventListener('fullscreenchange', syncZenMode);
+    document.addEventListener('webkitfullscreenchange', syncZenMode);
+    const handleCustomZen = (e) => {
+      isZenMode = Boolean(e.detail?.active);
+    };
+    window.addEventListener('fiosra:zen-change', handleCustomZen);
+    return () => {
+      document.removeEventListener('fullscreenchange', syncZenMode);
+      document.removeEventListener('webkitfullscreenchange', syncZenMode);
+      window.removeEventListener('fiosra:zen-change', handleCustomZen);
+    };
+  });
 </script>
 
-<div class="app-root">
-  <AppHeader />
-  <div class:assistant-open={assistantOpen} class="app-body">
+<div class="app-root" class:zen-mode={isZenMode}>
+  {#if !isZenMode}
+    <AppHeader />
+  {/if}
+  <div class:assistant-open={assistantOpen && !isZenMode} class="app-body">
     <div class="route-viewport">
       <Router {routes} />
     </div>
-    <AIDesignAssistant bind:open={assistantOpen} />
+    {#if !isZenMode}
+      <AIDesignAssistant bind:open={assistantOpen} />
+    {/if}
   </div>
 </div>
 
@@ -63,6 +87,12 @@
     display: flex;
     flex-direction: column;
     min-height: 100vh;
+  }
+
+  .app-root.zen-mode {
+    height: 100vh;
+    max-height: 100vh;
+    overflow: hidden;
   }
 
   .app-body { display: flex; flex: 1; min-height: 0; }

@@ -1,7 +1,11 @@
 """
 fiosra/mvp/agents/critic_agent.py
 Answer-Isolation Critic & Verifier Agent.
-Guarantees zero ground-truth solution leakage, zero ghostwriting, and strict hint ladder bounds.
+Guarantees zero ground-truth solution leakage, zero ghostwriting, and strict brevity.
+
+Uses structural format validation (has question mark, word count) rather than
+regex-based content classification. The LLM's structured output handles intent
+classification; the critic validates the output format is safe.
 """
 from __future__ import annotations
 
@@ -12,7 +16,8 @@ from fiosra.mvp.agents.contracts import TutorSessionState, VerificationResult
 
 logger = logging.getLogger(__name__)
 
-# Deterministic patterns that indicate solution disclosure or directive solving
+# Deterministic patterns that indicate solution disclosure — these are
+# security guardrails and should NOT be delegated to LLM judgment.
 FORBIDDEN_PATTERNS = [
     r"\b(?:the (?:correct )?answer is|the solution is|the right choice is|the right answer is)\b",
     r"\b(?:therefore, we can conclude that [A-D]\b|option [A-D] is correct\b)",
@@ -26,7 +31,8 @@ FORBIDDEN_REGEX = re.compile("|".join(FORBIDDEN_PATTERNS), re.IGNORECASE)
 class AnswerIsolationCriticAgent:
     """
     Evaluates candidate tutor responses before client streaming.
-    Guarantees Answer Isolation and enforces Socratic pedagogical bounds.
+    Guarantees Answer Isolation and enforces Socratic pedagogical bounds
+    through structural format validation.
     """
 
     def verify_response(self, state: TutorSessionState) -> dict[str, Any]:
@@ -60,22 +66,35 @@ class AnswerIsolationCriticAgent:
                 ),
             }
 
-        # 3. Ghostwriting / Non-Socratic Lecture Check (Paragraphs > 80 words without question mark)
-        word_count = len(draft.split())
+        # 3. Structural validation: must contain a question
         has_question = "?" in draft
-        if word_count > 90 and not has_question:
-            logger.warning("Critic detected lecturing ghostwriting (long text without question).")
+        if not has_question:
+            logger.warning("Critic detected lecturing ghostwriting (no question mark).")
             return {
                 "is_approved": False,
                 "verification_attempts": attempts + 1,
                 "critic_violation": "lecture_ghostwriting",
                 "remediation_instructions": (
-                    "Response is lecturing without asking a question. Educational policy requires a Socratic probe. "
-                    "Shorten the explanation and end with a direct guiding question."
+                    "Response does not ask a question. Educational policy requires an open Socratic inquiry. "
+                    "Keep your response to 2 sentences and end with a direct guiding question."
                 ),
             }
 
-        # 4. Verified and Compliant
+        # 4. Structural validation: brevity check
+        word_count = len(draft.split())
+        if word_count > 65:
+            logger.warning(f"Critic detected excessive length ({word_count} words).")
+            return {
+                "is_approved": False,
+                "verification_attempts": attempts + 1,
+                "critic_violation": "lecture_too_long",
+                "remediation_instructions": (
+                    f"Response is too long ({word_count} words). Socratic dialogue must be concise (under 60 words). "
+                    "Remove theoretical explanations and ask strictly one focused guiding question."
+                ),
+            }
+
+        # 5. Verified and Compliant
         return {
             "is_approved": True,
             "final_verified_response": draft,

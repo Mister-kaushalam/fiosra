@@ -74,6 +74,8 @@ class PublicSource(BaseModel):
     source_url: str | None = None
     citation: str | None = None
     relevance_guidance: str
+    page: int | None = None
+    section: str | None = None
 
 
 class AssignmentTask(BaseModel):

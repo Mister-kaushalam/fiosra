@@ -128,7 +128,7 @@ class EventStore:
                     "assignment_id": str(assignment_id) if assignment_id else None,
                     "question_id": question_id,
                     "event_type": event_type,
-                    "payload": json.dumps(payload),
+                    "payload": json.dumps(payload, default=str),
                 },
             )
             event_id = result.scalar()
