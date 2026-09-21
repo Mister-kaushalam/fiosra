@@ -73,6 +73,7 @@
   }
 
   function getFirstAssignment(course) {
+    if (!course) return null;
     if (course.active_assignment) return course.active_assignment;
     if (course.modules) {
       for (const mod of course.modules) {
@@ -120,109 +121,178 @@
 <div class="portal-page">
   <main class="portal-main">
 
-    <!-- Greeting Banner -->
-    <div class="greeting-banner">
+    <!-- Top Greeting Header -->
+    <header class="greeting-banner">
       <div class="greeting-left">
-        <h1 class="greeting-name">Welcome back, Elena</h1>
+        <h1 class="greeting-name">Welcome back, Julian</h1>
         <p class="greeting-sub">
           {#if isLoading}
-            Loading your Fall 2026 courses & milestones...
+            Loading your Fall 2026 courses &amp; milestones...
           {:else}
             You are enrolled in {enrolledCourses.length} course{enrolledCourses.length === 1 ? '' : 's'} for Fall 2026.
             {#if enrolledCourses.length > 0 && getFirstAssignment(enrolledCourses[0])}
               Next milestone due: <strong>{getFirstAssignment(enrolledCourses[0]).title}</strong>.
             {:else}
-              Browse available courses in the catalog below to enroll.
+              Browse available courses in the academic catalog below.
             {/if}
           {/if}
         </p>
       </div>
 
-      <a href="#/student/timeline" class="portfolio-pill" title="View Longitudinal Progression Timeline">
-        <span>🛡️</span>
-        <span>Autonomy Rating: <strong>88.4% (Level 4 Independent) →</strong></span>
-      </a>
+      <div class="term-pill">
+        <span>🏛️ Fall 2026 Academic Term</span>
+      </div>
+    </header>
+
+    <!-- 2-COLUMN BALANCED DASHBOARD: ENROLLED COURSES + ACADEMIC OVERVIEW -->
+    <div class="dashboard-grid">
+
+      <!-- LEFT COLUMN: ENROLLED COURSES (Handles 1 or multiple courses gracefully) -->
+      <section class="dashboard-main-col">
+        <div class="section-header">
+          <div class="section-title-wrap">
+            <span class="section-eyebrow">📚 MY ENROLLED COURSES</span>
+            <span class="section-badge-count">{enrolledCourses.length} Enrolled</span>
+          </div>
+        </div>
+
+        <div class="enrolled-stack">
+          {#if isLoading}
+            <div class="student-course-card skeleton-card">
+              <div style="height: 18px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
+              <div style="height: 24px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
+              <div style="height: 60px; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 12px;"></div>
+            </div>
+          {:else if enrolledCourses.length > 0}
+            {#each enrolledCourses as c (c.course_id)}
+              {@const firstAssign = getFirstAssignment(c)}
+              {@const mods = c.modules || []}
+              {@const totalAssigns = mods.reduce((sum, m) => sum + (m.assignments ? m.assignments.length : 0), 0) || c.assignments_count || 1}
+
+              <div class="student-course-card enrolled-card">
+                <!-- Header with Title and Status -->
+                <div class="card-top-row">
+                  <div class="card-titles">
+                    <div class="meta-badge-strip">
+                      <span class="course-meta-code">{c.domain || 'BUSINESS & MANAGEMENT'}</span>
+                      <span class="badge badge-success">Active Enrolled</span>
+                    </div>
+                    <h2 class="course-title">{c.title}</h2>
+                    <div class="instructor-line">
+                      Faculty: <strong>{c.created_by || 'Prof. Somerville'}</strong>
+                      <span class="meta-dot">•</span>
+                      <strong>{mods.length} Modules</strong>
+                      <span class="meta-dot">•</span>
+                      <strong>{totalAssigns} Assignments</strong>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Clean Light Active Task Callout (No dark grey!) -->
+                <div class="active-task-box">
+                  <span class="active-task-label">CURRENT ACTIVE REASONING MILESTONE</span>
+                  <div class="active-task-title">
+                    {firstAssign ? firstAssign.title : 'Primary Source Inquiries & Epistemic Reasoning'}
+                  </div>
+                  <div class="active-task-meta">
+                    ⏱️ Module 1 • Sectional Scaffold Active • 5 Rubric Criteria Tracked • ~400 Words Target
+                  </div>
+                </div>
+
+                <!-- Balanced Action Footer -->
+                <div class="card-footer">
+                  <div class="card-footer-left">
+                    <a href="#/student/home?course_id={c.course_id}" class="link-subtle">
+                      View Course Map &amp; Modules →
+                    </a>
+                    <button
+                      class="link-drop"
+                      onclick={() => dropCourse(c.course_id)}
+                      disabled={droppingId === c.course_id}
+                    >
+                      {droppingId === c.course_id ? 'Dropping...' : 'Drop Course'}
+                    </button>
+                  </div>
+
+                  <a
+                    href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`}
+                    class="btn btn-primary"
+                  >
+                    Resume Reasoning Canvas →
+                  </a>
+                </div>
+              </div>
+            {/each}
+          {:else}
+            <div class="empty-state-card">
+              <div class="empty-icon">📭</div>
+              <h3 class="empty-title">No Active Course Enrollments</h3>
+              <p class="empty-desc">You are not enrolled in any courses yet. Select a course from the academic catalog below to get started.</p>
+            </div>
+          {/if}
+        </div>
+      </section>
+
+      <!-- RIGHT COLUMN: ACADEMIC OVERVIEW & PROGRESSION -->
+      <aside class="dashboard-sidebar-col">
+        <!-- Autonomy & Epistemic Standing Card -->
+        <div class="sidebar-card autonomy-widget">
+          <div class="widget-header">
+            <span class="widget-icon">🛡️</span>
+            <span class="widget-label">Academic Standing</span>
+          </div>
+
+          <div class="autonomy-score-block">
+            <span class="score-number">88.4%</span>
+            <span class="score-tier">Level 4 Independent</span>
+          </div>
+
+          <div class="score-progress-bar">
+            <div class="score-progress-fill" style="width: 88.4%;"></div>
+          </div>
+
+          <p class="widget-desc">
+            Demonstrates rigorous primary source synthesis with minimal hint dependency.
+          </p>
+
+          <a href="#/student/timeline" class="sidebar-cta-btn">
+            📈 Longitudinal Progression Timeline →
+          </a>
+        </div>
+
+        <!-- Academic Milestones & Term Overview -->
+        <div class="sidebar-card term-widget">
+          <div class="widget-header">
+            <span class="widget-icon">🗓️</span>
+            <span class="widget-label">Fall 2026 Overview</span>
+          </div>
+
+          <div class="term-stats-list">
+            <div class="term-stat-item">
+              <span class="stat-name">Active Courses:</span>
+              <span class="stat-value">{enrolledCourses.length} Enrolled</span>
+            </div>
+            <div class="term-stat-item">
+              <span class="stat-name">Current Task:</span>
+              <span class="stat-value highlight-text">
+                {enrolledCourses.length > 0 && getFirstAssignment(enrolledCourses[0]) ? getFirstAssignment(enrolledCourses[0]).title : 'Dara\'s Coffee Cart'}
+              </span>
+            </div>
+            <div class="term-stat-item">
+              <span class="stat-name">Evaluation Rubrics:</span>
+              <span class="stat-value">5 Criteria Tracked</span>
+            </div>
+          </div>
+        </div>
+      </aside>
+
     </div>
 
-    <!-- SECTION 1: MY ENROLLED COURSES -->
-    <section class="section-block">
-      <div class="section-header">
-        <div class="section-title-wrap">
-          <span class="section-eyebrow">📚 MY ENROLLED COURSES</span>
-          <span class="section-badge-count">{enrolledCourses.length} Enrolled</span>
-        </div>
-      </div>
-
-      <div class="courses-grid">
-        {#if isLoading}
-          <div class="student-course-card skeleton-card">
-            <div style="height: 18px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
-            <div style="height: 24px; width: 60%; background: #e2e8f0; border-radius: 4px; margin-top: 8px;"></div>
-            <div style="height: 60px; width: 100%; background: #e2e8f0; border-radius: 6px; margin-top: 12px;"></div>
-          </div>
-        {:else if enrolledCourses.length > 0}
-          {#each enrolledCourses as c (c.course_id)}
-            {@const firstAssign = getFirstAssignment(c)}
-            <div class="student-course-card enrolled-card">
-              <div class="card-top-row">
-                <div>
-                  <span class="course-meta-code">{c.domain || 'ACADEMIC'}</span>
-                  <h2 class="course-title">{c.title}</h2>
-                </div>
-                <span class="badge badge-success">Active Unit</span>
-              </div>
-
-              <div class="instructor-line">
-                Instructor: {c.created_by || 'Faculty'} • {c.modules ? c.modules.length : 0} Modules • {c.assignments_count || 0} Assignments
-              </div>
-
-              <!-- Clean Light Active Task Box (Replaces dark grey!) -->
-              <div class="active-task-box">
-                <span class="active-task-label">{firstAssign ? 'Current Active Reasoning Task' : 'Course Overview'}</span>
-                <div class="active-task-title">{firstAssign ? firstAssign.title : 'Primary Source Inquiries & Epistemic Reasoning'}</div>
-                <div class="active-task-meta">
-                  {firstAssign ? '⏱️ Sectional Scaffold Active • 5 Canvas Sections' : 'Syllabus and grounding corpus configured'}
-                </div>
-              </div>
-
-              <div class="card-footer">
-                <div class="card-footer-left">
-                  <a href="#/student/home?course_id={c.course_id}" class="link-subtle">
-                    View Course Map →
-                  </a>
-                  <button
-                    class="link-drop"
-                    onclick={() => dropCourse(c.course_id)}
-                    disabled={droppingId === c.course_id}
-                  >
-                    {droppingId === c.course_id ? 'Dropping...' : 'Drop Course'}
-                  </button>
-                </div>
-                <a
-                  href={firstAssign ? `#/student?course_id=${c.course_id}&assignment_id=${firstAssign.assignment_id}` : `#/student/home?course_id=${c.course_id}`}
-                  class="btn btn-primary"
-                  style="padding: 7px 15px; font-size: 12.5px; font-weight: 600;"
-                >
-                  {firstAssign ? 'Resume Reasoning Canvas →' : 'Explore Course Map →'}
-                </a>
-              </div>
-            </div>
-          {/each}
-        {:else}
-          <div class="empty-state-card">
-            <div class="empty-icon">📭</div>
-            <h3 class="empty-title">No Active Enrollments</h3>
-            <p class="empty-desc">You are not currently enrolled in any courses. Browse the academic catalog below to select a course.</p>
-          </div>
-        {/if}
-      </div>
-    </section>
-
-    <!-- SECTION 2: AVAILABLE COURSES (SEPARATED WITH SEARCH & TABS) -->
+    <!-- SECTION 2: ACADEMIC CATALOG & ENROLLMENT (CLEAR SEPARATION) -->
     <section class="section-block catalog-section">
       <div class="section-header catalog-header">
         <div class="section-title-wrap">
-          <span class="section-eyebrow">🔍 AVAILABLE FOR ENROLLMENT</span>
+          <span class="section-eyebrow">🔍 EXPLORE ACADEMIC CATALOG &amp; ENROLLMENT</span>
           <span class="section-badge-count">{filteredAvailableCourses.length} Available</span>
         </div>
 
@@ -241,7 +311,7 @@
         </div>
       </div>
 
-      <!-- Category Tabs -->
+      <!-- Category Filter Tabs -->
       <div class="category-tabs-bar">
         <button
           type="button"
@@ -249,7 +319,7 @@
           class:active={selectedCategory === 'all'}
           onclick={() => (selectedCategory = 'all')}
         >
-          All Courses ({categoryCounts.all})
+          All Subjects ({categoryCounts.all})
         </button>
         <button
           type="button"
@@ -278,7 +348,7 @@
       </div>
 
       <!-- Filtered Available Courses Grid -->
-      <div class="courses-grid">
+      <div class="catalog-grid">
         {#if isLoading}
           <div class="student-course-card skeleton-card">
             <div style="height: 18px; width: 80px; background: #e2e8f0; border-radius: 4px;"></div>
@@ -301,7 +371,7 @@
 
               {#if c.syllabus_context}
                 <p class="course-synopsis">
-                  {c.syllabus_context.slice(0, 150)}{c.syllabus_context.length > 150 ? '...' : ''}
+                  {c.syllabus_context.slice(0, 140)}{c.syllabus_context.length > 140 ? '...' : ''}
                 </p>
               {:else}
                 <p class="course-synopsis">
@@ -326,7 +396,7 @@
             <div class="empty-icon">🔎</div>
             <h3 class="empty-title">No Matching Courses</h3>
             <p class="empty-desc">
-              {searchQuery ? `No courses found matching "${searchQuery}".` : 'No courses are available in this category.'} Try selecting "All Courses" or clearing your search.
+              {searchQuery ? `No courses found matching "${searchQuery}".` : 'No courses are available in this category.'} Try selecting "All Subjects" or clearing your search.
             </p>
           </div>
         {/if}
@@ -345,25 +415,25 @@
   }
 
   .portal-main {
-    max-width: 1200px;
+    max-width: 1240px;
     margin: 0 auto;
-    padding: 32px 24px 80px 24px;
+    padding: 30px 24px 80px 24px;
     display: flex;
     flex-direction: column;
     gap: 32px;
   }
 
-  /* Greeting Banner */
+  /* Top Greeting Header */
   .greeting-banner {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 12px;
-    padding: 24px 28px;
     display: flex;
     justify-content: space-between;
     align-items: center;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 22px 28px;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    gap: 20px;
+    gap: 16px;
     flex-wrap: wrap;
   }
 
@@ -386,38 +456,183 @@
     margin: 0;
   }
 
-  .portfolio-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 16px;
-    background: #ecfdf5;
-    border: 1px solid #a7f3d0;
-    border-radius: 999px;
+  .term-pill {
     font-size: 12.5px;
     font-weight: 600;
-    color: #047857;
-    text-decoration: none;
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    color: #475569;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    padding: 6px 14px;
+    border-radius: 999px;
   }
 
-  .portfolio-pill:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  /* 2-Column Balanced Dashboard Grid */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 340px;
+    gap: 24px;
+    align-items: start;
   }
 
-  /* Section Structure & Clear Separation */
-  .section-block {
+  @media (max-width: 990px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .dashboard-main-col {
     display: flex;
     flex-direction: column;
     gap: 16px;
   }
 
-  .catalog-section {
-    border-top: 2px solid #e2e8f0;
-    padding-top: 28px;
+  .enrolled-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
   }
 
+  /* Sidebar Column */
+  .dashboard-sidebar-col {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+
+  .sidebar-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 20px 22px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .autonomy-widget {
+    border-left: 4px solid #059669;
+  }
+
+  .term-widget {
+    border-left: 4px solid #d97706;
+  }
+
+  .widget-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .widget-icon {
+    font-size: 16px;
+  }
+
+  .widget-label {
+    font-size: 11.5px;
+    font-weight: 800;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .autonomy-score-block {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .score-number {
+    font-size: 28px;
+    font-weight: 800;
+    color: #047857;
+  }
+
+  .score-tier {
+    font-size: 12px;
+    font-weight: 600;
+    color: #059669;
+    background: #ecfdf5;
+    padding: 2px 8px;
+    border-radius: 999px;
+  }
+
+  .score-progress-bar {
+    height: 6px;
+    background: #e2e8f0;
+    border-radius: 999px;
+    overflow: hidden;
+  }
+
+  .score-progress-fill {
+    height: 100%;
+    background: #059669;
+    border-radius: 999px;
+  }
+
+  .widget-desc {
+    font-size: 12px;
+    color: #64748b;
+    line-height: 1.45;
+    margin: 0;
+  }
+
+  .sidebar-cta-btn {
+    font-size: 12px;
+    font-weight: 600;
+    color: #047857;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    text-align: center;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .sidebar-cta-btn:hover {
+    background: #d1fae5;
+  }
+
+  .term-stats-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .term-stat-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 12.5px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+
+  .term-stat-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .stat-name {
+    color: #64748b;
+  }
+
+  .stat-value {
+    font-weight: 600;
+    color: #0f172a;
+    text-align: right;
+  }
+
+  .highlight-text {
+    color: #d97706;
+    max-width: 170px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Section Header */
   .section-header {
     display: flex;
     justify-content: space-between;
@@ -429,7 +644,7 @@
   .section-title-wrap {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
   }
 
   .section-eyebrow {
@@ -449,7 +664,207 @@
     border-radius: 999px;
   }
 
-  /* Search Bar */
+  /* Enrolled Course Card (Clean, Proportional, Light) */
+  .student-course-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 22px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .student-course-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+
+  .enrolled-card {
+    border-left: 4px solid #d97706;
+  }
+
+  .available-card {
+    border-left: 3px solid #cbd5e1;
+  }
+
+  .available-card:hover {
+    border-color: #d97706;
+  }
+
+  .card-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .card-titles {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+    min-width: 240px;
+  }
+
+  .meta-badge-strip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .course-meta-code {
+    font-size: 10.5px;
+    font-weight: 800;
+    color: #d97706;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+
+  .course-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #0f172a;
+    margin: 0;
+    line-height: 1.3;
+  }
+
+  .instructor-line {
+    font-size: 12.5px;
+    color: #64748b;
+  }
+
+  .meta-dot {
+    margin: 0 4px;
+    color: #cbd5e1;
+  }
+
+  .badge-success {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid #a7f3d0;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .badge-open {
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    font-size: 10.5px;
+    font-weight: 700;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  /* Light Active Task Box */
+  .active-task-box {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .active-task-label {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: #64748b;
+    letter-spacing: 0.5px;
+  }
+
+  .active-task-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+
+  .active-task-meta {
+    font-size: 12px;
+    color: #64748b;
+  }
+
+  /* Card Action Footer */
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-top: 1px solid #e2e8f0;
+    padding-top: 14px;
+    margin-top: auto;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .card-footer-left {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+
+  .link-subtle {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #d97706;
+    text-decoration: none;
+    transition: opacity 0.15s ease;
+  }
+
+  .link-subtle:hover {
+    color: #b45309;
+    text-decoration: underline;
+  }
+
+  .link-drop {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: #94a3b8;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: color 0.15s ease;
+  }
+
+  .link-drop:hover {
+    color: #ef4444;
+  }
+
+  .btn-primary {
+    background: #d97706;
+    color: #ffffff;
+    border: 1px solid #b45309;
+    padding: 8px 18px;
+    border-radius: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+  }
+
+  .btn-primary:hover {
+    background: #b45309;
+  }
+
+  /* Catalog Section */
+  .catalog-section {
+    border-top: 2px solid #e2e8f0;
+    padding-top: 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
   .search-wrap {
     display: flex;
     align-items: center;
@@ -494,7 +909,6 @@
     color: #475569;
   }
 
-  /* Category Tabs */
   .category-tabs-bar {
     display: flex;
     gap: 8px;
@@ -527,91 +941,10 @@
     border-color: #d97706;
   }
 
-  /* Courses Grid */
-  .courses-grid {
+  .catalog-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-    gap: 20px;
-  }
-
-  /* Clean Light Cards (No Dark Grey!) */
-  .student-course-card {
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 22px 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
-  }
-
-  .student-course-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
-  }
-
-  .enrolled-card {
-    border-left: 4px solid #d97706;
-  }
-
-  .available-card {
-    border-left: 3px solid #cbd5e1;
-  }
-
-  .available-card:hover {
-    border-color: #d97706;
-  }
-
-  .card-top-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .course-meta-code {
-    font-size: 10.5px;
-    font-weight: 800;
-    color: #d97706;
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-  }
-
-  .course-title {
-    font-size: 17.5px;
-    font-weight: 700;
-    color: #0f172a;
-    margin: 4px 0 0 0;
-    line-height: 1.3;
-  }
-
-  .badge-success {
-    background: #ecfdf5;
-    color: #047857;
-    border: 1px solid #a7f3d0;
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-
-  .badge-open {
-    background: #f1f5f9;
-    color: #475569;
-    border: 1px solid #cbd5e1;
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 2px 8px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-
-  .instructor-line {
-    font-size: 12.5px;
-    color: #64748b;
+    grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+    gap: 18px;
   }
 
   .course-synopsis {
@@ -619,93 +952,6 @@
     color: #64748b;
     line-height: 1.5;
     margin: 0;
-  }
-
-  /* Light Active Task Box */
-  .active-task-box {
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 6px;
-    padding: 12px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .active-task-label {
-    font-size: 10px;
-    font-weight: 800;
-    text-transform: uppercase;
-    color: #64748b;
-    letter-spacing: 0.5px;
-  }
-
-  .active-task-title {
-    font-size: 13.5px;
-    font-weight: 600;
-    color: #0f172a;
-  }
-
-  .active-task-meta {
-    font-size: 11.5px;
-    color: #64748b;
-  }
-
-  .card-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-top: 1px solid #e2e8f0;
-    padding-top: 12px;
-    margin-top: auto;
-  }
-
-  .card-footer-left {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-  }
-
-  .link-subtle {
-    font-size: 12.5px;
-    font-weight: 600;
-    color: #d97706;
-    text-decoration: none;
-    transition: opacity 0.15s ease;
-  }
-
-  .link-subtle:hover {
-    color: #b45309;
-    text-decoration: underline;
-  }
-
-  .link-drop {
-    font-size: 11.5px;
-    font-weight: 500;
-    color: #94a3b8;
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0;
-    transition: color 0.15s ease;
-  }
-
-  .link-drop:hover {
-    color: #ef4444;
-  }
-
-  .btn-primary {
-    background: #d97706;
-    color: #ffffff;
-    border: 1px solid #b45309;
-    border-radius: 6px;
-    text-decoration: none;
-    transition: background 0.15s ease;
-    white-space: nowrap;
-  }
-
-  .btn-primary:hover {
-    background: #b45309;
   }
 
   .btn-enroll {
@@ -739,7 +985,6 @@
     padding: 32px 20px;
     text-align: center;
     color: #64748b;
-    grid-column: 1 / -1;
   }
 
   .empty-icon {
