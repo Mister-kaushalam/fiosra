@@ -31,6 +31,11 @@
   let showMisconceptions = $state(true);
   let showProbes = $state(true);
   let showModules = $state(true);
+  // Focus mode: collapse the canvas to the selected node's neighbourhood.
+  // On a course-sized graph a single concept is invisible among thousands, so
+  // this is how one concept and its traps can actually be shown.
+  let focusMode = $state(false);
+  let focusDepth = $state(1);
   let searchQuery = $state('');
   let hudOpen = $state(true);
   let activeTab = $state('filters'); // 'filters' | 'display' | 'forces'
@@ -148,8 +153,32 @@
     if (type === 'module' && !showModules) return false;
     if (type === 'misconception' && !showMisconceptions) return false;
     if (type === 'socratic_probe' && !showProbes) return false;
-    if ((type === 'pedagogical_kc' || type === 'atomic_concept' || type === 'topic' || type === 'subtopic' || type === 'domain') && !showKCs) return false;
+    if (type !== 'module' && type !== 'misconception' && type !== 'socratic_probe' && !showKCs) return false;
     return true;
+  }
+
+  // Ids within `depth` hops of `rootId`, walking the raw edges so the result
+  // does not depend on what the simulation happens to hold right now.
+  function neighbourhoodIds(rootId, edges, depth) {
+    const adjacency = new Map();
+    const link = (a, b) => {
+      if (!adjacency.has(a)) adjacency.set(a, []);
+      adjacency.get(a).push(b);
+    };
+    for (const edge of edges) { link(edge.source, edge.target); link(edge.target, edge.source); }
+    const seen = new Set([rootId]);
+    let frontier = [rootId];
+    for (let hop = 0; hop < depth; hop++) {
+      const next = [];
+      for (const id of frontier) {
+        for (const other of adjacency.get(id) || []) {
+          if (!seen.has(other)) { seen.add(other); next.push(other); }
+        }
+      }
+      frontier = next;
+      if (!frontier.length) break;
+    }
+    return seen;
   }
 
   function getNeighborIds(nodeId) {
@@ -179,7 +208,16 @@
     const rawEdges = graph?.edges || [];
 
     // Filter nodes according to toggle buttons
-    const activeNodes = rawNodes.filter(filterNode);
+    let activeNodes = rawNodes.filter(filterNode);
+
+    // Then, if focusing, keep only the selected node's neighbourhood. Focus
+    // with nothing selected would blank the canvas, so it is a no-op until a
+    // node is clicked.
+    if (focusMode && selectedConceptId) {
+      const keep = neighbourhoodIds(selectedConceptId, rawEdges, focusDepth);
+      const focused = activeNodes.filter(n => keep.has(n.concept_id));
+      if (focused.length) activeNodes = focused;
+    }
     const activeNodeIds = new Set(activeNodes.map(n => n.concept_id));
 
     // Filter edges whose endpoints are both visible
@@ -610,6 +648,9 @@
     showMisconceptions;
     showProbes;
     showModules;
+    focusMode;
+    focusDepth;
+    selectedConceptId;
     rebuildSimulation();
   });
 
@@ -728,6 +769,23 @@
               placeholder="Search concepts or notes..."
               bind:value={searchQuery}
             />
+          </div>
+
+          <div class="hud-section">
+            <span class="section-label">Focus</span>
+            <label class="checkbox-pill focus">
+              <input type="checkbox" bind:checked={focusMode} />
+              <span>Only the selected node</span>
+            </label>
+            {#if focusMode}
+              <div class="focus-depth">
+                <button type="button" class:on={focusDepth === 1} onclick={() => (focusDepth = 1)}>Direct links</button>
+                <button type="button" class:on={focusDepth === 2} onclick={() => (focusDepth = 2)}>Two hops</button>
+              </div>
+              {#if !selectedConceptId}
+                <p class="focus-hint">Click a node to focus on it.</p>
+              {/if}
+            {/if}
           </div>
 
           <!-- Color Groups / Toggles (matching the screenshot) -->
@@ -1084,6 +1142,16 @@
     flex-direction: column;
     gap: 4px;
   }
+
+  .focus-depth { display: flex; gap: 6px; margin-top: 8px; }
+  .focus-depth button {
+    flex: 1; font: inherit; font-size: 11px; cursor: pointer;
+    padding: 4px 8px; border-radius: 6px;
+    border: 1px solid rgba(148, 163, 184, 0.45);
+    background: transparent; color: inherit; opacity: 0.75;
+  }
+  .focus-depth button.on { opacity: 1; border-color: #38bdf8; background: rgba(56, 189, 248, 0.14); }
+  .focus-hint { margin: 8px 0 0; font-size: 11px; opacity: 0.7; }
 
   .checkbox-pill {
     display: flex;
