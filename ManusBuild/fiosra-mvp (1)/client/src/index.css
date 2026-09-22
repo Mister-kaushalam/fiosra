@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    /* Fiosra Core Palette: Bone, Cloud, Slate, Obsidian, Graphite */
+    --color-bone: #F6F5F1;
+    --color-cloud: #E9E8E3;
+    --color-cloud-subtle: #F0EFEA;
+    --color-slate: #6D7378;
+    --color-slate-light: #8A9096;
+    --color-obsidian: #111315;
+    --color-graphite: #23272B;
+    --color-graphite-soft: #32373C;
+
+    /* Accents */
+    --color-horizon-blue: #4F6BFF;
+    --color-horizon-blue-soft: #EBF0FF;
+    --color-aurora: #7B61FF;
+    --color-aurora-soft: #F1EDFF;
+    --color-signal-green: #5FAF7A;
+    --color-signal-green-soft: #EBF7F0;
+    --color-amber: #D89A3A;
+    --color-amber-soft: #FDF6EC;
+    --color-deep-red: #B74C4C;
+    --color-deep-red-soft: #FCEFEF;
+
+    /* Semantic Theme Mappings (Default: Light Mode / Bone Base) */
+    --background: var(--color-bone);
+    --foreground: var(--color-obsidian);
+    --card: #FFFFFF;
+    --card-foreground: var(--color-obsidian);
+    --popover: #FFFFFF;
+    --popover-foreground: var(--color-obsidian);
+    --primary: var(--color-horizon-blue);
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--color-cloud);
+    --secondary-foreground: var(--color-obsidian);
+    --muted: var(--color-cloud);
+    --muted-foreground: var(--color-slate);
+    --accent: var(--color-cloud-subtle);
+    --accent-foreground: var(--color-obsidian);
+    --destructive: var(--color-deep-red);
+    --destructive-foreground: #FFFFFF;
+    --border: #DDDCD5;
+    --input: #DDDCD5;
+    --ring: var(--color-horizon-blue);
+    --radius: 10px;
+  }
+
+  .dark {
+    --background: var(--color-obsidian);
+    --foreground: var(--color-bone);
+    --card: var(--color-graphite);
+    --card-foreground: var(--color-bone);
+    --popover: var(--color-graphite);
+    --popover-foreground: var(--color-bone);
+    --primary: var(--color-horizon-blue);
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--color-graphite-soft);
+    --secondary-foreground: var(--color-bone);
+    --muted: var(--color-graphite-soft);
+    --muted-foreground: var(--color-slate-light);
+    --accent: var(--color-graphite-soft);
+    --accent-foreground: var(--color-bone);
+    --destructive: var(--color-deep-red);
+    --destructive-foreground: #FFFFFF;
+    --border: #353B41;
+    --input: #353B41;
+    --ring: var(--color-horizon-blue);
+  }
+
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}

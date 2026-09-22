@@ -123,111 +123,80 @@
   onMount(loadCourses);
 </script>
 
-<main class="courses-main">
-  <!-- Page Header -->
-  <div class="page-header">
-    <div class="page-title-group">
-      <h1 class="page-title">
-        Course Portfolio &amp; Academic Grounding
-        <span class="term-pill">Fall 2026 Semester</span>
-      </h1>
-      <p class="page-subtitle">
-        Manage sovereign course workspaces, bind foundational syllabi into Neo4j knowledge graphs, and sequence verified reasoning units.
+<main class="space-y-8 max-w-4xl mx-auto w-full">
+  <!-- Page Header (Manus Aesthetic) -->
+  <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 border-b border-[#DDDCD5] pb-6">
+    <div class="space-y-2">
+      <p class="text-xs uppercase tracking-[0.18em] font-mono text-[var(--m-color-horizon-blue)]">
+        Educator workspace
       </p>
+      <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight text-[var(--m-color-obsidian)]">
+        Course Portfolio
+      </h1>
     </div>
-    <div class="header-actions">
-      <button type="button" class="btn btn-primary ai-studio-btn" onclick={() => push('/studio/course')}>
-        ✨ Build Course with AI Studio
-      </button>
-      <button type="button" class="btn btn-secondary" onclick={() => (showIngestModal = true)}>
-        📄 Ground course materials
-      </button>
-      <button type="button" class="btn btn-outline" onclick={() => (showCreateCourse = true)}>
-        + Quick Create
-      </button>
+    <div class="flex flex-wrap items-center gap-2 sm:justify-end">
+      <button type="button" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-[var(--m-color-obsidian)] border border-transparent text-white text-xs font-medium hover:bg-black transition-colors shadow-xs" onclick={() => push('/studio/course')}>Studio</button>
+      <button type="button" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#DDDCD5] text-[var(--m-color-obsidian)] text-xs font-medium hover:bg-[#FAF9F5] transition-colors shadow-xs" onclick={() => (showIngestModal = true)}>Ground</button>
+      <button type="button" class="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg bg-[#FFFFFF] border border-[#DDDCD5] text-[var(--m-color-obsidian)] text-xs font-medium hover:bg-[#FAF9F5] transition-colors shadow-xs" onclick={() => (showCreateCourse = true)}>+ Add</button>
     </div>
-  </div>
+  </header>
 
   <!-- Stats Ribbon -->
-  <div class="stats-ribbon">
-    <div class="stat-card">
-      <div class="stat-label"><span>Active Workspaces</span><span>📚</span></div>
-      <div class="stat-value-row">
-        <span class="stat-value">{courses.length}</span>
-        <span class="stat-trend neutral">Live Synced</span>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label"><span>Curriculum Modules</span><span>🗺️</span></div>
-      <div class="stat-value-row">
-        <span class="stat-value">{totalModules}</span>
-        <span class="stat-trend neutral">Live course data</span>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label"><span>Assignment Drafts</span><span>⚡</span></div>
-      <div class="stat-value-row">
-        <span class="stat-value">{totalAssignments}</span>
-        <span class="stat-trend neutral">Live course data</span>
-      </div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label"><span>Student Activity</span><span>🎯</span></div>
-      <div class="stat-value-row">
-        <span class="stat-value">—</span>
-        <span class="stat-trend neutral">Available by course</span>
-      </div>
-    </div>
+  <div class="flex items-center justify-between gap-4">
+    <h2 class="text-xs font-semibold uppercase tracking-wider text-[var(--m-color-slate)]">
+      Current teaching
+    </h2>
+    <span class="text-xs text-[var(--m-color-slate-light)]">{courses.length} courses</span>
   </div>
 
   <!-- Search & Filter Controls -->
-  <div class="controls-bar">
-    <div class="search-box">
-      <span class="search-icon">🔍</span>
+  <div class="flex flex-wrap items-center gap-2 sm:gap-4 p-2 sm:p-3 bg-[#FFFFFF] border border-[#DDDCD5] rounded-xl shadow-xs">
+    <div class="flex flex-1 items-center gap-2 min-w-[260px] max-w-[400px] p-1.5 px-3 bg-[#FAF9F5] border border-[#DDDCD5] rounded-md">
+      <span class="text-sm text-[var(--m-color-slate)]">🔍</span>
       <input
         type="text"
-        class="search-input"
+        class="w-full text-xs sm:text-[13px] bg-transparent border-none outline-none text-[var(--m-color-obsidian)] placeholder-[var(--m-color-slate-light)]"
         placeholder="Search courses by code, title, or keywords..."
         bind:value={searchQuery}
         oninput={() => (currentPage = 1)}
       />
       {#if searchQuery}
-        <button type="button" class="clear-search" onclick={() => { searchQuery = ''; currentPage = 1; }}>✕</button>
+        <button type="button" class="p-1 text-xs text-[var(--m-color-slate-light)] bg-transparent border-none cursor-pointer hover:text-[var(--m-color-obsidian)]" onclick={() => { searchQuery = ''; currentPage = 1; }}>✕</button>
       {/if}
     </div>
 
-    <div class="filter-chips">
+    <div class="flex flex-wrap gap-2">
       <button
         type="button"
-        class="filter-chip {selectedDomain === 'all' ? 'active' : ''}"
+        class="px-3.5 py-1.5 text-xs font-medium rounded-full cursor-pointer transition-all border {selectedDomain === 'all' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)] font-semibold' : 'bg-[#FAF9F5] border-[#DDDCD5] text-[var(--m-color-slate)] hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0]'}"
         onclick={() => setDomainFilter('all')}
       >
         All Domains ({courses.length})
       </button>
       <button
         type="button"
-        class="filter-chip {selectedDomain === 'history' ? 'active' : ''}"
+        class="px-3.5 py-1.5 text-xs font-medium rounded-full cursor-pointer transition-all border {selectedDomain === 'history' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)] font-semibold' : 'bg-[#FAF9F5] border-[#DDDCD5] text-[var(--m-color-slate)] hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0]'}"
         onclick={() => setDomainFilter('history')}
       >
         History
       </button>
       <button
         type="button"
-        class="filter-chip {selectedDomain === 'philosophy' ? 'active' : ''}"
+        class="px-3.5 py-1.5 text-xs font-medium rounded-full cursor-pointer transition-all border {selectedDomain === 'philosophy' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)] font-semibold' : 'bg-[#FAF9F5] border-[#DDDCD5] text-[var(--m-color-slate)] hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0]'}"
         onclick={() => setDomainFilter('philosophy')}
       >
         Philosophy
       </button>
       <button
         type="button"
-        class="filter-chip {selectedDomain === 'literature' ? 'active' : ''}"
+        class="px-3.5 py-1.5 text-xs font-medium rounded-full cursor-pointer transition-all border {selectedDomain === 'literature' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)] font-semibold' : 'bg-[#FAF9F5] border-[#DDDCD5] text-[var(--m-color-slate)] hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0]'}"
         onclick={() => setDomainFilter('literature')}
       >
         Literature
       </button>
       <button
         type="button"
-        class="filter-chip {selectedDomain === 'computer science' ? 'active' : ''}"
+        class="px-3.5 py-1.5 text-xs font-medium rounded-full cursor-pointer transition-all border {selectedDomain === 'computer science' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)] font-semibold' : 'bg-[#FAF9F5] border-[#DDDCD5] text-[var(--m-color-slate)] hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0]'}"
         onclick={() => setDomainFilter('computer science')}
       >
         Computer Science
@@ -237,73 +206,73 @@
 
   <!-- Courses Grid -->
   <div>
-    <div class="section-meta">
+    <div class="flex justify-between items-center text-xs text-[var(--m-color-slate)] mb-4 px-1">
       <span>
         Showing {filteredCourses.length > 0 ? (currentPage - 1) * pageSize + 1 : 0}–{Math.min(currentPage * pageSize, filteredCourses.length)} of {filteredCourses.length} courses
       </span>
       {#if searchQuery || selectedDomain !== 'all'}
-        <span class="filter-indicator">
+        <span class="flex items-center gap-2">
           Filtered by: {selectedDomain !== 'all' ? selectedDomain : ''} {searchQuery ? `"${searchQuery}"` : ''}
-          <button type="button" class="reset-filter-btn" onclick={() => { searchQuery = ''; selectedDomain = 'all'; currentPage = 1; }}>Reset</button>
+          <button type="button" class="bg-transparent border-none text-[var(--m-color-horizon-blue)] text-xs font-medium cursor-pointer underline p-0" onclick={() => { searchQuery = ''; selectedDomain = 'all'; currentPage = 1; }}>Reset</button>
         </span>
       {/if}
     </div>
 
     {#if isLoading}
-      <div class="loading-state">
-        <div class="loading-spinner"></div>
+      <div class="flex flex-col items-center justify-center p-16 bg-[#FFFFFF] border border-[#DDDCD5] rounded-lg text-sm text-[var(--m-color-slate)] gap-4">
+        <div class="w-6 h-6 border-2 border-[#DDDCD5] border-t-[var(--m-color-horizon-blue)] rounded-full animate-spin"></div>
         <span>Loading course portfolio...</span>
       </div>
     {:else if loadError}
-      <div class="empty-state"><div class="empty-icon">⚠️</div><h3>Course data is unavailable</h3><p>{loadError}</p><button type="button" class="btn btn-secondary" onclick={loadCourses}>Retry loading courses</button></div>
+      <div class="flex flex-col items-center justify-center p-16 bg-[#FFFFFF] border border-[#DDDCD5] rounded-lg text-center max-w-2xl mx-auto"><div class="text-3xl mb-4 opacity-80">⚠️</div><h3 class="m-0 mb-2 font-[var(--font-brand)] text-lg text-[var(--m-color-obsidian)]">Course data is unavailable</h3><p class="mt-0 mb-6 text-[13.5px] leading-relaxed text-[var(--m-color-slate)]">{loadError}</p><button type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2 text-[12.5px] font-semibold text-[var(--m-color-obsidian)] bg-[#FFFFFF] border border-[#DDDCD5] rounded-md cursor-pointer hover:bg-[#F0EFEA] transition-all" onclick={loadCourses}>Retry loading courses</button></div>
     {:else if paginatedCourses.length === 0}
-      <div class="empty-state">
-        <div class="empty-icon">🔍</div>
-        <h3>No courses match your filter</h3>
-        <p>Try refining your search query or reset the domain filter above.</p>
-        <button type="button" class="btn btn-secondary" onclick={() => { searchQuery = ''; selectedDomain = 'all'; currentPage = 1; }}>
+      <div class="flex flex-col items-center justify-center p-16 bg-[#FFFFFF] border border-[#DDDCD5] rounded-lg text-center max-w-2xl mx-auto">
+        <div class="text-3xl mb-4 opacity-80">🔍</div>
+        <h3 class="m-0 mb-2 font-[var(--font-brand)] text-lg text-[var(--m-color-obsidian)]">No courses match your filter</h3>
+        <p class="mt-0 mb-6 text-[13.5px] leading-relaxed text-[var(--m-color-slate)]">Try refining your search query or reset the domain filter above.</p>
+        <button type="button" class="inline-flex items-center justify-center gap-2 px-4 py-2 text-[12.5px] font-semibold text-[var(--m-color-obsidian)] bg-[#FFFFFF] border border-[#DDDCD5] rounded-md cursor-pointer hover:bg-[#F0EFEA] transition-all" onclick={() => { searchQuery = ''; selectedDomain = 'all'; currentPage = 1; }}>
           Clear All Filters
         </button>
       </div>
     {:else}
-      <div class="courses-grid">
+      <div class="grid grid-cols-[repeat(auto-fill,minmax(380px,1fr))] gap-5">
         {#each paginatedCourses as course (course.course_id || course.code || course.name)}
           {@const identity = courseIdentity(course)}
-          <div class="course-card">
-            <div class="course-card-top">
+          <div class="flex flex-col gap-4 p-5.5 bg-[#FFFFFF] border border-[#DDDCD5] rounded-lg relative overflow-hidden transition-all hover:border-[var(--m-color-horizon-blue)] hover:shadow-md hover:-translate-y-0.5 before:content-[''] before:absolute before:top-0 before:left-0 before:right-0 before:h-[3px] before:bg-gradient-to-r before:from-[var(--m-color-horizon-blue)] before:to-[var(--m-color-aurora)] before:opacity-80">
+            <div class="flex justify-between items-start gap-3">
               <div>
-                <span class="course-code-badge">{identity.code || (course.domain || 'ACADEMIC').toUpperCase()} • WORKSPACE</span>
-                <h3 class="course-name">{identity.title}</h3>
+                <span class="text-[10.5px] font-bold px-2 py-[3px] rounded bg-[var(--m-color-obsidian)] border border-[#DDDCD5] text-white tracking-wide uppercase">{identity.code || (course.domain || 'ACADEMIC').toUpperCase()} • WORKSPACE</span>
+                <h3 class="m-0 mt-1.5 font-[var(--font-brand)] text-[17px] font-bold text-[var(--m-color-obsidian)] leading-snug">{identity.title}</h3>
               </div>
-              <span class="grounding-pill"><span>●</span> Course workspace</span>
+              <span class="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-[3px] rounded-full bg-[rgba(16,185,129,0.1)] border border-[rgba(16,185,129,0.3)] text-[#10B981] whitespace-nowrap shrink-0"><span>●</span> Course workspace</span>
             </div>
 
-            <p class="course-desc">
+            <p class="m-0 text-[13px] text-[var(--m-color-slate)] leading-[1.55] line-clamp-3 min-h-[58px]">
               {course.syllabus_context || course.description || 'Curriculum workspace initialized. Ready for syllabus ingestion and prerequisite module sequencing.'}
             </p>
 
-            <div class="course-metrics">
-              <div class="metric-item">
-                <span class="metric-val">{course.modules?.length ?? course.modules ?? 0}</span>
-                <span class="metric-sub">Modules</span>
+            <div class="grid grid-cols-3 gap-2 p-2.5 bg-[#FAF9F5] border border-[#DDDCD5] rounded text-center">
+              <div class="flex flex-col gap-0.5">
+                <span class="font-[var(--font-brand)] text-[15px] font-bold text-[var(--m-color-obsidian)]">{course.modules?.length ?? course.modules ?? 0}</span>
+                <span class="text-[10px] text-[var(--m-color-slate)] uppercase tracking-[0.3px]">Modules</span>
               </div>
-              <div class="metric-item">
-                <span class="metric-val">{course.assignments_count ?? course.assignments ?? 0}</span>
-                <span class="metric-sub">Assignments</span>
+              <div class="flex flex-col gap-0.5">
+                <span class="font-[var(--font-brand)] text-[15px] font-bold text-[var(--m-color-obsidian)]">{course.assignments_count ?? course.assignments ?? 0}</span>
+                <span class="text-[10px] text-[var(--m-color-slate)] uppercase tracking-[0.3px]">Assignments</span>
               </div>
-              <div class="metric-item">
-                <span class="metric-val" style="color: var(--color-signal-green);">0%</span>
-                <span class="metric-sub">Leakage</span>
+              <div class="flex flex-col gap-0.5">
+                <span class="font-[var(--font-brand)] text-[15px] font-bold text-[#10B981]">0%</span>
+                <span class="text-[10px] text-[var(--m-color-slate)] uppercase tracking-[0.3px]">Leakage</span>
               </div>
             </div>
 
-            <div class="card-footer">
-              <span class="last-active">
-                Instructor: <strong>{course.created_by || 'Dr. Vance'}</strong>
+            <div class="flex items-center justify-between pt-3.5 mt-auto border-t border-[#DDDCD5]">
+              <span class="text-[11.5px] text-[var(--m-color-slate)]">
+                Instructor: <strong class="text-[var(--m-color-obsidian)] font-semibold">{course.created_by || 'Dr. Vance'}</strong>
               </span>
               <button
                 type="button"
-                class="course-link"
+                class="inline-flex items-center gap-1.5 p-0 bg-transparent border-none text-[12.5px] font-semibold text-[var(--m-color-horizon-blue)] cursor-pointer transition-all hover:gap-2.5 hover:text-[var(--m-color-obsidian)]"
                 onclick={() => push('/modules' + (course.course_id ? '?course_id=' + course.course_id : ''))}
               >
                 Enter Curriculum &amp; Modules →
@@ -315,35 +284,35 @@
 
       <!-- Pagination Controls -->
       {#if totalPages > 1}
-        <div class="pagination-bar">
+        <div class="flex justify-center items-center gap-3 mt-9 py-4">
           <button
             type="button"
-            class="page-btn"
+            class="px-3 py-1.5 text-xs font-semibold text-[var(--m-color-slate)] bg-transparent border border-[#DDDCD5] rounded cursor-pointer transition-colors hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0] disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={currentPage === 1}
             onclick={() => setPage(currentPage - 1)}
           >
             ← Previous
           </button>
 
-          <div class="page-numbers">
+          <div class="flex items-center gap-1.5">
             {#each Array(totalPages) as _, i}
               {#if i + 1 === 1 || i + 1 === totalPages || (i + 1 >= currentPage - 1 && i + 1 <= currentPage + 1)}
                 <button
                   type="button"
-                  class="page-num {currentPage === i + 1 ? 'active' : ''}"
+                  class="flex items-center justify-center min-w-[28px] h-7 text-xs font-semibold rounded cursor-pointer transition-colors {currentPage === i + 1 ? 'bg-[var(--m-color-horizon-blue)] border border-[var(--m-color-horizon-blue)] text-white' : 'bg-transparent border border-transparent text-[var(--m-color-slate)] hover:bg-[#FFFFFF] hover:border-[#DDDCD5]'}"
                   onclick={() => setPage(i + 1)}
                 >
                   {i + 1}
                 </button>
               {:else if (i + 1 === currentPage - 2 && currentPage > 3) || (i + 1 === currentPage + 2 && currentPage < totalPages - 2)}
-                <span class="page-ellipsis">…</span>
+                <span class="text-[var(--m-color-slate)]">…</span>
               {/if}
             {/each}
           </div>
 
           <button
             type="button"
-            class="page-btn"
+            class="px-3 py-1.5 text-xs font-semibold text-[var(--m-color-slate)] bg-transparent border border-[#DDDCD5] rounded cursor-pointer transition-colors hover:text-[var(--m-color-obsidian)] hover:border-[#BDBBB0] disabled:opacity-50 disabled:cursor-not-allowed"
             disabled={currentPage === totalPages}
             onclick={() => setPage(currentPage + 1)}
           >
@@ -357,22 +326,22 @@
 
 <!-- Create Course Modal -->
 <Modal isOpen={showCreateCourse} title="🏛️ Create New Course Workspace" onClose={() => (showCreateCourse = false)}>
-  <p class="modal-desc">Set a clear course identity and teaching context. You can then create modules, attach source material, and test a student-safe assignment before publication.</p>
-  <form onsubmit={handleCreateCourse} class="create-form">
-    <div class="form-row">
-      <div class="form-field">
-        <label for="newCourseCode" class="field-label">Course Code</label>
-        <input id="newCourseCode" type="text" class="field-input" placeholder="e.g. HIST-302" bind:value={newCourseCode} />
+  <p class="m-0 mb-5 text-[13px] leading-relaxed text-[var(--m-color-slate)]">Set a clear course identity and teaching context. You can then create modules, attach source material, and test a student-safe assignment before publication.</p>
+  <form onsubmit={handleCreateCourse} class="flex flex-col gap-4">
+    <div class="flex gap-4">
+      <div class="flex flex-col gap-1.5 flex-1">
+        <label for="newCourseCode" class="text-[11px] font-bold uppercase tracking-wide text-[var(--m-color-obsidian)]">Course Code</label>
+        <input id="newCourseCode" type="text" class="px-3 py-2 text-[13px] text-[var(--m-color-obsidian)] bg-[#FAF9F5] border border-[#DDDCD5] rounded-md font-inherit outline-none transition-border focus:border-[var(--m-color-horizon-blue)]" placeholder="e.g. HIST-302" bind:value={newCourseCode} />
       </div>
-      <div class="form-field">
-        <label for="newCourseTitle" class="field-label">Course Title <span class="req">*</span></label>
-        <input id="newCourseTitle" type="text" class="field-input" placeholder="e.g. Revolutions in the Atlantic World" bind:value={newCourseTitle} required />
+      <div class="flex flex-col gap-1.5 flex-[2]">
+        <label for="newCourseTitle" class="text-[11px] font-bold uppercase tracking-wide text-[var(--m-color-obsidian)]">Course Title <span class="text-[#EF4444] ml-0.5">*</span></label>
+        <input id="newCourseTitle" type="text" class="px-3 py-2 text-[13px] text-[var(--m-color-obsidian)] bg-[#FAF9F5] border border-[#DDDCD5] rounded-md font-inherit outline-none transition-border focus:border-[var(--m-color-horizon-blue)]" placeholder="e.g. Revolutions in the Atlantic World" bind:value={newCourseTitle} required />
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-field">
-        <label for="newCourseDomain" class="field-label">Academic Domain <span class="req">*</span></label>
-        <select id="newCourseDomain" class="field-input" bind:value={newCourseDomain}>
+    <div class="flex gap-4">
+      <div class="flex flex-col gap-1.5 flex-1">
+        <label for="newCourseDomain" class="text-[11px] font-bold uppercase tracking-wide text-[var(--m-color-obsidian)]">Academic Domain <span class="text-[#EF4444] ml-0.5">*</span></label>
+        <select id="newCourseDomain" class="px-3 py-2 text-[13px] text-[var(--m-color-obsidian)] bg-[#FAF9F5] border border-[#DDDCD5] rounded-md font-inherit outline-none transition-border focus:border-[var(--m-color-horizon-blue)]" bind:value={newCourseDomain}>
           <option>History</option>
           <option>Philosophy</option>
           <option>Computer Science</option>
@@ -381,620 +350,21 @@
           <option>Literature</option>
         </select>
       </div>
-      <div class="form-field">
-        <label for="newCourseInstructor" class="field-label">Lead Instructor</label>
-        <input id="newCourseInstructor" type="text" class="field-input" bind:value={newCourseInstructor} />
+      <div class="flex flex-col gap-1.5 flex-1">
+        <label for="newCourseInstructor" class="text-[11px] font-bold uppercase tracking-wide text-[var(--m-color-obsidian)]">Lead Instructor</label>
+        <input id="newCourseInstructor" type="text" class="px-3 py-2 text-[13px] text-[var(--m-color-obsidian)] bg-[#FAF9F5] border border-[#DDDCD5] rounded-md font-inherit outline-none transition-border focus:border-[var(--m-color-horizon-blue)]" bind:value={newCourseInstructor} />
       </div>
     </div>
-    <div class="form-field">
-      <label for="newCourseSyllabus" class="field-label">Introductory Syllabus Context (Optional)</label>
-      <textarea id="newCourseSyllabus" class="field-input" rows="3" bind:value={newCourseSyllabus} placeholder="Key topics, preliminary reading units..."></textarea>
+    <div class="flex flex-col gap-1.5">
+      <label for="newCourseSyllabus" class="text-[11px] font-bold uppercase tracking-wide text-[var(--m-color-obsidian)]">Introductory Syllabus Context (Optional)</label>
+      <textarea id="newCourseSyllabus" class="px-3 py-2 text-[13px] text-[var(--m-color-obsidian)] bg-[#FAF9F5] border border-[#DDDCD5] rounded-md font-inherit outline-none transition-border focus:border-[var(--m-color-horizon-blue)] resize-y min-h-[80px]" rows="3" bind:value={newCourseSyllabus} placeholder="Key topics, preliminary reading units..."></textarea>
     </div>
-    {#if createFeedback}<div class="feedback-error">{createFeedback}</div>{/if}
-    <div class="modal-footer">
-      <button type="button" class="btn btn-secondary" onclick={() => (showCreateCourse = false)}>Cancel</button>
-      <button type="submit" class="btn btn-primary" disabled={isCreating}>
+    {#if createFeedback}<div class="mt-1 p-2.5 bg-[rgba(239,68,68,0.1)] border border-[rgba(239,68,68,0.2)] rounded text-[12.5px] text-[#EF4444] font-medium">{createFeedback}</div>{/if}
+    <div class="flex justify-end gap-3 pt-4 mt-2 border-t border-[#DDDCD5]">
+      <button type="button" class="px-4 py-2 text-[12.5px] font-semibold text-[var(--m-color-obsidian)] bg-[#FFFFFF] border border-[#DDDCD5] rounded-md cursor-pointer hover:bg-[#F0EFEA] transition-all" onclick={() => (showCreateCourse = false)}>Cancel</button>
+      <button type="submit" class="px-4 py-2 text-[12.5px] font-semibold text-white bg-[var(--m-color-horizon-blue)] rounded-md cursor-pointer border-none shadow-sm hover:bg-[#3D56E0] disabled:opacity-50 disabled:cursor-not-allowed transition-all" disabled={isCreating}>
         {isCreating ? 'Creating Workspace...' : '+ Create Course Workspace'}
       </button>
     </div>
   </form>
 </Modal>
-
-<!-- Ingest Syllabus Modal -->
-<Modal isOpen={showIngestModal} title="📄 Ground course materials" onClose={() => (showIngestModal = false)}>
-  <p class="modal-desc">Materials must be attached to a curriculum module so their provenance is visible in assignment design. Create or open a course, add a module, and use <strong>Ingest Material</strong> from that module.</p>
-  <div class="pipeline-preview">
-    <div class="pipeline-title">What grounding records</div>
-    <div class="pipeline-step"><span>1. The selected course and module</span><span class="step-ok">Required</span></div>
-    <div class="pipeline-step"><span>2. Source title, excerpt, and link when supplied</span><span class="step-ok">Visible to educators</span></div>
-    <div class="pipeline-step"><span>3. Knowledge-component mapping when available</span><span class="step-ok">Reviewable</span></div>
-  </div>
-  <div class="modal-footer">
-    <button type="button" class="btn btn-secondary" onclick={() => (showIngestModal = false)}>Cancel</button>
-    <a href="#/modules" class="btn btn-primary" onclick={() => (showIngestModal = false)}>Open curriculum</a>
-  </div>
-</Modal>
-
-<style>
-  .courses-main {
-    padding: 32px 40px 80px;
-    max-width: 1440px;
-    width: 100%;
-    margin: 0 auto;
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    gap: 32px;
-  }
-
-  .page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-end;
-    border-bottom: 1px solid var(--color-graphite-border);
-    padding-bottom: 24px;
-    gap: 24px;
-  }
-
-  .page-title-group {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .page-title {
-    font-family: var(--font-brand);
-    font-size: 26px;
-    font-weight: 700;
-    color: var(--color-heading);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin: 0;
-  }
-
-  .term-pill {
-    font-size: 11px;
-    font-weight: 600;
-    background: var(--pill-active-bg);
-    border: 1px solid var(--pill-active-border);
-    color: var(--color-horizon-bright);
-    padding: 3px 10px;
-    border-radius: var(--radius-full);
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
-
-  .page-subtitle {
-    font-size: 13.5px;
-    color: var(--color-slate-light);
-    margin: 0;
-    max-width: 800px;
-    line-height: 1.5;
-  }
-
-  .header-actions {
-    display: flex;
-    gap: 12px;
-    flex-shrink: 0;
-  }
-
-  .stats-ribbon {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
-  }
-
-  .stat-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 18px 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    transition: border-color 0.2s, transform 0.2s;
-  }
-
-  .stat-card:hover {
-    border-color: var(--color-slate-subtle);
-    transform: translateY(-2px);
-  }
-
-  .stat-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--color-slate-muted);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .stat-value-row {
-    display: flex;
-    align-items: baseline;
-    gap: 10px;
-  }
-
-  .stat-value {
-    font-family: var(--font-brand);
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .stat-trend {
-    font-size: 11px;
-    font-weight: 600;
-  }
-  .stat-trend.neutral { color: var(--color-slate-light); }
-
-  .controls-bar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 16px;
-    flex-wrap: wrap;
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 12px 16px;
-  }
-
-  .search-box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 6px 12px;
-    flex: 1;
-    min-width: 260px;
-    max-width: 460px;
-  }
-
-  .search-icon {
-    font-size: 14px;
-    color: var(--color-slate-muted);
-  }
-
-  .search-input {
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--color-slate-bright);
-    font-size: 13px;
-    font-family: var(--font-ui);
-    width: 100%;
-  }
-  .search-input::placeholder {
-    color: var(--color-slate-muted);
-  }
-
-  .clear-search {
-    background: none;
-    border: none;
-    color: var(--color-slate-muted);
-    cursor: pointer;
-    font-size: 12px;
-    padding: 2px 4px;
-  }
-  .clear-search:hover { color: var(--color-heading); }
-
-  .filter-chips {
-    display: flex;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-
-  .filter-chip {
-    background: var(--color-obsidian);
-    border: 1px solid var(--color-graphite-border);
-    color: var(--color-slate-light);
-    font-size: 12px;
-    font-weight: 500;
-    padding: 6px 14px;
-    border-radius: var(--radius-full);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .filter-chip:hover {
-    color: var(--color-heading);
-    border-color: var(--color-slate-subtle);
-  }
-  .filter-chip.active {
-    background: var(--pill-active-bg);
-    border-color: var(--pill-active-border);
-    color: var(--color-horizon-bright);
-    font-weight: 600;
-  }
-
-  .section-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 12px;
-    color: var(--color-slate-muted);
-    margin-bottom: 16px;
-    padding: 0 4px;
-  }
-
-  .filter-indicator {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .reset-filter-btn {
-    background: none;
-    border: none;
-    color: var(--color-horizon-bright);
-    font-size: 12px;
-    cursor: pointer;
-    text-decoration: underline;
-    padding: 0;
-  }
-
-  .courses-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-    gap: 20px;
-  }
-
-  .course-card {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 22px;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    transition: all 0.2s ease;
-    position: relative;
-    overflow: hidden;
-  }
-  .course-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--color-horizon-blue), var(--color-aurora));
-    opacity: 0.8;
-  }
-  .course-card:hover {
-    border-color: var(--color-horizon-blue);
-    box-shadow: var(--shadow-md);
-    transform: translateY(-2px);
-  }
-
-  .course-card-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 12px;
-  }
-
-  .course-code-badge {
-    font-size: 10.5px;
-    font-weight: 700;
-    padding: 3px 8px;
-    border-radius: var(--radius-xs);
-    background: var(--pill-bg);
-    color: var(--color-slate-bright);
-    letter-spacing: 0.5px;
-  }
-
-  .course-name {
-    font-family: var(--font-brand);
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--color-heading);
-    margin: 6px 0 0;
-    line-height: 1.35;
-  }
-
-  .course-desc {
-    font-size: 13px;
-    color: var(--color-slate-light);
-    line-height: 1.55;
-    margin: 0;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    min-height: 58px;
-  }
-
-  .grounding-pill {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 3px 9px;
-    border-radius: var(--radius-full);
-    background: var(--color-signal-green-bg);
-    border: 1px solid rgba(16, 185, 129, 0.3);
-    color: var(--color-signal-green);
-    white-space: nowrap;
-    flex-shrink: 0;
-  }
-
-  .course-metrics {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    padding: 10px 12px;
-    background: var(--color-graphite-card);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
-    text-align: center;
-    gap: 8px;
-  }
-
-  .metric-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
-  .metric-val {
-    font-family: var(--font-brand);
-    font-size: 15px;
-    font-weight: 700;
-    color: var(--color-heading);
-  }
-
-  .metric-sub {
-    font-size: 10px;
-    color: var(--color-slate-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-
-  .card-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 14px;
-    margin-top: auto;
-  }
-
-  .last-active {
-    font-size: 11.5px;
-    color: var(--color-slate-muted);
-  }
-  .last-active strong {
-    color: var(--color-slate-bright);
-  }
-
-  .course-link {
-    background: none;
-    border: none;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--color-horizon-bright);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: gap 0.15s, color 0.15s;
-    padding: 0;
-  }
-  .course-link:hover {
-    gap: 9px;
-    color: var(--color-heading);
-  }
-
-  .pagination-bar {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 12px;
-    margin-top: 36px;
-    padding: 16px 0;
-  }
-
-  .page-btn {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    color: var(--color-slate-light);
-    font-size: 12.5px;
-    font-weight: 600;
-    padding: 8px 16px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-  .page-btn:hover:not(:disabled) {
-    color: var(--color-heading);
-    border-color: var(--color-slate-subtle);
-    background: var(--color-graphite-hover);
-  }
-  .page-btn:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
-
-  .page-numbers {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-  }
-
-  .page-num {
-    background: var(--color-graphite);
-    border: 1px solid var(--color-graphite-border);
-    color: var(--color-slate-light);
-    font-size: 12.5px;
-    font-weight: 600;
-    width: 34px;
-    height: 34px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.15s ease;
-  }
-  .page-num:hover {
-    color: var(--color-heading);
-    border-color: var(--color-slate-subtle);
-  }
-  .page-num.active {
-    background: var(--color-horizon-blue);
-    border-color: var(--color-horizon-bright);
-    color: #ffffff;
-  }
-
-  .page-ellipsis {
-    color: var(--color-slate-muted);
-    padding: 0 4px;
-    font-size: 12px;
-  }
-
-  .loading-state, .empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-    min-height: 240px;
-    color: var(--color-slate-light);
-    font-size: 14px;
-    background: var(--color-graphite);
-    border: 1px dashed var(--color-graphite-border);
-    border-radius: var(--radius-md);
-    padding: 40px;
-    text-align: center;
-  }
-
-  .empty-icon {
-    font-size: 32px;
-  }
-  .empty-state h3 {
-    margin: 0;
-    color: var(--color-heading);
-    font-family: var(--font-brand);
-  }
-  .empty-state p {
-    margin: 0;
-    color: var(--color-slate-muted);
-    font-size: 13px;
-  }
-
-  .loading-spinner {
-    width: 24px;
-    height: 24px;
-    border: 2px solid rgba(59, 130, 246, 0.2);
-    border-top-color: var(--color-horizon-bright);
-    border-radius: 50%;
-    animation: spin 0.8s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-
-  .modal-desc {
-    font-size: 13px;
-    color: var(--color-slate-light);
-    line-height: 1.5;
-    margin: 0 0 20px;
-  }
-
-  .create-form {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-  }
-
-  .form-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-  }
-
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 14px;
-  }
-
-  .field-label {
-    font-size: 11.5px;
-    font-weight: 700;
-    text-transform: uppercase;
-    color: var(--color-slate-light);
-    letter-spacing: 0.4px;
-  }
-
-  .req {
-    color: var(--color-rose);
-  }
-
-  .field-input {
-    background: var(--input-bg);
-    border: 1px solid var(--input-border);
-    color: var(--color-slate-bright);
-    padding: 10px 14px;
-    border-radius: var(--radius-sm);
-    font-size: 13.5px;
-    font-family: var(--font-ui);
-    width: 100%;
-    box-sizing: border-box;
-    transition: border-color 0.15s;
-  }
-  .field-input:focus {
-    outline: none;
-    border-color: var(--input-focus-border);
-  }
-
-  textarea.field-input {
-    resize: vertical;
-  }
-
-  .feedback-error {
-    font-size: 12px;
-    padding: 8px 12px;
-    border-radius: var(--radius-xs);
-    background: var(--color-rose-bg);
-    color: var(--color-rose-text);
-    border: 1px solid var(--color-rose);
-  }
-
-  .modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    border-top: 1px solid var(--color-graphite-border);
-    padding-top: 16px;
-  }
-
-  .pipeline-preview {
-    background: var(--pill-bg);
-    border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
-    padding: 14px;
-    font-size: 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-  .pipeline-title {
-    font-weight: 600;
-    color: var(--color-heading);
-  }
-  .pipeline-step {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    color: var(--color-slate-light);
-  }
-  .step-ok {
-    color: var(--color-signal-green);
-  }
-</style>

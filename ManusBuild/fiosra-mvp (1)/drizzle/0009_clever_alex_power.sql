@@ -1,0 +1,2 @@
+ALTER TABLE `academic_materials` DROP INDEX `materials_course_sequence_idx`;--> statement-breakpoint
+ALTER TABLE `academic_materials` ADD CONSTRAINT `materials_assignment_sequence_idx` UNIQUE(`assignmentId`,`sequence`);

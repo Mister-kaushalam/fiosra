@@ -15,11 +15,24 @@
   import StudentTimeline from './routes/StudentTimeline.svelte';
   import StudentTrace from './routes/StudentTrace.svelte';
   import KnowledgeGraph from './routes/KnowledgeGraph.svelte';
+  import Home from './routes/Home.svelte';
+  import StudentNow from './routes/StudentNow.svelte';
+  import { onMount } from 'svelte';
 
   let assistantOpen = $state(false);
+  let currentHash = $state('/');
+
+  onMount(() => {
+    currentHash = window.location.hash.replace('#', '') || '/';
+    const handleHashChange = () => {
+      currentHash = window.location.hash.replace('#', '') || '/';
+    };
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  });
 
   const routes = {
-    '/': Courses,
+    '/': Home,
     '/portfolio': Courses,
     '/courses': Courses,
     '/modules': Modules,
@@ -29,9 +42,10 @@
     '/studio/course': CourseStudio,
     '/designer': AssignmentDesigner,
     '/student': wrap({ asyncComponent: () => import('./routes/StudentWorkspace.svelte') }),
-    '/student/courses': StudentPortal,
-    '/student/home': StudentHome,
-    '/student/portal': StudentPortal,
+    '/student/courses': StudentNow,
+    '/student/home': StudentNow,
+    '/student/portal': StudentNow,
+    '/student/now': StudentNow,
     '/student/sources': StudentSources,
     '/student/timeline': StudentTimeline,
     '/student/trace': StudentTrace,
@@ -59,12 +73,12 @@
   });
 </script>
 
-<div class="app-root" class:zen-mode={isZenMode}>
-  {#if !isZenMode}
+<div class="min-h-screen bg-[var(--m-color-bone)] text-[var(--m-color-obsidian)] flex flex-col selection:bg-[var(--m-color-horizon-blue-soft)] selection:text-[var(--m-color-horizon-blue)]" class:zen-mode={isZenMode}>
+  {#if currentHash !== '/' && !isZenMode}
     <AppHeader />
   {/if}
   <div class:assistant-open={assistantOpen && !isZenMode} class="app-body">
-    <div class="route-viewport">
+    <div class="route-viewport flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
       <Router {routes} />
     </div>
     {#if !isZenMode}
@@ -77,19 +91,9 @@
   :global(body) {
     margin: 0;
     padding: 0;
-    background-color: var(--color-obsidian);
-    color: var(--color-slate-bright);
-    font-family: var(--font-ui);
-    -webkit-font-smoothing: antialiased;
   }
 
-  .app-root {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
-
-  .app-root.zen-mode {
+  .zen-mode {
     height: 100vh;
     max-height: 100vh;
     overflow: hidden;
@@ -99,7 +103,6 @@
   .app-body.assistant-open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, 32vw); }
 
   .route-viewport {
-    flex: 1;
     display: flex;
     flex-direction: column;
     min-width: 0;

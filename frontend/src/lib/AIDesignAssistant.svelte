@@ -69,24 +69,58 @@
 </script>
 
 {#if open}
-  <aside class="assistant-panel" aria-label="AI Design Assistant">
-    <header class="assistant-header"><div><span class="eyebrow">Fiosra design intelligence</span><h2>AI Design Assistant</h2><p>Set a direction once; the right workspace opens with the course and module context already attached.</p></div><button type="button" class="close" onclick={closeAssistant} aria-label="Close AI assistant">×</button></header>
-    <div class="mode-tabs" role="tablist"><button type="button" class:active={mode === 'course'} onclick={() => (mode = 'course')}>Course design</button><button type="button" class:active={mode === 'assignment'} onclick={() => (mode = 'assignment')}>Assignment draft</button><button type="button" class:active={mode === 'graph'} onclick={() => (mode = 'graph')}>Concept graph</button></div>
-    <section class="assistant-body">
+  <aside class="flex flex-col w-full bg-[var(--card)] border-l border-[#DDDCD5] overflow-hidden min-h-0 lg:border-t-0 border-t" aria-label="AI Design Assistant">
+    <header class="flex justify-between items-start p-6 pb-5 border-b border-[#DDDCD5]">
+      <div>
+        <span class="text-[10px] font-bold text-[var(--m-color-horizon-blue)] uppercase tracking-wider">Fiosra design intelligence</span>
+        <h2 class="font-[var(--font-brand)] text-[22px] text-[var(--foreground)] my-1">AI Design Assistant</h2>
+        <p class="text-xs text-[var(--muted-foreground)] max-w-sm m-0 leading-relaxed">Set a direction once; the right workspace opens with the course and module context already attached.</p>
+      </div>
+      <button type="button" class="flex items-center justify-center w-8 h-8 rounded-md border border-[#DDDCD5] bg-transparent text-[var(--muted-foreground)] hover:bg-[#F5F4EF] cursor-pointer text-xl" onclick={closeAssistant} aria-label="Close AI assistant">×</button>
+    </header>
+    
+    <div class="grid grid-cols-3 gap-1.5 p-2.5 border-b border-[#DDDCD5]" role="tablist">
+      <button type="button" class="px-1 py-2 text-[11px] font-semibold rounded-md border border-transparent text-[var(--muted-foreground)] cursor-pointer hover:bg-[#F5F4EF] {mode === 'course' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)]' : ''}" onclick={() => (mode = 'course')}>Course design</button>
+      <button type="button" class="px-1 py-2 text-[11px] font-semibold rounded-md border border-transparent text-[var(--muted-foreground)] cursor-pointer hover:bg-[#F5F4EF] {mode === 'assignment' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)]' : ''}" onclick={() => (mode = 'assignment')}>Assignment draft</button>
+      <button type="button" class="px-1 py-2 text-[11px] font-semibold rounded-md border border-transparent text-[var(--muted-foreground)] cursor-pointer hover:bg-[#F5F4EF] {mode === 'graph' ? 'bg-[var(--m-color-horizon-blue-soft)] border-[var(--m-color-horizon-blue)] text-[var(--m-color-horizon-blue)]' : ''}" onclick={() => (mode = 'graph')}>Concept graph</button>
+    </div>
+    
+    <section class="flex flex-col flex-1 gap-4 p-6 overflow-auto">
       {#if mode !== 'course'}
-        <label>Course context<select bind:value={courseId} onchange={() => selectCourse(courseId)}><option value="">Select a course</option>{#each courses as course}<option value={course.course_id}>{course.title}</option>{/each}</select></label>
+        <label class="flex flex-col gap-1.5 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-wider">Course context
+          <select class="p-2.5 text-xs font-inherit text-[var(--foreground)] bg-[var(--background)] border border-[#DDDCD5] rounded-md" bind:value={courseId} onchange={() => selectCourse(courseId)}>
+            <option value="">Select a course</option>
+            {#each courses as course}
+              <option value={course.course_id}>{course.title}</option>
+            {/each}
+          </select>
+        </label>
       {/if}
       {#if mode === 'assignment' && activeCourse}
-        <label>Module context<select bind:value={moduleId}><option value="">Choose a module</option>{#each activeCourse.modules || [] as module}<option value={module.module_id}>Unit {module.position}: {module.title}</option>{/each}</select></label>
+        <label class="flex flex-col gap-1.5 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-wider">Module context
+          <select class="p-2.5 text-xs font-inherit text-[var(--foreground)] bg-[var(--background)] border border-[#DDDCD5] rounded-md" bind:value={moduleId}>
+            <option value="">Choose a module</option>
+            {#each activeCourse.modules || [] as module}
+              <option value={module.module_id}>Unit {module.position}: {module.title}</option>
+            {/each}
+          </select>
+        </label>
       {/if}
-      <div class="assistant-guidance"><span>{mode === 'assignment' ? 'Proactive assignment brief' : mode === 'graph' ? 'Graph refinement brief' : 'Course design brief'}</span><p>{mode === 'assignment' ? 'The assistant will draft a Socratic task with objectives, source boundaries, hint ladder, misconceptions, and rubric criteria. You review before saving or publishing.' : mode === 'graph' ? 'The assistant will create a teacher-reviewable concept, hierarchy, and prerequisite proposal. Nothing becomes active until you validate it.' : 'The assistant will open the course studio with a design direction ready to synthesize into an editable curriculum draft.'}</p></div>
-      <label>Your direction<textarea rows="7" bind:value={instruction} placeholder={suggestedInstruction}></textarea></label>
-      <button type="button" class="suggestion" onclick={useSuggestion}>Use a focused starting brief</button>
+      <div class="p-3 bg-[var(--m-color-horizon-blue-soft)] border border-[#CAD6FF] rounded-md">
+        <span class="text-[10px] font-bold text-[var(--m-color-horizon-blue)] uppercase">{mode === 'assignment' ? 'Proactive assignment brief' : mode === 'graph' ? 'Graph refinement brief' : 'Course design brief'}</span>
+        <p class="mt-1 text-[11.5px] leading-relaxed text-[var(--muted-foreground)]">{mode === 'assignment' ? 'The assistant will draft a Socratic task with objectives, source boundaries, hint ladder, misconceptions, and rubric criteria. You review before saving or publishing.' : mode === 'graph' ? 'The assistant will create a teacher-reviewable concept, hierarchy, and prerequisite proposal. Nothing becomes active until you validate it.' : 'The assistant will open the course studio with a design direction ready to synthesize into an editable curriculum draft.'}</p>
+      </div>
+      <label class="flex flex-col gap-1.5 text-[10px] font-bold text-[var(--muted-foreground)] uppercase tracking-wider">Your direction
+        <textarea class="p-2.5 text-xs leading-relaxed font-inherit text-[var(--foreground)] bg-[var(--background)] border border-[#DDDCD5] rounded-md resize-y" rows="7" bind:value={instruction} placeholder={suggestedInstruction}></textarea>
+      </label>
+      <button type="button" class="self-start text-[11px] text-[var(--m-color-aurora)] underline bg-transparent border-0 cursor-pointer p-0" onclick={useSuggestion}>Use a focused starting brief</button>
     </section>
-    <footer class="assistant-footer"><span>AI prepares a proposal; the educator remains the approving authority.</span><button type="button" class="btn btn-primary" disabled={mode !== 'course' && !courseId} onclick={beginWork}>{mode === 'assignment' ? 'Draft assignment' : mode === 'graph' ? 'Propose graph update' : 'Open course studio'}</button></footer>
+    
+    <footer class="flex items-center justify-between gap-3 p-4 px-6 border-t border-[#DDDCD5] text-[10px] leading-relaxed text-[var(--muted-foreground)]">
+      <span class="max-w-[240px]">AI prepares a proposal; the educator remains the approving authority.</span>
+      <button type="button" class="px-4 py-2 bg-[var(--m-color-horizon-blue)] hover:bg-[#3D56E0] text-white font-semibold text-xs rounded-md shadow-sm border-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed transition-all" disabled={mode !== 'course' && !courseId} onclick={beginWork}>
+        {mode === 'assignment' ? 'Draft assignment' : mode === 'graph' ? 'Propose graph update' : 'Open course studio'}
+      </button>
+    </footer>
   </aside>
 {/if}
-
-<style>
-  .assistant-panel{background:var(--color-graphite);border-left:1px solid var(--color-graphite-border);display:flex;flex-direction:column;min-height:0;overflow:hidden;width:100%}.assistant-header{border-bottom:1px solid var(--color-graphite-border);display:flex;gap:16px;justify-content:space-between;padding:24px 24px 20px}.eyebrow{color:var(--color-horizon-bright);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase}.assistant-header h2{color:var(--color-heading);font-family:var(--font-brand);font-size:22px;margin:5px 0}.assistant-header p{color:var(--color-slate-light);font-size:12px;line-height:1.5;margin:0;max-width:390px}.close{background:transparent;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-light);cursor:pointer;font-size:20px;height:30px;line-height:20px;width:30px}.mode-tabs{border-bottom:1px solid var(--color-graphite-border);display:grid;grid-template-columns:repeat(3,1fr);padding:10px;gap:6px}.mode-tabs button{background:transparent;border:1px solid transparent;border-radius:var(--radius-sm);color:var(--color-slate-light);cursor:pointer;font-size:11px;font-weight:600;padding:9px 4px}.mode-tabs button.active{background:rgba(59,130,246,.14);border-color:rgba(59,130,246,.3);color:var(--color-horizon-bright)}.assistant-body{display:flex;flex:1;flex-direction:column;gap:16px;overflow:auto;padding:22px 24px}.assistant-body label{color:var(--color-slate-light);display:flex;flex-direction:column;font-size:10px;font-weight:700;gap:6px;letter-spacing:.35px;text-transform:uppercase}.assistant-body select,.assistant-body textarea{background:var(--color-obsidian);border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm);color:var(--color-slate-bright);font:inherit;font-size:12px;padding:10px}.assistant-body textarea{line-height:1.55;resize:vertical}.assistant-guidance{background:rgba(59,130,246,.08);border:1px solid rgba(59,130,246,.22);border-radius:var(--radius-sm);padding:12px}.assistant-guidance span{color:var(--color-horizon-bright);font-size:10px;font-weight:700;text-transform:uppercase}.assistant-guidance p{color:var(--color-slate-light);font-size:11.5px;line-height:1.5;margin:5px 0 0}.suggestion{align-self:flex-start;background:transparent;border:0;color:var(--color-aurora-bright);cursor:pointer;font-size:11px;padding:0;text-decoration:underline}.assistant-footer{align-items:center;border-top:1px solid var(--color-graphite-border);color:var(--color-slate-muted);display:flex;font-size:10px;gap:14px;justify-content:space-between;line-height:1.4;padding:16px 24px}.assistant-footer span{max-width:240px}@media(max-width:940px){.assistant-panel{border-left:0;border-top:1px solid var(--color-graphite-border);min-height:580px}.assistant-footer{align-items:stretch;flex-direction:column}.assistant-footer span{max-width:none}.assistant-footer .btn{width:100%}}
-</style>
