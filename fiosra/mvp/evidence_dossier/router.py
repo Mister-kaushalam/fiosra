@@ -53,30 +53,47 @@ class FinaliseGradeResponse(BaseModel):
 async def get_review_queue(
     course_id: Annotated[UUID | None, Query()] = None,
     assignment_id: Annotated[UUID | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
 ) -> list[dict[str, Any]]:
-    """Return submitted student sessions ready for sovereign educator review."""
+    """Return student sessions ready for sovereign educator review or live progress inspection."""
+    # When filtering by assignment, return all active and submitted student sessions
+    # unless a specific status filter is supplied.
+    # When querying globally without assignment_id, default to 'submitted' for grading queue.
+    effective_status = status if status is not None else (None if assignment_id else "submitted")
+
     sql = text("""
         SELECT s.session_id, s.student_id, s.assignment_id, s.status, s.last_activity_at, a.title
         FROM student_sessions s
         LEFT JOIN assignments a ON s.assignment_id = a.assignment_id
         LEFT JOIN modules m ON a.module_id = m.module_id
-        WHERE s.status = 'submitted'
+        WHERE (CAST(:status AS VARCHAR) IS NULL OR s.status = CAST(:status AS VARCHAR))
           AND (CAST(:course_id AS UUID) IS NULL OR m.course_id = CAST(:course_id AS UUID))
           AND (CAST(:assignment_id AS UUID) IS NULL OR s.assignment_id = CAST(:assignment_id AS UUID))
-        ORDER BY s.last_activity_at DESC;
+        ORDER BY 
+            CASE WHEN s.status = 'submitted' THEN 0 ELSE 1 END,
+            s.last_activity_at DESC;
     """)
     async with AsyncSessionLocal() as session:
         result = await session.execute(
             sql,
             {
+                "status": effective_status,
                 "course_id": str(course_id) if course_id else None,
                 "assignment_id": str(assignment_id) if assignment_id else None,
             },
         )
         rows = result.mappings().all()
 
+    seen_students: set[str] = set()
     queue: list[dict[str, Any]] = []
     for row in rows:
+        student_id = row["student_id"]
+        # If querying for a specific assignment, pick the latest session for each student
+        if assignment_id:
+            if student_id in seen_students:
+                continue
+            seen_students.add(student_id)
+
         session_info = await event_store.get_session_details(row["session_id"])
         events = await event_store.get_session_events(row["session_id"])
         dossier = evidence_dossier_synthesizer.synthesize_dossier(
@@ -92,6 +109,7 @@ async def get_review_queue(
                 "assignment_id": str(row["assignment_id"]) if row["assignment_id"] else None,
                 "assignment_title": row["title"] or "Reasoning assignment",
                 "submitted_at": row["last_activity_at"].isoformat() if row["last_activity_at"] else None,
+                "status": row["status"] or "active",
                 "suggested_grade": summary.get("suggested_grade", "Pending"),
                 "autonomy_score": summary.get("autonomy_score", 0),
                 "misconceptions_triggered": summary.get("misconceptions_triggered", []),

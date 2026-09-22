@@ -21,8 +21,8 @@
   let isAddResourceOpen = $state(false);
   let selectedModuleForResource = $state(null);
 
-  function handleEvaluateAssignment(assignmentId = '', title = '') {
-    activeEvaluationAssignment = { id: assignmentId, title: title };
+  function handleEvaluateAssignment(assignmentId = '', title = '', studentId = '', sessionId = '') {
+    activeEvaluationAssignment = { id: assignmentId, title: title, studentId: studentId, sessionId: sessionId };
     activeTab = 'modules';
   }
 
@@ -197,7 +197,12 @@
               <h2 class="assignment-eval-heading">{activeEvaluationAssignment.title || 'Assignment Submissions &amp; Evaluation'}</h2>
             </div>
           </div>
-          <StudioReview courseId={currentCourseId} assignmentId={activeEvaluationAssignment.id} />
+          <StudioReview
+            courseId={currentCourseId}
+            assignmentId={activeEvaluationAssignment.id}
+            targetStudentId={activeEvaluationAssignment.studentId}
+            targetSessionId={activeEvaluationAssignment.sessionId}
+          />
         </div>
       {:else}
         <div class="modules-container">

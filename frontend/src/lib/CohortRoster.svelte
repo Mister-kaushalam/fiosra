@@ -97,8 +97,8 @@
                   <button
                     type="button"
                     class="assignment-link-btn"
-                    title="Jump to this assignment's Evaluation Window"
-                    onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title)}
+                    title="Inspect {stu.student_id}'s work on this assignment"
+                    onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title, stu.student_id, stu.latest_session_id)}
                   >
                     {stu.assignment_title || 'Course Module Task'} ↗
                   </button>
@@ -114,8 +114,8 @@
                     <button
                       type="button"
                       class="status-badge badge-submitted clickable"
-                      title="Open Evaluation Window for this submission"
-                      onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title)}
+                      title="Evaluate {stu.student_id}'s submission"
+                      onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title, stu.student_id, stu.latest_session_id)}
                     >
                       ✓ Submitted ↗
                     </button>
@@ -125,13 +125,35 @@
                     </span>
                   {/if}
                 {:else if stu.active_struggle}
-                  <span class="status-badge badge-scaffold">
-                    ⚠️ Needs Scaffolding
-                  </span>
+                  {#if stu.assignment_id}
+                    <button
+                      type="button"
+                      class="status-badge badge-scaffold clickable"
+                      title="Inspect {stu.student_id}'s struggle trace"
+                      onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title, stu.student_id, stu.latest_session_id)}
+                    >
+                      ⚠️ Needs Scaffolding ↗
+                    </button>
+                  {:else}
+                    <span class="status-badge badge-scaffold">
+                      ⚠️ Needs Scaffolding
+                    </span>
+                  {/if}
                 {:else}
-                  <span class="status-badge badge-progressing">
-                    ● In Progress
-                  </span>
+                  {#if stu.assignment_id}
+                    <button
+                      type="button"
+                      class="status-badge badge-progressing clickable"
+                      title="Inspect {stu.student_id}'s live progress & draft"
+                      onclick={() => onEvaluateStudentAssignment?.(stu.assignment_id, stu.assignment_title, stu.student_id, stu.latest_session_id)}
+                    >
+                      ● In Progress ↗
+                    </button>
+                  {:else}
+                    <span class="status-badge badge-progressing">
+                      ● In Progress
+                    </span>
+                  {/if}
                 {/if}
               </td>
               <td>
