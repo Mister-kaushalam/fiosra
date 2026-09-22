@@ -26,6 +26,75 @@
   let linkedProbes = $derived(graph.probes?.filter((probe) => probe.misconception_id === selectedConceptId) || []);
 
   let selectedModuleId = $state('');
+
+  // ---- Unit view filter -------------------------------------------------
+  // module_links maps concept -> module, so the whole subgraph can be derived
+  // in the browser from data that is already loaded. Selecting "All Units"
+  // returns the graph untouched.
+  function subgraphForUnit(full, moduleId) {
+    if (!moduleId) return full;
+
+    const nodeById = new Map((full.nodes || []).map((n) => [n.concept_id, n]));
+    const edges = full.edges || [];
+
+    // Seed: concepts this module introduces, develops or assesses.
+    const keep = new Set(
+      (full.module_links || [])
+        .filter((link) => link.module_id === moduleId)
+        .map((link) => link.concept_id)
+    );
+
+    // A module with no concept links would otherwise render an empty canvas,
+    // which reads as a broken page rather than an empty unit. Show everything
+    // and let the banner explain instead.
+    if (keep.size === 0) return full;
+
+    // Walk up CONTAINS so each kept concept keeps its ancestry and the
+    // hierarchy still reads top-down rather than as a floating cloud.
+    const parentsOf = new Map();
+    for (const edge of edges) {
+      if (edge.relation !== 'CONTAINS') continue;
+      if (!parentsOf.has(edge.target)) parentsOf.set(edge.target, []);
+      parentsOf.get(edge.target).push(edge.source);
+    }
+    const stack = [...keep];
+    while (stack.length) {
+      for (const parent of parentsOf.get(stack.pop()) || []) {
+        if (!keep.has(parent)) { keep.add(parent); stack.push(parent); }
+      }
+    }
+
+    // Pull in the misconceptions hanging off kept concepts, then the probes
+    // hanging off those misconceptions. A trap without its concept is noise.
+    for (const edge of edges) {
+      if (edge.relation === 'ASSOCIATED_WITH' && keep.has(edge.source)) keep.add(edge.target);
+    }
+    for (const edge of edges) {
+      if (edge.relation === 'PROBED_BY' && keep.has(edge.source)) keep.add(edge.target);
+    }
+
+    // The module node itself, so the unit has a visible anchor.
+    if (nodeById.has(moduleId)) keep.add(moduleId);
+
+    return {
+      ...full,
+      nodes: (full.nodes || []).filter((n) => keep.has(n.concept_id)),
+      edges: edges.filter((e) => keep.has(e.source) && keep.has(e.target)),
+      module_links: (full.module_links || []).filter((l) => l.module_id === moduleId),
+      source_links: (full.source_links || []).filter((l) => keep.has(l.concept_id)),
+      probes: (full.probes || []).filter((p) => keep.has(p.misconception_id)),
+      // Recomputed below from the filtered nodes; the server's course-wide
+      // totals would contradict what is on screen.
+      stats: {},
+    };
+  }
+
+  let visibleGraph = $derived(subgraphForUnit(graph, selectedModuleId));
+  let unitFilterActive = $derived(Boolean(selectedModuleId) && visibleGraph !== graph);
+  let selectedUnitTitle = $derived(
+    course?.modules?.find((m) => m.module_id === selectedModuleId)?.title || ''
+  );
+
   let isHydrating = $state(false);
   let hydrationProgress = $state(0);
   let hydrationStage = $state('');
@@ -179,7 +248,7 @@
       </label>
 
       {#if course?.modules?.length}
-        <label class="module-picker" title="Select target module for concept synthesis">
+        <label class="module-picker" title="Filters the graph to one unit, and targets Hydrate Graph at it">
           <span class="picker-label">Unit:</span>
           <select bind:value={selectedModuleId} disabled={isHydrating}>
             <option value="">All Units (Course)</option>
@@ -195,19 +264,24 @@
         class="btn-hydrate"
         onclick={startHydration}
         disabled={isHydrating || !selectedCourseId}
-        title="Synthesize and map concept nodes from module curriculum and uploaded materials"
+        title={selectedModuleId
+          ? `Regenerate concepts for ${selectedUnitTitle || 'the selected unit'} only`
+          : 'Regenerate concepts across every unit in this course'}
       >
         <span class="bolt-icon {isHydrating ? 'spinning' : ''}">⚡</span>
-        {isHydrating ? 'Hydrating…' : 'Hydrate Graph'}
+        {isHydrating ? 'Hydrating…' : selectedModuleId ? 'Hydrate Unit' : 'Hydrate Graph'}
       </button>
 
       {#if course}
         <div class="header-stats">
-          <span class="stat-tag">{graph.stats.concepts || graph.nodes.filter(n => n.concept_type !== 'misconception' && n.concept_type !== 'socratic_probe' && n.concept_type !== 'module').length} concepts</span>
-          <span class="stat-tag trap">{graph.stats.misconceptions || graph.nodes.filter(n => n.concept_type === 'misconception').length} traps</span>
-          <span class="stat-tag probe">{graph.stats.socratic_probes || (graph.probes?.length || 0)} probes</span>
-          {#if graph.stats.source_links}
-            <span class="stat-tag evidence">{graph.stats.source_links} sources</span>
+          <span class="stat-tag">{visibleGraph.stats.concepts || visibleGraph.nodes.filter(n => n.concept_type !== 'misconception' && n.concept_type !== 'socratic_probe' && n.concept_type !== 'module').length} concepts</span>
+          <span class="stat-tag trap">{visibleGraph.stats.misconceptions || visibleGraph.nodes.filter(n => n.concept_type === 'misconception').length} traps</span>
+          <span class="stat-tag probe">{visibleGraph.stats.socratic_probes || (visibleGraph.probes?.length || 0)} probes</span>
+          {#if visibleGraph.stats.source_links}
+            <span class="stat-tag evidence">{visibleGraph.stats.source_links} sources</span>
+          {/if}
+          {#if unitFilterActive}
+            <span class="stat-tag filtered">of {graph.nodes.length} in course</span>
           {/if}
         </div>
       {/if}
@@ -259,7 +333,7 @@
     <!-- 100% Full-Page Graph Canvas -->
     <div class="full-canvas-container">
       <CurriculumGraphCanvas
-        {graph}
+        graph={visibleGraph}
         {selectedConceptId}
         onSelect={(conceptId) => (selectedConceptId = conceptId)}
         bind:theme
@@ -1207,6 +1281,9 @@
   }
 
   /* Module Picker & Hydrate Button */
+  .stat-tag.filtered { background: rgba(36, 36, 36, 0.10); color: #475569; font-style: italic; }
+  .dark-mode .stat-tag.filtered { background: rgba(244, 244, 245, 0.14); color: #cbd5e1; }
+
   .module-picker {
     display: flex;
     align-items: center;

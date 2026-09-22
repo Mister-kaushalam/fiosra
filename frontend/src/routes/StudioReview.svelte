@@ -1,6 +1,7 @@
 <script>
   import { onMount } from 'svelte';
   import ThinkingTimeline from '../lib/ThinkingTimeline.svelte';
+  import PdfViewer from '../lib/PdfViewer.svelte';
   import { formatDate, responseError, routeParams } from '../lib/session.js';
 
   let {
@@ -15,8 +16,9 @@
   let filterStatus = $state('all'); // 'all' | 'submitted' | 'active'
   let searchQuery = $state('');
 
-  // Accordion section state
+  // Accordion and tabs state
   let openSections = $state({ reasoning: true, work: false, rubric: false });
+  let activeWorkTab = $state('sections'); // 'sections' | 'pdf'
 
   function toggleSection(key) {
     openSections = { ...openSections, [key]: !openSections[key] };
@@ -260,6 +262,8 @@
                   </div>
                   {#if item.status === 'submitted'}
                     <span class="roster-badge submitted">✓ Submitted</span>
+                  {:else if item.status === 'completed'}
+                    <span class="roster-badge completed">✓ Finalized</span>
                   {:else}
                     <span class="roster-badge in-progress">● In Progress</span>
                   {/if}
@@ -288,19 +292,48 @@
             <header class="dossier-header">
               <div>
                 <div class="eyebrow">
-                  {selected.status === 'submitted' ? 'Evaluation Dossier' : 'Learner Progress Dossier'}
+                  {selected.status === 'submitted' ? 'Evaluation Dossier' : selected.status === 'completed' ? 'Finalized Dossier' : 'Learner Progress Dossier'}
                 </div>
                 <h2>{selected.student_id}</h2>
                 <p class="dossier-sub">
-                  {selected.status === 'submitted' ? 'Submitted' : 'Last Active'}: {formatDate(selected.submitted_at)}
+                  {selected.status === 'submitted' ? 'Submitted' : selected.status === 'completed' ? 'Finalized' : 'Last Active'}: {formatDate(selected.submitted_at)}
                 </p>
               </div>
-              <div class="status-badge" class:submitted={selected.status === 'submitted'} class:in-progress={selected.status !== 'submitted'}>
-                {#if selected.status === 'submitted'}
-                  <span>✓ Ready for Grading</span>
-                {:else}
-                  <span>● In Progress (Live Draft)</span>
-                {/if}
+              <div class="dossier-header-actions">
+                <button
+                  type="button"
+                  class="btn-view-pdf-tab"
+                  class:active={openSections.work && activeWorkTab === 'pdf'}
+                  onclick={() => {
+                    openSections.work = true;
+                    activeWorkTab = 'pdf';
+                  }}
+                  title="Render student's submitted assignment as a PDF document"
+                >
+                  <span class="btn-icon">📄</span> Rendered PDF
+                </button>
+                <a
+                  class="btn-download-pdf"
+                  href={`/evidence/dossier/${selected.session_id}/pdf`}
+                  download
+                  title="Download student assignment submission as a PDF"
+                >
+                  <span class="btn-icon">⬇</span> Download PDF
+                </a>
+                <div
+                  class="status-badge"
+                  class:submitted={selected.status === 'submitted'}
+                  class:completed={selected.status === 'completed'}
+                  class:in-progress={selected.status !== 'submitted' && selected.status !== 'completed'}
+                >
+                  {#if selected.status === 'submitted'}
+                    <span>✓ Ready for Grading</span>
+                  {:else if selected.status === 'completed'}
+                    <span>✓ Grade Finalized</span>
+                  {:else}
+                    <span>● In Progress (Live Draft)</span>
+                  {/if}
+                </div>
               </div>
             </header>
 
@@ -318,45 +351,43 @@
                   class="acc-tab-btn"
                   class:active={activeReviewTimelineTab === 'reasoning'}
                   onclick={() => { activeReviewTimelineTab = 'reasoning'; if (!openSections.reasoning) toggleSection('reasoning'); }}
-                >Reasoning ({reasoningNodes.length})</button>
+                >
+                  Intellectual Milestones ({reasoningNodes.length})
+                </button>
                 <button
                   type="button"
                   class="acc-tab-btn"
                   class:active={activeReviewTimelineTab === 'activity'}
                   onclick={() => { activeReviewTimelineTab = 'activity'; if (!openSections.reasoning) toggleSection('reasoning'); }}
-                >Activity ({activityNodes.length})</button>
-                <a
-                  class="acc-flight-link"
-                  href={`#/student/trace?session_id=${selected.session_id}`}
-                  title="Open full-page flight recorder"
-                >Flight Recorder ↗</a>
+                >
+                  Full Activity Log ({activityNodes.length})
+                </button>
+                <a class="acc-flight-link" href={`#/student/trace?session_id=${selected.session_id}`}>
+                  Live Flight Recorder ↗
+                </a>
               </div>
               {#if openSections.reasoning}
                 <div class="accordion-body">
                   {#if activeReviewTimelineTab === 'reasoning'}
                     {#if reasoningNodes.length === 0}
-                      <p class="accordion-empty">No reasoning milestones recorded for this session.</p>
+                      <p class="accordion-empty">No reasoning trace events logged yet for this session.</p>
                     {:else}
                       <ThinkingTimeline
                         nodes={reasoningNodes}
-                        showContent={true}
-                        showDiff={true}
                         expandedNodeIndex={expandedReasoningNode}
-                        onNodeClick={(idx) => {
+                        onToggleNode={(idx) => {
                           expandedReasoningNode = expandedReasoningNode === idx ? -1 : idx;
                         }}
                       />
                     {/if}
                   {:else}
                     {#if activityNodes.length === 0}
-                      <p class="accordion-empty">No activity events recorded.</p>
+                      <p class="accordion-empty">No activity events logged for this session.</p>
                     {:else}
                       <ThinkingTimeline
                         nodes={activityNodes}
-                        showContent={true}
-                        showDiff={false}
                         expandedNodeIndex={expandedActivityNode}
-                        onNodeClick={(idx) => {
+                        onToggleNode={(idx) => {
                           expandedActivityNode = expandedActivityNode === idx ? -1 : idx;
                         }}
                       />
@@ -383,42 +414,109 @@
               <div class="accordion-trigger" role="button" tabindex="0" onclick={() => toggleSection('work')} onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') toggleSection('work'); }}>
                 <span class="accordion-chevron" class:open={openSections.work}>▶</span>
                 <span class="accordion-icon">📝</span>
-                <span class="accordion-title">Student Work</span>
+                <span class="accordion-title">Student Work &amp; Assignment Deliverables</span>
                 <span class="accordion-count">{displaySections.length} Sections</span>
+              </div>
+              <div class="accordion-toolbar work-toolbar">
+                <div class="work-tab-group">
+                  <button
+                    type="button"
+                    class="acc-tab-btn"
+                    class:active={activeWorkTab === 'sections'}
+                    onclick={() => { activeWorkTab = 'sections'; if (!openSections.work) toggleSection('work'); }}
+                  >
+                    📝 Canvas Sections ({displaySections.length})
+                  </button>
+                  <button
+                    type="button"
+                    class="acc-tab-btn"
+                    class:active={activeWorkTab === 'pdf'}
+                    onclick={() => { activeWorkTab = 'pdf'; if (!openSections.work) toggleSection('work'); }}
+                  >
+                    📄 Rendered PDF View
+                  </button>
+                </div>
+                <a
+                  class="btn-download-pdf btn-sm"
+                  href={`/evidence/dossier/${selected.session_id}/pdf`}
+                  download
+                  title="Download complete student assignment submission as a PDF"
+                >
+                  <span class="btn-icon">⬇</span> Download PDF
+                </a>
               </div>
               {#if openSections.work}
                 <div class="accordion-body">
-                  {#if displaySections.length === 0}
-                    <p class="accordion-empty">No authored work found for this session.</p>
-                  {:else}
-                    <div class="work-sections">
-                      {#each displaySections as sec (sec.section_id)}
-                        <article class="work-card">
-                          <div class="work-card-header">
-                            <span class="work-title">{sec.title || sec.section_id.replaceAll('_', ' ')}</span>
-                            {#if sec.revision}
-                              <span class="revision-tag">Rev {sec.revision}</span>
-                            {/if}
-                          </div>
-                          {#if sec.prompt}
-                            <p class="work-prompt">{sec.prompt}</p>
-                          {/if}
-                          {#if sec.text}
-                            <div class="work-text">{sec.text}</div>
-                          {:else}
-                            <p class="work-empty">No text authored for this section.</p>
-                          {/if}
-                          {#if sec.source_references?.length}
-                            <div class="work-sources">
-                              <span class="sources-label">Cited Sources:</span>
-                              {#each sec.source_references as src}
-                                <span class="source-tag">{src.document_title || 'Reference'}{src.page_number ? ` (p. ${src.page_number})` : ''}</span>
-                              {/each}
-                            </div>
-                          {/if}
-                        </article>
-                      {/each}
+                  {#if activeWorkTab === 'pdf'}
+                    <div class="pdf-render-pane">
+                      <div class="pdf-render-header">
+                        <div class="pdf-render-title">
+                          <span class="pdf-icon">📄</span>
+                          <strong>Official Submission PDF Document</strong>
+                          <span class="pdf-meta">&bull; Submitted assignment document</span>
+                        </div>
+                        <div class="pdf-render-actions">
+                          <a
+                            class="btn-fallback-open"
+                            href={`/evidence/dossier/${selected.session_id}/pdf`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Open PDF in a new browser tab"
+                          >
+                            Open in Tab ↗
+                          </a>
+                          <a
+                            class="btn-download-pdf btn-sm"
+                            href={`/evidence/dossier/${selected.session_id}/pdf`}
+                            download
+                            title="Download PDF to device"
+                          >
+                            <span class="btn-icon">⬇</span> Download PDF
+                          </a>
+                        </div>
+                      </div>
+                      <div class="pdf-render-viewport">
+                        {#key selected.session_id}
+                          <PdfViewer
+                            url={`/evidence/dossier/${selected.session_id}/pdf`}
+                            title={`${selected.student_id} - ${selected.assignment_title || 'Assignment Submission'}`}
+                          />
+                        {/key}
+                      </div>
                     </div>
+                  {:else}
+                    {#if displaySections.length === 0}
+                      <p class="accordion-empty">No authored work found for this session.</p>
+                    {:else}
+                      <div class="work-sections">
+                        {#each displaySections as sec (sec.section_id)}
+                          <article class="work-card">
+                            <div class="work-card-header">
+                              <span class="work-title">{sec.title || sec.section_id.replaceAll('_', ' ')}</span>
+                              {#if sec.revision}
+                                <span class="revision-tag">Rev {sec.revision}</span>
+                              {/if}
+                            </div>
+                            {#if sec.prompt}
+                              <p class="work-prompt">{sec.prompt}</p>
+                            {/if}
+                            {#if sec.text}
+                              <div class="work-text">{sec.text}</div>
+                            {:else}
+                              <p class="work-empty">No text authored for this section.</p>
+                            {/if}
+                            {#if sec.source_references?.length}
+                              <div class="work-sources">
+                                <span class="sources-label">Cited Sources:</span>
+                                {#each sec.source_references as src}
+                                  <span class="source-tag">{src.document_title || 'Reference'}{src.page_number ? ` (p. ${src.page_number})` : ''}</span>
+                                {/each}
+                              </div>
+                            {/if}
+                          </article>
+                        {/each}
+                      </div>
+                    {/if}
                   {/if}
                 </div>
               {/if}
@@ -469,6 +567,14 @@
                     {isFinalizing ? 'Finalizing…' : 'Finalize Grade & Seal ➔'}
                   </button>
                 </div>
+              </div>
+            {:else if selected.status === 'completed'}
+              <div class="sticky-progress-bar completed-bar">
+                <span class="progress-badge completed-badge">✓ Grade Finalized</span>
+                <span class="progress-text">This submission is officially evaluated and sealed in the sovereign event ledger.</span>
+                <a class="btn btn-secondary btn-sm" href={`/evidence/dossier/${selected.session_id}/pdf`} download>
+                  ⬇ Download Sealed PDF
+                </a>
               </div>
             {:else}
               <div class="sticky-progress-bar">
@@ -838,6 +944,12 @@
     border: 1px solid rgba(5, 150, 105, 0.2);
   }
 
+  .roster-badge.completed {
+    background: #ecfdf5;
+    color: #047857;
+    border: 1px solid rgba(16, 185, 129, 0.25);
+  }
+
   .roster-badge.in-progress {
     background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
     color: var(--color-aurora-bright, #0369a1);
@@ -883,6 +995,136 @@
     margin-bottom: 4px;
   }
 
+  .dossier-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .btn-download-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    color: #1d4ed8;
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+  }
+
+  .btn-download-pdf:hover {
+    background: #dbeafe;
+    color: #1e40af;
+    border-color: #93c5fd;
+  }
+
+  .btn-download-pdf.btn-sm {
+    padding: 4px 8px;
+    font-size: 11px;
+  }
+
+  .btn-view-pdf-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 600;
+    color: #334155;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.15s ease;
+  }
+
+  .btn-view-pdf-tab:hover {
+    background: #e2e8f0;
+    color: #0f172a;
+    border-color: #94a3b8;
+  }
+
+  .btn-view-pdf-tab.active {
+    background: #e0e7ff;
+    color: #3730a3;
+    border-color: #a5b4fc;
+  }
+
+  .work-tab-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pdf-render-pane {
+    display: flex;
+    flex-direction: column;
+    background: #f8fafc;
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md, 8px);
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+
+  .pdf-render-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--color-graphite-border);
+  }
+
+  .pdf-render-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 12px;
+    color: var(--color-heading);
+  }
+
+  .pdf-meta {
+    font-size: 11px;
+    color: var(--color-slate-muted);
+  }
+
+  .pdf-render-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .btn-fallback-open {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-horizon-blue, #2563eb);
+    text-decoration: none;
+    padding: 4px 8px;
+    border-radius: var(--radius-xs);
+    border: 1px solid transparent;
+    transition: all 0.15s;
+  }
+
+  .btn-fallback-open:hover {
+    background: #eff6ff;
+    border-color: #bfdbfe;
+  }
+
+  .pdf-render-viewport {
+    height: 650px;
+    min-height: 480px;
+    position: relative;
+    background: #0f172a;
+    overflow: hidden;
+  }
+
   .dossier-header h2 {
     color: var(--color-heading);
     font-size: 18px;
@@ -905,7 +1147,8 @@
     white-space: nowrap;
   }
 
-  .status-badge.submitted {
+  .status-badge.submitted,
+  .status-badge.completed {
     background: var(--color-signal-green-bg, #ecfdf5);
     color: var(--color-signal-green-text, #065f46);
     border: 1px solid rgba(5, 150, 105, 0.25);
@@ -1238,7 +1481,7 @@
     white-space: nowrap;
   }
 
-  /* ── Sticky Progress Bar (In-Progress Student) ────────────────── */
+  /* ── Sticky Progress Bar (In-Progress / Completed Student) ────── */
   .sticky-progress-bar {
     position: sticky;
     bottom: 0;
@@ -1253,6 +1496,11 @@
     z-index: 10;
   }
 
+  .sticky-progress-bar.completed-bar {
+    background: #f0fdf4;
+    border-color: #bbf7d0;
+  }
+
   .progress-badge {
     font-size: 12px;
     font-weight: 700;
@@ -1260,10 +1508,26 @@
     white-space: nowrap;
   }
 
+  .progress-badge.completed-badge {
+    color: #166534;
+  }
+
   .progress-text {
     flex: 1;
     font-size: 12px;
     color: var(--color-slate-light);
+  }
+
+  .work-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 4px 10px 22px;
+  }
+
+  .work-toolbar-note {
+    font-size: 11px;
+    color: var(--color-slate-muted);
   }
 
   /* ── Standalone Mode Styles ──────────────────────────────────── */

@@ -1,13 +1,14 @@
 from typing import Annotated, Any
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 
 from fiosra.mvp.assignment_designer.generator import assignment_generator
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.event_store import event_store
+from fiosra.mvp.evidence_dossier.pdf_generator import generate_submission_pdf
 from fiosra.mvp.evidence_dossier.synthesizer import evidence_dossier_synthesizer
 from fiosra.mvp.analytics.thinking_trace import build_activity_log, build_reasoning_trace
 from fiosra.mvp.socratic_probe_service import socratic_probe_service
@@ -146,6 +147,7 @@ async def get_executive_evidence_dossier(session_id: UUID) -> dict[str, Any]:
                     "title": sec_id.replace("_", " ").title(),
                     "text": p.get("plaintext") or p.get("text") or "",
                     "revision": p.get("revision", 1),
+                    "source_references": p.get("source_references") or [],
                     "updated_at": ev.get("created_at"),
                 }
 
@@ -161,6 +163,135 @@ async def get_executive_evidence_dossier(session_id: UUID) -> dict[str, Any]:
 
     dossier["canvas_sections"] = list(latest_sections.values())
     return dossier
+
+
+@router.get("/dossier/{session_id}/pdf")
+async def download_submission_pdf(session_id: UUID) -> Response:
+    """Generate and return an academic PDF download of the student's submitted assignment."""
+    session_info = await event_store.get_session_details(session_id)
+    if not session_info:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    events = await event_store.get_session_events(session_id)
+    dossier = evidence_dossier_synthesizer.synthesize_dossier(
+        session_info=session_info,
+        events=events,
+        rubric_criteria=await _published_rubric(session_info),
+    )
+
+    # Extract canvas sections if any
+    latest_sections: dict[str, dict[str, Any]] = {}
+    for ev in events:
+        ev_type = ev.get("event_type")
+        p = ev.get("payload", {})
+        if ev_type == "canvas_section_saved":
+            sec_id = p.get("section_id")
+            if sec_id:
+                latest_sections[sec_id] = {
+                    "section_id": sec_id,
+                    "title": sec_id.replace("_", " ").title(),
+                    "text": p.get("plaintext") or p.get("text") or "",
+                    "revision": p.get("revision", 1),
+                    "source_references": p.get("source_references") or [],
+                    "updated_at": ev.get("created_at"),
+                }
+
+    # Extract authored long-form document blocks and source references
+    document_blocks: list[dict[str, Any]] = []
+    source_references: list[dict[str, Any]] = []
+    try:
+        async with AsyncSessionLocal() as db_session:
+            doc_sql = text("""
+                SELECT document_id, title
+                FROM learning_documents
+                WHERE session_id = CAST(:session_id AS UUID)
+                ORDER BY created_at DESC
+                LIMIT 1;
+            """)
+            doc_res = await db_session.execute(doc_sql, {"session_id": str(session_id)})
+            doc_row = doc_res.mappings().first()
+            if doc_row:
+                doc_id = doc_row["document_id"]
+                blocks_sql = text("""
+                    SELECT block_id, section_id, position, block_type, content, plaintext, revision
+                    FROM learning_document_blocks
+                    WHERE document_id = CAST(:document_id AS UUID)
+                    ORDER BY position ASC;
+                """)
+                blocks_res = await db_session.execute(blocks_sql, {"document_id": str(doc_id)})
+                for brow in blocks_res.mappings().all():
+                    txt = (brow["plaintext"] or "").strip()
+                    if txt:
+                        document_blocks.append({
+                            "block_id": str(brow["block_id"]),
+                            "block_type": brow["block_type"],
+                            "plaintext": txt,
+                            "content": brow["content"] if isinstance(brow["content"], dict) else {},
+                            "section_id": brow["section_id"],
+                            "revision": brow["revision"],
+                        })
+                ref_sql = text("""
+                    SELECT reference_id, source_title, excerpt, citation
+                    FROM learning_document_source_references
+                    WHERE document_id = CAST(:document_id AS UUID)
+                    ORDER BY attached_at ASC;
+                """)
+                ref_res = await db_session.execute(ref_sql, {"document_id": str(doc_id)})
+                for rrow in ref_res.mappings().all():
+                    source_references.append({
+                        "source_title": rrow["source_title"],
+                        "excerpt": rrow["excerpt"],
+                        "citation": rrow["citation"],
+                    })
+    except Exception:
+        pass
+
+    assignment_title = "Assignment Submission"
+    course_title = "Course Curriculum"
+    assignment_id = session_info.get("assignment_id")
+    if assignment_id:
+        assignment = await assignment_generator.get_public_assignment(assignment_id)
+        if assignment:
+            if assignment.published and assignment.published.title:
+                assignment_title = assignment.published.title
+            elif assignment.prompt:
+                assignment_title = assignment.prompt
+            if assignment.published and assignment.published.course_title:
+                course_title = assignment.published.course_title
+
+            c_sections = assignment.canvas_sections or (assignment.published.canvas_sections if hasattr(assignment.published, "canvas_sections") else None)
+            if c_sections:
+                for s_def in c_sections:
+                    if s_def.section_id in latest_sections:
+                        latest_sections[s_def.section_id]["title"] = s_def.title
+                        latest_sections[s_def.section_id]["prompt"] = s_def.prompt
+
+    submitted_at_str = None
+    if session_info.get("last_activity_at"):
+        submitted_at_str = str(session_info["last_activity_at"])[:16].replace("T", " ") + " UTC"
+
+    pdf_bytes = generate_submission_pdf(
+        student_id=session_info.get("student_id", "student"),
+        assignment_title=assignment_title,
+        submitted_at=submitted_at_str,
+        status=session_info.get("status", "submitted"),
+        canvas_sections=list(latest_sections.values()),
+        document_blocks=document_blocks,
+        source_references=source_references,
+        course_title=course_title,
+        session_id=str(session_id),
+    )
+
+    clean_name = "".join(c for c in f"{session_info.get('student_id', 'student')}_{assignment_title}" if c.isalnum() or c in ("-", "_")).rstrip()
+    filename = f"{clean_name}_submission.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-cache",
+        },
+    )
 
 
 @router.post("/dossier/{session_id}/finalise-grade", response_model=FinaliseGradeResponse)

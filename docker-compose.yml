@@ -42,7 +42,7 @@ services:
       start_period: 30s
     volumes:
       - ./fiosra:/app/fiosra
-      - ./ui-ux/frontend-dist:/app/ui-ux/frontend-dist
+      - ./frontend/dist:/app/frontend/dist
       - ./storage:/app/storage
 
   postgres:

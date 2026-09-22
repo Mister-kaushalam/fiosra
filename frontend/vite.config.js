@@ -21,7 +21,7 @@ export default defineConfig({
   plugins: [svelte(), stripWorkerSourcemap()],
   base: './',
   build: {
-    outDir: '../ui-ux/frontend-dist',
+    outDir: 'dist',
     emptyOutDir: true,
   },
   server: {
