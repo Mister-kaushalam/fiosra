@@ -194,11 +194,28 @@ def restore_databases(dump_dir: Path) -> None:
     archive_file = dump_dir / DEFAULT_SNAPSHOT_NAME
     extracted_storage = dump_dir / "storage"
 
-    # Extract archive if loose files not found
-    if archive_file.exists() and (not pg_dump_file.exists() or not neo4j_dump_file.exists()):
-        print(f"\n📂 Extracting archive {archive_file.name}...")
+    # Check if archive exists
+    if archive_file.exists():
+        # Check if it's an unpulled Git LFS pointer
+        try:
+            with open(archive_file, "rb") as f:
+                header = f.read(200)
+                if header.startswith(b"version https://git-lfs.github.com"):
+                    sys.exit(
+                        f"\n❌ Error: '{archive_file.name}' is a Git LFS pointer, not the actual database archive.\n"
+                        f"   Your environment has not downloaded the Git LFS binary files.\n\n"
+                        f"   Please run:\n"
+                        f"       git lfs pull\n\n"
+                        f"   Then re-run: uv run python scripts/db_sync.py restore\n"
+                    )
+        except Exception:
+            pass
+
+        # Always unpack the archive so latest snapshot overrides any stale loose files
+        print(f"\n📂 Extracting snapshot archive {archive_file.name}...")
         with tarfile.open(archive_file, "r:gz") as tar:
             tar.extractall(path=dump_dir)
+
 
     if not pg_dump_file.exists():
         sys.exit(f"❌ Error: PostgreSQL dump not found at {pg_dump_file} or in {archive_file}.")
