@@ -199,7 +199,7 @@
           isBusy={isAgentBusy}
         />
       {:else if activeTab === 'trace'}
-        <EngagementTraceView {...traceProps} />
+        <EngagementTraceView {sessionId} {...traceProps} />
       {/if}
     </div>
   {/if}

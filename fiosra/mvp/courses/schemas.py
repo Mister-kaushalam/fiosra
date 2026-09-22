@@ -100,6 +100,10 @@ class CohortStudentMetrics(BaseModel):
     hint_consumption_rate: float = Field(..., description="Ratio of steps where hints were consumed")
     active_struggle: bool = Field(..., description="True if student exhibits struggle alerts or repeated hints")
     struggling_kcs: list[str] = Field(default_factory=list, description="Target KCs where struggle was detected")
+    assignment_title: str | None = Field(default=None, description="Title of latest active or submitted assignment")
+    assignment_id: str | None = Field(default=None, description="UUID of latest assignment")
+    status: str | None = Field(default=None, description="Latest session status: submitted, in_progress, completed")
+    latest_session_id: str | None = Field(default=None, description="UUID of latest session")
 
 
 class CohortRosterResponse(BaseModel):

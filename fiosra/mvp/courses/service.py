@@ -466,6 +466,10 @@ class CourseService:
                 COUNT(DISTINCT CASE WHEN s.status = 'completed' THEN s.session_id END) as completed_count,
                 COUNT(CASE WHEN e.event_type IN ('hint_served', 'hint_delivered') THEN 1 END) as hint_count,
                 COUNT(CASE WHEN e.event_type = 'misconception_flagged' THEN 1 END) as misconception_count,
+                (array_agg(a.title ORDER BY s.last_activity_at DESC NULLS LAST))[1] as latest_assignment_title,
+                (array_agg(s.assignment_id ORDER BY s.last_activity_at DESC NULLS LAST))[1] as latest_assignment_id,
+                (array_agg(s.status ORDER BY s.last_activity_at DESC NULLS LAST))[1] as latest_status,
+                (array_agg(s.session_id ORDER BY s.last_activity_at DESC NULLS LAST))[1] as latest_session_id,
                 jsonb_agg(CASE WHEN e.event_type IN ('hint_served', 'hint_delivered') THEN e.payload END) as hints,
                 jsonb_agg(CASE WHEN e.event_type = 'misconception_flagged' THEN e.payload END) as misconceptions
             FROM student_sessions s
@@ -473,7 +477,11 @@ class CourseService:
             JOIN modules m ON a.module_id = m.module_id
             LEFT JOIN session_events e ON s.session_id = e.session_id
             WHERE m.course_id = :course_id
-            GROUP BY s.student_id;
+            GROUP BY s.student_id
+            ORDER BY 
+                CASE WHEN (array_agg(s.status ORDER BY s.last_activity_at DESC NULLS LAST))[1] = 'submitted' THEN 0 ELSE 1 END,
+                COUNT(DISTINCT s.session_id) DESC,
+                s.student_id ASC;
         """)
 
         async with AsyncSessionLocal() as session:
@@ -520,6 +528,10 @@ class CourseService:
                     hint_consumption_rate=hint_rate,
                     active_struggle=active_struggle,
                     struggling_kcs=sorted(struggling_kcs),
+                    assignment_title=r["latest_assignment_title"],
+                    assignment_id=str(r["latest_assignment_id"]) if r["latest_assignment_id"] else None,
+                    status=r["latest_status"],
+                    latest_session_id=str(r["latest_session_id"]) if r["latest_session_id"] else None,
                 )
             )
 

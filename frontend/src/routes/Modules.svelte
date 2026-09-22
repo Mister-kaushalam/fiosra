@@ -7,7 +7,6 @@
   import AddResourceModal from '../lib/AddResourceModal.svelte';
   import AddModuleModal from '../lib/AddModuleModal.svelte';
   import CohortRoster from '../lib/CohortRoster.svelte';
-  import CohortDiagnostics from './CohortDiagnostics.svelte';
   import StudioReview from './StudioReview.svelte';
 
   let currentCourseId = $state('');
@@ -16,10 +15,16 @@
   let allDocuments = $state([]);
   let rosterData = $state({ total_enrolled: 0, students: [] });
   let activeTab = $state('modules');
+  let activeEvaluationAssignment = $state(null);
   let isLoading = $state(true);
   let isAddModuleOpen = $state(false);
   let isAddResourceOpen = $state(false);
   let selectedModuleForResource = $state(null);
+
+  function handleEvaluateAssignment(assignmentId = '', title = '') {
+    activeEvaluationAssignment = { id: assignmentId, title: title };
+    activeTab = 'modules';
+  }
 
   async function loadCourseWorkspace() {
     isLoading = true;
@@ -157,14 +162,19 @@
     />
 
     <div class="view-switcher">
-      <button type="button" class="view-tab-btn {activeTab === 'modules' ? 'active' : ''}" onclick={() => (activeTab = 'modules')}>
+      <button
+        type="button"
+        class="view-tab-btn {activeTab === 'modules' && !activeEvaluationAssignment ? 'active' : ''}"
+        onclick={() => { activeTab = 'modules'; activeEvaluationAssignment = null; }}
+      >
         <span>🗺️</span> Curriculum Architecture &amp; Sequencer ({currentCourse.modules?.length || 0} Units)
       </button>
-      <button type="button" class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}" onclick={() => (activeTab = 'roster')}>
-        <span>👥</span> Cohort Roster &amp; Autonomy Diagnostics ({rosterData.total_enrolled || rosterData.students?.length || 0} Students)
-      </button>
-      <button type="button" class="view-tab-btn {activeTab === 'autoscore' ? 'active' : ''}" onclick={() => (activeTab = 'autoscore')}>
-        <span>⚡</span> AutoSCORE Review
+      <button
+        type="button"
+        class="view-tab-btn {activeTab === 'roster' ? 'active' : ''}"
+        onclick={() => { activeTab = 'roster'; activeEvaluationAssignment = null; }}
+      >
+        <span>👥</span> Students &amp; Cohort Roster ({rosterData.total_enrolled || rosterData.students?.length || 0})
       </button>
       <a href="#/knowledge-graph?course_id={currentCourseId}" class="view-tab-btn" title="Open Full-Screen Curriculum Concept Graph">
         <span>◌</span> Curriculum Concept Graph ↗
@@ -172,42 +182,57 @@
     </div>
 
     {#if activeTab === 'modules'}
-      <div class="modules-container">
-        {#if !currentCourse.modules || currentCourse.modules.length === 0}
-          <div class="empty-modules">
-            <div style="font-size: 42px;">🗺️</div>
-            <h3>No Curriculum Modules Configured Yet</h3>
-            <p>This workspace is active in PostgreSQL and Neo4j. Add your first curriculum unit module below to start building prerequisite knowledge graphs.</p>
-            <button type="button" class="btn btn-primary" onclick={() => (isAddModuleOpen = true)}>+ Add First Curriculum Module</button>
+      {#if activeEvaluationAssignment}
+        <div class="assignment-eval-wrapper">
+          <div class="assignment-eval-header">
+            <button
+              type="button"
+              class="btn btn-secondary btn-sm"
+              onclick={() => (activeEvaluationAssignment = null)}
+            >
+              ← Back to Curriculum Architecture
+            </button>
+            <div class="assignment-eval-meta">
+              <span class="assignment-eval-tag">Assignment Evaluation Context</span>
+              <h2 class="assignment-eval-heading">{activeEvaluationAssignment.title || 'Assignment Submissions &amp; Evaluation'}</h2>
+            </div>
           </div>
-        {:else}
-          {#each currentCourse.modules.slice().sort((a, b) => a.position - b.position) as mod, idx (mod.module_id)}
-            <ModuleCard
-              module={mod}
-              index={idx}
-              documents={allDocuments.filter((d) => d.module_id === mod.module_id)}
-              resources={allResources.filter((r) => r.module_id === mod.module_id)}
-              courseId={currentCourseId}
-              onAddResource={handleOpenAddResource}
-              onDeleteResource={handleDeleteResource}
-              onDeleteDocument={handleDeleteDocument}
-              onDeleteAssignment={handleDeleteAssignment}
-            />
-          {/each}
-        {/if}
-      </div>
+          <StudioReview courseId={currentCourseId} assignmentId={activeEvaluationAssignment.id} />
+        </div>
+      {:else}
+        <div class="modules-container">
+          {#if !currentCourse.modules || currentCourse.modules.length === 0}
+            <div class="empty-modules">
+              <div style="font-size: 42px;">🗺️</div>
+              <h3>No Curriculum Modules Configured Yet</h3>
+              <p>This workspace is active in PostgreSQL and Neo4j. Add your first curriculum unit module below to start building prerequisite knowledge graphs.</p>
+              <button type="button" class="btn btn-primary" onclick={() => (isAddModuleOpen = true)}>+ Add First Curriculum Module</button>
+            </div>
+          {:else}
+            {#each currentCourse.modules.slice().sort((a, b) => a.position - b.position) as mod, idx (mod.module_id)}
+              <ModuleCard
+                module={mod}
+                index={idx}
+                documents={allDocuments.filter((d) => d.module_id === mod.module_id)}
+                resources={allResources.filter((r) => r.module_id === mod.module_id)}
+                courseId={currentCourseId}
+                onAddResource={handleOpenAddResource}
+                onDeleteResource={handleDeleteResource}
+                onDeleteDocument={handleDeleteDocument}
+                onDeleteAssignment={handleDeleteAssignment}
+                onEvaluateAssignment={handleEvaluateAssignment}
+              />
+            {/each}
+          {/if}
+        </div>
+      {/if}
     {:else if activeTab === 'roster'}
       <CohortRoster
         students={rosterData.students || []}
         courseId={currentCourseId}
         onDispatchScaffold={() => alert('Targeted Socratic micro-scaffold dispatched to flagged students.')}
+        onEvaluateStudentAssignment={handleEvaluateAssignment}
       />
-      <!-- Preview: heatmap and flagged-student panels are not yet wired to live
-           misconception data (see the Cohort Diagnostics build note). Kept here
-           so the feature is easy to find and finish. -->
-      <CohortDiagnostics />
-    {:else if activeTab === 'autoscore'}
-      <StudioReview />
     {:else}
       <CourseConceptMap course={currentCourse} courseId={currentCourseId} />
     {/if}
@@ -242,4 +267,42 @@
   .view-tab-btn:hover { color: var(--color-heading); background: var(--color-graphite-hover); }
   .view-tab-btn.active { background: rgba(59,130,246,.15); border: 1px solid rgba(59,130,246,.3); color: var(--color-horizon-bright); }
   .modules-container { display: flex; flex-direction: column; gap: 18px; }
+
+  .assignment-eval-wrapper {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    animation: fadeIn 0.2s ease;
+  }
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .assignment-eval-header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 12px 18px;
+    background: var(--color-graphite);
+    border: 1px solid var(--color-graphite-border);
+    border-radius: var(--radius-md);
+  }
+  .assignment-eval-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .assignment-eval-tag {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--color-horizon-bright);
+  }
+  .assignment-eval-heading {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--color-heading);
+  }
 </style>

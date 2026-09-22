@@ -1,4 +1,7 @@
 <script>
+  import { onMount } from 'svelte';
+  import ThinkingTimeline from './ThinkingTimeline.svelte';
+
   let {
     graphMetrics = { claims: 0, evidence: 0, warrants: 0, assumptions: 0, probes: 0 },
     graphSections = [],
@@ -23,21 +26,78 @@
     onExamineProbe = () => null,
     promptTitle = '',
     cognitivePivots = [],
+    sessionId = '',
   } = $props();
 
-  let activeTraceSubTab = $state('tree'); // 'tree' | 'dossier'
+  let activeTraceSubTab = $state('reasoning'); // 'reasoning' | 'activity' | 'tree' | 'dossier'
+
+  // Dual timeline data
+  let reasoningNodes = $state([]);
+  let activityNodes = $state([]);
+  let expandedReasoningNode = $state(-1);
+  let expandedActivityNode = $state(-1);
+  let timelineLoading = $state(false);
+
+  async function loadTimelines() {
+    if (!sessionId) return;
+    timelineLoading = true;
+    try {
+      const [reasoningRes, activityRes] = await Promise.all([
+        fetch(`/evidence/trace/${sessionId}/reasoning`),
+        fetch(`/evidence/trace/${sessionId}/activity`),
+      ]);
+      if (reasoningRes.ok) {
+        const data = await reasoningRes.json();
+        reasoningNodes = data.nodes || [];
+      }
+      if (activityRes.ok) {
+        const data = await activityRes.json();
+        activityNodes = data.nodes || [];
+      }
+    } catch (err) {
+      console.warn('Loading thinking timelines:', err);
+    } finally {
+      timelineLoading = false;
+    }
+  }
+
+  // Load timelines on mount and when sessionEvents change (new events arrive)
+  onMount(() => { loadTimelines(); });
+
+  // Reactively reload when session events change (new activity)
+  $effect(() => {
+    if (sessionEvents.length > 0 && sessionId) {
+      loadTimelines();
+    }
+  });
 </script>
 
 <div class="engagement-trace-root" aria-label="Engagement Trace & Reasoning Portfolio">
-  <!-- Sub-tabs to easily switch between Argument Architecture & Epistemic Dossier -->
+  <!-- Sub-tabs to easily switch between Reasoning Trace, Activity Log, Argument Tree & Epistemic Dossier -->
   <div class="trace-subtab-bar">
+    <button
+      type="button"
+      class="subtab-btn"
+      class:active={activeTraceSubTab === 'reasoning'}
+      onclick={() => activeTraceSubTab = 'reasoning'}
+    >
+      💡 Reasoning
+    </button>
+    <button
+      type="button"
+      class="subtab-btn"
+      class:active={activeTraceSubTab === 'activity'}
+      onclick={() => activeTraceSubTab = 'activity'}
+    >
+      ⏱️ Activity
+    </button>
     <button
       type="button"
       class="subtab-btn"
       class:active={activeTraceSubTab === 'tree'}
       onclick={() => activeTraceSubTab = 'tree'}
     >
-      🌳 Living Argument Tree
+      🌳 Tree
     </button>
     <button
       type="button"
@@ -45,7 +105,7 @@
       class:active={activeTraceSubTab === 'dossier'}
       onclick={() => activeTraceSubTab = 'dossier'}
     >
-      📋 Audit & Submission
+      📋 Audit
     </button>
   </div>
 
@@ -70,7 +130,57 @@
       </div>
     </div>
 
-    {#if activeTraceSubTab === 'tree'}
+    {#if activeTraceSubTab === 'reasoning'}
+      <!-- TAB 1: CURATED REASONING TRACE -->
+      <section class="trace-panel-card timeline-panel-card">
+        <header class="panel-card-header">
+          <div class="header-titles">
+            <span class="card-eyebrow">Intellectual Evolution</span>
+            <h4>Curated Reasoning Trace</h4>
+          </div>
+          <span class="node-count-badge">{reasoningNodes.length} milestones</span>
+        </header>
+        <p class="timeline-intro">Key moments where hypotheses formed, met friction, and evolved.</p>
+        {#if timelineLoading}
+          <div class="timeline-loading-state"><div class="spinner"></div><span>Tracing reasoning path…</span></div>
+        {:else}
+          <ThinkingTimeline
+            nodes={reasoningNodes}
+            showContent={true}
+            showDiff={true}
+            expandedNodeIndex={expandedReasoningNode}
+            onNodeClick={(idx) => {
+              expandedReasoningNode = expandedReasoningNode === idx ? -1 : idx;
+            }}
+          />
+        {/if}
+      </section>
+    {:else if activeTraceSubTab === 'activity'}
+      <!-- TAB 2: CHRONOLOGICAL ACTIVITY LOG -->
+      <section class="trace-panel-card timeline-panel-card">
+        <header class="panel-card-header">
+          <div class="header-titles">
+            <span class="card-eyebrow">Append-Only Audit</span>
+            <h4>Mechanical Activity Log</h4>
+          </div>
+          <span class="node-count-badge">{activityNodes.length} events</span>
+        </header>
+        <p class="timeline-intro">Complete chronological event record of draft saves, tutor exchanges, and marginalia probes.</p>
+        {#if timelineLoading}
+          <div class="timeline-loading-state"><div class="spinner"></div><span>Loading activity log…</span></div>
+        {:else}
+          <ThinkingTimeline
+            nodes={activityNodes}
+            showContent={true}
+            showDiff={false}
+            expandedNodeIndex={expandedActivityNode}
+            onNodeClick={(idx) => {
+              expandedActivityNode = expandedActivityNode === idx ? -1 : idx;
+            }}
+          />
+        {/if}
+      </section>
+    {:else if activeTraceSubTab === 'tree'}
       <!-- TAB A: LIVING ARGUMENT ARCHITECTURE -->
       <section class="trace-panel-card">
         <header class="panel-card-header">
@@ -488,6 +598,14 @@
 
   .panel-card-header {
     display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+  }
+
+  .header-titles {
+    display: flex;
     flex-direction: column;
     gap: 2px;
   }
@@ -509,6 +627,57 @@
 
   :global([data-theme="dark"]) .panel-card-header h4 {
     color: #f0f6fc;
+  }
+
+  .node-count-badge {
+    font-size: 0.68rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 99px;
+    background: rgba(2, 132, 199, 0.08);
+    color: var(--color-aurora, #0284c7);
+    border: 1px solid rgba(2, 132, 199, 0.2);
+    white-space: nowrap;
+  }
+
+  :global([data-theme="dark"]) .node-count-badge {
+    background: rgba(56, 189, 248, 0.1);
+    color: #38bdf8;
+    border-color: rgba(56, 189, 248, 0.25);
+  }
+
+  .timeline-intro {
+    font-size: 0.76rem;
+    color: var(--color-slate-muted, #64748b);
+    line-height: 1.45;
+    margin: -4px 0 6px 0;
+  }
+
+  :global([data-theme="dark"]) .timeline-intro {
+    color: #8b949e;
+  }
+
+  .timeline-loading-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 36px 12px;
+    color: var(--color-slate-muted, #64748b);
+    font-size: 0.8rem;
+  }
+
+  .spinner {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(2, 132, 199, 0.2);
+    border-top-color: var(--color-aurora, #0284c7);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin {
+    to { transform: rotate(360deg); }
   }
 
   .empty-trace-state, .empty-dossier-state {
