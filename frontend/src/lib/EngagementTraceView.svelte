@@ -27,9 +27,15 @@
     promptTitle = '',
     cognitivePivots = [],
     sessionId = '',
+    activeTraceSubTab = 'reasoning',
+    onSubTabChange = () => null,
   } = $props();
 
-  let activeTraceSubTab = $state('reasoning'); // 'reasoning' | 'activity' | 'tree' | 'dossier'
+  let currentSubTab = $state(activeTraceSubTab);
+
+  $effect(() => {
+    currentSubTab = activeTraceSubTab;
+  });
 
   // Dual timeline data
   let reasoningNodes = $state([]);
@@ -72,40 +78,24 @@
   });
 </script>
 
-<div class="engagement-trace-root" aria-label="Engagement Trace & Reasoning Portfolio">
-  <!-- Sub-tabs to easily switch between Reasoning Trace, Activity Log, Argument Tree & Epistemic Dossier -->
+<div class="engagement-trace-root" aria-label="Reasoning & Activity Timeline">
+  <!-- Sub-tabs to easily switch between Reasoning Trace and Activity Log -->
   <div class="trace-subtab-bar">
     <button
       type="button"
       class="subtab-btn"
-      class:active={activeTraceSubTab === 'reasoning'}
-      onclick={() => activeTraceSubTab = 'reasoning'}
+      class:active={currentSubTab === 'reasoning'}
+      onclick={() => { currentSubTab = 'reasoning'; onSubTabChange('reasoning'); }}
     >
       💡 Reasoning
     </button>
     <button
       type="button"
       class="subtab-btn"
-      class:active={activeTraceSubTab === 'activity'}
-      onclick={() => activeTraceSubTab = 'activity'}
+      class:active={currentSubTab === 'activity'}
+      onclick={() => { currentSubTab = 'activity'; onSubTabChange('activity'); }}
     >
       ⏱️ Activity
-    </button>
-    <button
-      type="button"
-      class="subtab-btn"
-      class:active={activeTraceSubTab === 'tree'}
-      onclick={() => activeTraceSubTab = 'tree'}
-    >
-      🌳 Tree
-    </button>
-    <button
-      type="button"
-      class="subtab-btn"
-      class:active={activeTraceSubTab === 'dossier'}
-      onclick={() => activeTraceSubTab = 'dossier'}
-    >
-      📋 Audit
     </button>
   </div>
 
@@ -130,7 +120,7 @@
       </div>
     </div>
 
-    {#if activeTraceSubTab === 'reasoning'}
+    {#if currentSubTab === 'reasoning'}
       <!-- TAB 1: CURATED REASONING TRACE -->
       <section class="trace-panel-card timeline-panel-card">
         <header class="panel-card-header">
@@ -155,7 +145,7 @@
           />
         {/if}
       </section>
-    {:else if activeTraceSubTab === 'activity'}
+    {:else if currentSubTab === 'activity'}
       <!-- TAB 2: CHRONOLOGICAL ACTIVITY LOG -->
       <section class="trace-panel-card timeline-panel-card">
         <header class="panel-card-header">
@@ -179,272 +169,6 @@
             }}
           />
         {/if}
-      </section>
-    {:else if activeTraceSubTab === 'tree'}
-      <!-- TAB A: LIVING ARGUMENT ARCHITECTURE -->
-      <section class="trace-panel-card">
-        <header class="panel-card-header">
-          <span class="card-eyebrow">Living Argument Architecture</span>
-          <h4>Reasoning Graph &amp; Claim Tree</h4>
-        </header>
-
-        {#if graphSections.length === 0}
-          <div class="empty-trace-state">
-            <p>Start writing in the Reasoning Canvas to see your living argument tree assemble in real time.</p>
-          </div>
-        {:else}
-          {#if promptTitle}
-            <div class="graph-root-node">
-              <span class="node-badge-chip root">Central Thesis</span>
-              <h5>{promptTitle}</h5>
-            </div>
-          {/if}
-
-          <div class="trace-tree-sections">
-            {#each graphSections as section, sIdx}
-              <div class="graph-section-group">
-                <div class="section-branch-header">
-                  <span class="branch-connector">├─ Section {sIdx + 1}:</span>
-                  <span class="sec-title">{section.heading.text}</span>
-                </div>
-                <div class="section-children-tree">
-                  {#each section.blocks as item}
-                    <div class="graph-claim-node {item.semanticType}" class:has-probe={item.hasProbe}>
-                      <div class="claim-node-top">
-                        <span class="claim-badge-icon">{item.icon}</span>
-                        <span class="claim-type-label">{item.label}</span>
-                        {#if item.hasProbe}
-                          <span class="claim-status-tag probe">◌ Socratic Tension</span>
-                        {:else if item.semanticType === 'evidence'}
-                          <span class="claim-status-tag grounded">✓ Grounding</span>
-                        {:else if item.hasPremature}
-                          <span class="claim-status-tag premature">🔴 Premature Leap</span>
-                        {:else if item.semanticType === 'claim'}
-                          <span class="claim-status-tag ungrounded">? Needs Warrant</span>
-                        {/if}
-                      </div>
-
-                      <p class="claim-excerpt">"{item.text || 'Untitled block'}"</p>
-
-                      {#if sourceReferenceForBlock(item.block_id).length}
-                        <div class="claim-source-links" aria-label="Sources linked by the learner">
-                          {#each sourceReferenceForBlock(item.block_id) as reference}
-                            <button type="button" class="btn-ref-pill" onclick={() => openAssignedSource(reference)}>
-                              ↗ {reference.title}
-                            </button>
-                          {/each}
-                        </div>
-                      {/if}
-
-                      <div class="scholastic-node-nav">
-                        <button 
-                          type="button" 
-                          class="scholastic-nav-link jump"
-                          onclick={() => onJumpToBlock(item.block_id)}
-                          title="Jump to this block in canvas"
-                        >
-                          Jump to draft ↗
-                        </button>
-                        {#if item.hasProbe}
-                          <span class="nav-sep">·</span>
-                          <button 
-                            type="button" 
-                            class="scholastic-nav-link probe"
-                            onclick={() => onExamineProbe(item.block_id)}
-                            title="Examine Socratic inquiry on this block"
-                          >
-                            Examine inquiry ⚡
-                          </button>
-                        {/if}
-                        {#if sessionStatus === 'active'}
-                          <span class="nav-sep">·</span>
-                          <button
-                            type="button"
-                            class="scholastic-nav-link evidence"
-                            onclick={() => findAssignedEvidence(item.block_id, item.text)}
-                            disabled={sourceActionBusy}
-                            title="Find relevant passages from assigned materials"
-                          >
-                            Find evidence
-                          </button>
-                        {/if}
-                      </div>
-
-                      {#if sourceLookupResults[item.block_id]}
-                        <div class="assigned-evidence-results" role="status">
-                          <p>{sourceLookupResults[item.block_id].message}</p>
-                          {#each sourceLookupResults[item.block_id].candidates as candidate}
-                            <article class="candidate-article">
-                              <strong>{candidate.title}</strong>
-                              <p>{candidate.excerpt}</p>
-                              <div class="candidate-actions">
-                                <button type="button" onclick={() => openAssignedSource(candidate)}>Open</button>
-                                <button
-                                  type="button"
-                                  onclick={() => useLocatedEvidenceForClaim(candidate, item.block_id)}
-                                  disabled={sourceActionBusy}
-                                >
-                                  Link Evidence
-                                </button>
-                              </div>
-                            </article>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                  {:else}
-                    <p class="empty-leaf-note">No claims drafted in this section yet.</p>
-                  {/each}
-                </div>
-              </div>
-            {/each}
-          </div>
-        {/if}
-      </section>
-    {:else}
-      <!-- TAB B: AUDIT & SUBMISSION -->
-      <section class="trace-panel-card">
-        <header class="panel-card-header">
-          <span class="card-eyebrow">Epistemic Audit &amp; Dossier</span>
-          <h4>Rubric Verification &amp; Submission</h4>
-        </header>
-
-        <!-- Readiness Self-Review -->
-        <div class="readiness-self-review" aria-label="Rubric-linked self-review">
-          <div class="readiness-header">
-            <div>
-              <span class="card-eyebrow">Before you submit</span>
-              <h5>Rubric-Linked Verification</h5>
-            </div>
-            <span class="readiness-count-badge">{readinessSummary.met}/{readinessSummary.total} Signals</span>
-          </div>
-          <p class="readiness-intro">This tracks which public rubric signals are visible in your saved draft.</p>
-          <ul class="readiness-list">
-            {#each readinessItems as item}
-              <li class="readiness-item" class:met={item.met}>
-                <span class="item-check">{item.met ? '✓' : '○'}</span>
-                <div class="item-content">
-                  <strong>{item.criterion.title}</strong>
-                  {#if !item.met}<small>{item.nextStep}</small>{/if}
-                </div>
-              </li>
-            {/each}
-          </ul>
-        </div>
-
-        <!-- Milestone Submission Tile -->
-        <div class="milestone-submission-banner">
-          <div class="submission-meta">
-            <span class="sub-badge" class:submitted={sessionStatus === 'submitted'}>
-              {sessionStatus === 'submitted' ? '✓ Submitted for Review' : '● In Progress (Draft)'}
-            </span>
-            <h5>Milestone Verification</h5>
-            <p>Once you are satisfied that your claims are grounded with warrants and evidence, submit this session for educator evaluation.</p>
-          </div>
-
-          {#if sessionStatus === 'submitted'}
-            <div class="submission-complete-pill" role="status">
-              <span>
-                ✓ Milestone submitted for educator review
-                {#if submittedRevision !== null} at revision {submittedRevision}{/if}
-                {#if submittedAt} on {new Date(submittedAt).toLocaleString()}{/if}.
-              </span>
-            </div>
-          {:else}
-            <div class="submission-action-stack">
-              {#if submissionNotice}
-                <p class:submission-error={Boolean(submissionError)} class="submission-status-note" role="status">
-                  {submissionNotice}
-                  {#if submissionError?.correlationId}
-                    <span class="submission-correlation">Support ID: {submissionError.correlationId}</span>
-                  {/if}
-                </p>
-              {/if}
-              <button
-                type="button"
-                class="btn-submit-milestone"
-                onclick={onSubmitMilestone}
-                disabled={isSubmitting || sessionStatus !== 'active'}
-              >
-                {isSubmitting ? 'Submitting saved revision…' : submissionError?.retryable ? 'Retry Submission' : 'Submit Milestone for Evaluation'}
-              </button>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Cognitive Pivot Diff Section (Scholastic Before / After Grounding) -->
-        <div class="scholastic-pivots-section">
-          <div class="pivots-section-header">
-            <span class="card-eyebrow">Cognitive Evolution &amp; Self-Correction</span>
-            <h5>Verified Conceptual Leaps ({cognitivePivots.length})</h5>
-          </div>
-
-          {#if cognitivePivots.length > 0}
-            <div class="pivot-cards-list">
-              {#each cognitivePivots as pivot}
-                <div class="scholastic-pivot-diff">
-                  <div class="pivot-meta-row">
-                    <span class="pivot-badge-dot">●</span>
-                    <span class="pivot-concept-name">{pivot.kc_label || 'Conceptual Grounding'}</span>
-                    {#if pivot.timestamp}
-                      <span class="pivot-timestamp">{new Date(pivot.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    {/if}
-                  </div>
-                  <div class="pivot-diff-body">
-                    <div class="diff-branch prior">
-                      <span class="diff-eyebrow">Initial Intuition:</span>
-                      <p class="diff-quote">“{pivot.before_text}”</p>
-                    </div>
-                    <div class="diff-arrow-connector">→</div>
-                    <div class="diff-branch grounded">
-                      <span class="diff-eyebrow">Grounded Claim:</span>
-                      <p class="diff-quote">“{pivot.after_text}”</p>
-                      {#if pivot.grounding_source}
-                        <span class="diff-evidence-cite">Grounded in: <em>{pivot.grounding_source}</em></span>
-                      {/if}
-                    </div>
-                  </div>
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <div class="empty-pivots-card">
-              <span class="empty-pivots-symbol">§</span>
-              <p class="empty-pivots-text">
-                When you refute unexamined assumptions by anchoring primary source evidence, your verified conceptual pivots will record here into your permanent reasoning dossier.
-              </p>
-            </div>
-          {/if}
-        </div>
-
-        <!-- Dialectic Inquiry History -->
-        <h5 class="dossier-section-title">Dialectic Inquiry History ({sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe')).length})</h5>
-        
-        <div class="dossier-events-stack">
-          {#each sessionEvents.filter(e => e.event_type?.includes('socratic') || e.event_type?.includes('probe') || e.event_type === 'milestone_submitted') as evt}
-            <div class="dossier-event-item">
-              <div class="event-header-row">
-                <span class="event-type-pill {evt.event_type}">{evt.event_type.replace(/_/g, ' ')}</span>
-                <span class="event-time">{evt.created_at ? new Date(evt.created_at).toLocaleTimeString() : ''}</span>
-              </div>
-              {#if evt.payload?.text}
-                <p class="event-text"><em>"{evt.payload.text}"</em></p>
-              {/if}
-              {#if evt.payload?.response_text}
-                <div class="event-student-note">
-                  <strong>Student Note:</strong> {evt.payload.response_text}
-                </div>
-              {/if}
-              {#if evt.payload?.move_type}
-                <span class="event-move-tag">Move: {evt.payload.move_type}</span>
-              {/if}
-            </div>
-          {:else}
-            <div class="empty-dossier-state">
-              <p>No Socratic inquiries recorded yet. As you engage with the Oracle and answer probes, your epistemic reasoning history will appear here.</p>
-            </div>
-          {/each}
-        </div>
       </section>
     {/if}
   </div>
@@ -992,6 +716,42 @@
   .sub-badge.submitted {
     background: rgba(5, 150, 105, 0.12);
     color: #059669;
+  }
+
+  .submission-complete-pill {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 6px;
+    background: rgba(5, 150, 105, 0.08);
+    border: 1px solid rgba(5, 150, 105, 0.25);
+    color: #047857;
+    font-size: 0.74rem;
+  }
+
+  .submission-msg {
+    line-height: 1.4;
+    font-weight: 500;
+  }
+
+  .btn-download-submission-pdf {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 7px 12px;
+    border-radius: 5px;
+    background: #059669;
+    color: #ffffff;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background 0.15s ease;
+  }
+
+  .btn-download-submission-pdf:hover {
+    background: #047857;
   }
 
   .btn-submit-milestone {

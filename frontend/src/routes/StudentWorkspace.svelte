@@ -187,6 +187,11 @@
   function handleSelectGutterTab(tab) {
     activeGutterTab = tab;
     isGutterCollapsed = false;
+    if (tab === 'submission' && gutterWidth < 540) {
+      gutterWidth = 580;
+    } else if ((tab === 'engagement' || tab === 'reasoning' || tab === 'activity') && gutterWidth < 480) {
+      gutterWidth = 500;
+    }
     // When opening right gutter (40% width), collapse sources so canvas remains roomy!
     if (isSourcesExpanded) {
       isSourcesExpanded = false;
@@ -1248,7 +1253,6 @@
           class:sources-collapsed={isSourcesCollapsed}
           class:sources-expanded={!isSourcesCollapsed}
           class:gutter-collapsed={isGutterCollapsed}
-          class:gutter-wide={activeGutterTab === 'trace' && !isGutterCollapsed}
           class:gutter-open={!isGutterCollapsed}
           class:is-resizing={isResizingLeft || isResizingRight}
           style="--sources-width: {isSourcesCollapsed ? '48px' : `${sourcesWidth}px`}; --gutter-width: {isGutterCollapsed ? '44px' : `${gutterWidth}px`};"
@@ -1350,11 +1354,10 @@
             </div>
           {/if}
 
-          <!-- Zone 3: Socratic Gutter (Marginalia + Agent + Engagement Trace Tabs) -->
+          <!-- Zone 3: Socratic Gutter (Marginalia + Agent + Reasoning + Activity) -->
           <div
             class="workbench-col-gutter"
             class:collapsed={isGutterCollapsed}
-            class:wide={activeGutterTab === 'trace' && !isGutterCollapsed}
             class:no-transition={isResizingRight}
             style="width: var(--gutter-width);"
           >
@@ -1389,36 +1392,14 @@
               isCollapsed={isGutterCollapsed}
               onToggleCollapse={handleToggleGutterCollapse}
               onSelectTab={handleSelectGutterTab}
-              traceProps={{
-                sessionId,
-                graphMetrics,
-                graphSections,
-                probes,
-                readinessItems,
-                readinessSummary,
-                sessionStatus,
-                submittedRevision,
-                submittedAt,
-                submissionNotice,
-                submissionError,
-                isSubmitting,
-                onSubmitMilestone: submitSession,
-                sessionEvents,
-                cognitivePivots,
-                sourceLookupResults,
-                sourceActionBusy,
-                sourceReferenceForBlock,
-                openAssignedSource,
-                findAssignedEvidence,
-                useLocatedEvidenceForClaim,
-                onJumpToBlock: (id) => {
-                  if (editorRef?.scrollToBlock) editorRef.scrollToBlock(id);
-                },
-                onExamineProbe: (id) => {
-                  if (editorRef?.expandBlockProbe) editorRef.expandBlockProbe(id);
-                },
-                promptTitle: published?.task?.prompt || published?.title || 'Thesis',
-              }}
+              sessionEvents={sessionEvents}
+              graphMetrics={graphMetrics}
+              sessionStatus={sessionStatus}
+              submittedAt={submittedAt}
+              isSubmitting={isSubmitting}
+              onSubmitMilestone={submitSession}
+              submissionError={submissionError}
+              submissionNotice={submissionNotice}
             />
           </div>
         </div>
@@ -1949,6 +1930,189 @@
     flex-direction: column;
     width: 100%;
     height: 100%;
+  }
+
+  /* Canvas Top Assignment Bar & Direct Submission Hub */
+  .canvas-assignment-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 10px 24px;
+    background: #ffffff;
+    border-bottom: 1px solid var(--color-graphite-border, #e2e8f0);
+    flex-shrink: 0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  :global([data-theme="dark"]) .canvas-assignment-header {
+    background: #0f172a;
+    border-color: #334155;
+  }
+
+  .assignment-header-left {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
+  .assignment-header-kicker {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-slate-subtle, #64748b);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .assignment-header-title {
+    margin: 0;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--color-slate-bright, #0f172a);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  :global([data-theme="dark"]) .assignment-header-title {
+    color: #f8fafc;
+  }
+
+  .assignment-header-right {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .canvas-submission-action-group,
+  .canvas-submission-status-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .canvas-draft-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    background: #f1f5f9;
+    border: 1px solid #cbd5e1;
+    border-radius: 9999px;
+    font-size: 11.5px;
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .canvas-draft-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: #eab308;
+    box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.2);
+  }
+
+  .btn-canvas-submit-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    background: #0284c7;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);
+    transition: all 0.15s ease;
+  }
+
+  .btn-canvas-submit-primary:hover:not(:disabled) {
+    background: #0369a1;
+    box-shadow: 0 3px 6px rgba(2, 132, 199, 0.35);
+    transform: translateY(-1px);
+  }
+
+  .btn-canvas-submit-primary:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+  }
+
+  .canvas-submitted-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    background: #ecfdf5;
+    border: 1px solid #a7f3d0;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 700;
+    color: #059669;
+  }
+
+  .canvas-submitted-date {
+    font-size: 11.5px;
+    color: #64748b;
+    font-weight: 500;
+  }
+
+  .btn-canvas-dl-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 12px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    color: #0284c7;
+    font-size: 12.5px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .btn-canvas-dl-pdf:hover {
+    background: #f0f9ff;
+    border-color: #0284c7;
+  }
+
+  .canvas-submission-alert {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 8px 24px 0;
+    padding: 9px 14px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .canvas-submission-alert.error {
+    background: #fef2f2;
+    border: 1px solid #fecaca;
+    color: #b91c1c;
+  }
+
+  .canvas-submission-alert.success {
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    color: #15803d;
+  }
+
+  .btn-canvas-alert-action {
+    background: #b91c1c;
+    color: #ffffff;
+    border: none;
+    border-radius: 4px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
   }
 
   .error-banner {

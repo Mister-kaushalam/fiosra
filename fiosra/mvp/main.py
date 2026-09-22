@@ -194,12 +194,10 @@ for router_instance in [
     app.include_router(router_instance)
     app.include_router(router_instance, prefix="/api")
 
-# Mount Static UI Frontend (Svelte production build or legacy fallback)
-DIST_DIR = Path(__file__).resolve().parent.parent.parent / "ui-ux" / "frontend-dist"
-LEGACY_DIR = Path(__file__).resolve().parent.parent.parent / "ui-ux" / "frontend"
-STATIC_DIR = DIST_DIR if DIST_DIR.exists() else LEGACY_DIR
-if STATIC_DIR.exists():
-    app.mount("/ui", StaticFiles(directory=str(STATIC_DIR), html=True), name="ui")
+# Mount Static UI Frontend (Svelte production build)
+DIST_DIR = Path(__file__).resolve().parent.parent.parent / "frontend" / "dist"
+if DIST_DIR.exists():
+    app.mount("/ui", StaticFiles(directory=str(DIST_DIR), html=True), name="ui")
 
 
 @app.get("/", include_in_schema=False)

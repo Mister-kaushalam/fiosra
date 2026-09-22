@@ -11,7 +11,6 @@ COPY frontend/package*.json ./frontend/
 RUN cd frontend && npm install
 
 COPY frontend/ ./frontend/
-COPY ui-ux/frontend/ ./ui-ux/frontend/
 RUN cd frontend && npm run build
 
 # Stage 2: Python Backend Runtime
@@ -32,8 +31,7 @@ RUN uv sync --frozen --no-dev
 
 # Copy application source code
 COPY fiosra/ ./fiosra/
-COPY ui-ux/ ./ui-ux/
-COPY --from=frontend-builder /app/ui-ux/frontend-dist/ ./ui-ux/frontend-dist/
+COPY --from=frontend-builder /app/frontend/dist/ ./frontend/dist/
 
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app"

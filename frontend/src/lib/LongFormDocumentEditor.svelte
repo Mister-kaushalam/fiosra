@@ -33,6 +33,10 @@
     onFocusedBlockChange = () => null,
     isZenFullscreen = false,
     onToggleZen = () => null,
+    sessionStatus = 'active',
+    submittedAt = '',
+    isSubmitting = false,
+    onSubmitMilestone = async () => null,
   } = $props();
 
   const blockTypes = {
@@ -2553,6 +2557,69 @@
   .save-status-correlation {
     color: var(--color-slate-muted, #646a78);
     font-family: var(--font-mono, monospace);
+  }
+
+  .btn-toolbar-submit {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 12px;
+    border-radius: var(--radius-xs, 4px);
+    background: #0284c7;
+    color: #ffffff;
+    font-size: 11.5px;
+    font-weight: 700;
+    font-family: var(--font-ui, sans-serif);
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+  }
+
+  .btn-toolbar-submit:hover:not(:disabled) {
+    background: #0369a1;
+  }
+
+  .btn-toolbar-submit:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+  }
+
+  .toolbar-submission-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .toolbar-submitted-chip,
+  .toolbar-completed-chip {
+    font-size: 11px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 999px;
+    background: rgba(5, 150, 105, 0.12);
+    color: #059669;
+    white-space: nowrap;
+  }
+
+  .toolbar-dl-pdf {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: #0284c7;
+    background: rgba(2, 132, 199, 0.08);
+    border: 1px solid rgba(2, 132, 199, 0.25);
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-decoration: none;
+    transition: all 0.15s ease;
+  }
+
+  .toolbar-dl-pdf:hover {
+    background: rgba(2, 132, 199, 0.16);
+    color: #0369a1;
   }
 
   .document-recovery-banner {

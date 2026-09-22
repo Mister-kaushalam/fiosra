@@ -11,7 +11,7 @@ flowchart TD
     Code[Author Code Changes] --> Lint[Run Ruff Linter & Formatter]
     Lint --> PyTest[Execute Backend Test Suite: uv run pytest]
     PyTest -->|Pass| SvelteBuild[Build Svelte 5 Frontend: npm run build]
-    SvelteBuild -->|Output to ui-ux/frontend-dist| DevServer[FastAPI Server: uvicorn fiosra.mvp.main:app]
+    SvelteBuild -->|Output to frontend/dist| DevServer[FastAPI Server: uvicorn fiosra.mvp.main:app]
     DevServer --> Browser[Visual & Browser Verification: localhost:8000/ui/]
     Browser --> GitCommit[Commit & Push]
 ```
@@ -109,7 +109,7 @@ psql -h localhost -U fiosra -d fiosra_db -f fiosra/mvp/migrations/007_proactive_
 
 ## 🌐 4. Building the Svelte 5 Frontend
 
-The frontend source code lives in `frontend/`. When built, Vite packages the compiled assets directly into `ui-ux/frontend-dist/`, where FastAPI mounts them at `/ui`:
+The frontend source code lives in `frontend/`. When built, Vite packages the compiled assets directly into `frontend/dist/`, where FastAPI mounts them at `/ui`:
 
 ```bash
 cd frontend

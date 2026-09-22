@@ -92,10 +92,9 @@ tutor/
 │       ├── README_MASTER_VISION.md  # Full theoretical framework (hyperbolic geometry, Kafka, etc.)
 │       └── agents/                  # Full 6-agent research specifications
 │
-├── ui-ux/                           # User Interface & Experience Specifications
-│   ├── student-experience/          # Student Inquiry, Scaffolding & Autonomy Docs
-│   ├── teacher-experience/          # Educator Studio, Observability & Review Docs
-│   └── frontend/                    # Web Client Applications & HTML5/CSS Screens
+├── frontend/                        # Svelte 5 SPA Frontend Client
+├── docs/                            # Documentation & Architecture Specifications
+│   └── design/                      # UI/UX Specifications (Student, Teacher, LMS)
 ├── docker-compose.yml               # PostgreSQL 16 + pgvector container
 ├── requirements.txt                 # Backend Python dependencies
 ├── Makefile                         # Developer CLI commands

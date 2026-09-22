@@ -26,6 +26,8 @@ class ActivityNode:
     kind: str
     icon: str
     label: str
+    stage: str | None = None
+    eyebrow: str | None = None
     content: str | None = None
 
 
@@ -36,6 +38,8 @@ class ReasoningNode:
     kind: str  # premise, challenge, struggle, pivot, evidence, synthesis, submitted
     icon: str
     label: str
+    stage: str | None = None
+    eyebrow: str | None = None
     content: str | None = None
     diff: dict[str, str] | None = None  # For pivots: {"before": "...", "after": "..."}
     insight: str | None = None
@@ -45,29 +49,29 @@ class ReasoningNode:
 # Event → Activity Node mapping
 # ---------------------------------------------------------------------------
 
-_ACTIVITY_MAP: dict[str, tuple[str, str]] = {
-    # (icon, label)
-    "assignment_opened":              ("📋", "Opened assignment"),
-    "source_document_opened":         ("📖", "Opened source material"),
-    "source_exhibit_read":            ("📖", "Read case brief"),
-    "student_prompt_submitted":       ("💬", "Sent message to tutor"),
-    "tutor_turn_completed":           ("🤖", "Tutor responded"),
-    "hint_delivered":                  ("🤖", "Tutor responded"),
-    "canvas_section_saved":           ("✏️", "Saved draft"),
-    "canvas_suggestion_offered":      ("💡", "Writing support offered"),
-    "canvas_suggestion_accepted":     ("✅", "Applied writing support"),
-    "canvas_suggestion_dismissed":    ("🙈", "Dismissed writing support"),
-    "socratic_probe_offered":         ("⚡", "Marginalia probe offered"),
-    "socratic_probe_response_submitted": ("💬", "Responded to probe"),
-    "socratic_probe_deferred":        ("⏸️", "Deferred probe"),
-    "socratic_probe_dismissed":       ("🙈", "Dismissed probe"),
-    "student_submitted_for_review":   ("🏁", "Submitted for review"),
-    "grade_finalised_by_educator":    ("🎓", "Educator finalized grade"),
-    "misconception_flagged":          ("⚠️", "Misconception flagged"),
-    "adversarial_probe_defended":     ("🛡️", "Integrity check passed"),
-    "speech_to_thought_crystallized": ("💎", "Reflection crystallized"),
-    "action_capsule_committed":       ("📌", "Applied action capsule"),
-    "socratic_move_triggered":        ("🎯", "Socratic move triggered"),
+_ACTIVITY_MAP: dict[str, tuple[str, str, str, str]] = {
+    # (icon, label, stage, eyebrow)
+    "assignment_opened":              ("📋", "Opened assignment", "Framing", "INITIALIZATION"),
+    "source_document_opened":         ("📖", "Opened source material", "Exploration", "SOURCE INQUIRY"),
+    "source_exhibit_read":            ("📖", "Read case brief", "Exploration", "EXHIBIT STUDY"),
+    "student_prompt_submitted":       ("💬", "Sent message to tutor", "Deliberation", "LEARNER PROMPT"),
+    "tutor_turn_completed":           ("🤖", "Tutor responded", "Deliberation", "SOCRATIC DIALOGUE"),
+    "hint_delivered":                  ("🤖", "Tutor responded", "Deliberation", "SOCRATIC HINT"),
+    "canvas_section_saved":           ("✏️", "Saved draft", "Drafting", "CANVAS REVISION"),
+    "canvas_suggestion_offered":      ("💡", "Writing support offered", "Guidance", "WRITING SUPPORT"),
+    "canvas_suggestion_accepted":     ("✅", "Applied writing support", "Drafting", "SUPPORT APPLIED"),
+    "canvas_suggestion_dismissed":    ("🙈", "Dismissed writing support", "Drafting", "SUPPORT DISMISSED"),
+    "socratic_probe_offered":         ("⚡", "Marginalia probe offered", "Friction", "CONCEPT PROBE"),
+    "socratic_probe_response_submitted": ("💬", "Responded to probe", "Reflection", "PROBE RESPONSE"),
+    "socratic_probe_deferred":        ("⏸️", "Deferred probe", "Reflection", "PROBE DEFERRED"),
+    "socratic_probe_dismissed":       ("🙈", "Dismissed probe", "Reflection", "PROBE DISMISSED"),
+    "student_submitted_for_review":   ("🏁", "Submitted for review", "Submission", "FINAL SUBMISSION"),
+    "grade_finalised_by_educator":    ("🎓", "Educator finalized grade", "Evaluation", "SEALED GRADE"),
+    "misconception_flagged":          ("⚠️", "Misconception flagged", "Friction", "MISCONCEPTION"),
+    "adversarial_probe_defended":     ("🛡️", "Integrity check passed", "Reflection", "INTEGRITY CHECK"),
+    "speech_to_thought_crystallized": ("💎", "Reflection crystallized", "Reflection", "CRYSTALLIZATION"),
+    "action_capsule_committed":       ("📌", "Applied action capsule", "Drafting", "ACTION CAPSULE"),
+    "socratic_move_triggered":        ("🎯", "Socratic move triggered", "Guidance", "SOCRATIC MOVE"),
 }
 
 
@@ -77,9 +81,10 @@ def _event_to_activity_node(event: dict[str, Any]) -> ActivityNode:
     payload = event.get("payload", {})
     timestamp = event.get("created_at", "")
 
-    icon, label = _ACTIVITY_MAP.get(
-        event_type, ("📋", event_type.replace("_", " ").title()),
+    mapping = _ACTIVITY_MAP.get(
+        event_type, ("📋", event_type.replace("_", " ").title(), "Activity", event_type.upper().replace("_", " ")),
     )
+    icon, label, stage, eyebrow = mapping[0], mapping[1], mapping[2], mapping[3]
 
     # Extract content snippet
     content = None
@@ -110,6 +115,8 @@ def _event_to_activity_node(event: dict[str, Any]) -> ActivityNode:
         kind=event_type,
         icon=icon,
         label=label,
+        stage=stage,
+        eyebrow=eyebrow,
         content=content,
     )
 
@@ -197,7 +204,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     timestamp=timestamp,
                     kind="premise",
                     icon="💡",
-                    label="Initial premise",
+                    label="Reframed problem into initial hypothesis",
+                    stage="Framing",
+                    eyebrow="FRAMING",
                     content=text[:500] if len(text) > 500 else text,
                 ))
             continue
@@ -210,7 +219,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     timestamp=timestamp,
                     kind="challenge",
                     icon="⚠️",
-                    label="Socratic challenge",
+                    label="Socratic friction introduced",
+                    stage="Exploration",
+                    eyebrow="EXPLORATION",
                     content=response[:500] if len(response) > 500 else response,
                 ))
                 challenge_pending = True
@@ -223,7 +234,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     timestamp=timestamp,
                     kind="challenge",
                     icon="⚠️",
-                    label="Marginalia probe",
+                    label="Marginalia probe prompted reconsideration",
+                    stage="Exploration",
+                    eyebrow="EXPLORATION",
                     content=question[:500] if len(question) > 500 else question,
                 ))
                 challenge_pending = True
@@ -237,7 +250,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     timestamp=timestamp,
                     kind="struggle",
                     icon="🤔",
-                    label="Student wrestled with this",
+                    label="Deliberated key trade-offs and tensions",
+                    stage="Deliberation",
+                    eyebrow="DELIBERATION",
                     content=text[:500] if len(text) > 500 else text,
                 ))
                 challenge_pending = False
@@ -250,7 +265,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     timestamp=timestamp,
                     kind="struggle",
                     icon="🤔",
-                    label="Responded to probe",
+                    label="Addressed friction with clarified rationale",
+                    stage="Deliberation",
+                    eyebrow="DELIBERATION",
                     content=text[:500] if len(text) > 500 else text,
                 ))
                 challenge_pending = False
@@ -274,6 +291,8 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     "🧩" if explicit_milestone == "synthesis" else "💡"
                 )
                 label = payload.get("label") or explicit_milestone.replace("_", " ").title()
+                stage_val = "Assumption testing" if explicit_milestone == "pivot" else ("Evidence grounding" if explicit_milestone == "evidence" else ("Synthesis" if explicit_milestone == "synthesis" else "Exploration"))
+                eyebrow_val = explicit_milestone.upper().replace("_", " ")
                 diff = payload.get("diff")
                 if not diff and explicit_milestone == "pivot" and prev_save:
                     diff = {"before": prev_save["text"][:300], "after": text[:300]}
@@ -282,6 +301,8 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     kind=explicit_milestone,
                     icon=icon,
                     label=label,
+                    stage=stage_val,
+                    eyebrow=eyebrow_val,
                     content=text[:500] if len(text) > 500 else text,
                     diff=diff,
                     insight=payload.get("insight"),
@@ -298,7 +319,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     timestamp=timestamp,
                     kind="pivot",
                     icon="🔄",
-                    label="Revised draft — mind changed",
+                    label="Reframed hypothesis after testing assumptions",
+                    stage="Assumption testing",
+                    eyebrow="ASSUMPTION TESTING",
                     content=text[:500] if len(text) > 500 else text,
                     diff={
                         "before": base[:300],
@@ -316,7 +339,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         timestamp=timestamp,
                         kind="synthesis",
                         icon="🧩",
-                        label="Connected the decisions",
+                        label="Connected decisions into unified strategic argument",
+                        stage="Synthesis",
+                        eyebrow="SYNTHESIS",
                         content=text[:500] if len(text) > 500 else text,
                     ))
                 elif has_data:
@@ -324,7 +349,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         timestamp=timestamp,
                         kind="evidence",
                         icon="📊",
-                        label="Grounded in evidence",
+                        label="Grounded argument in empirical case evidence",
+                        stage="Evidence grounding",
+                        eyebrow="EVIDENCE GROUNDING",
                         content=text[:500] if len(text) > 500 else text,
                     ))
                 elif prev_save and _texts_differ_meaningfully(prev_save["text"], text):
@@ -332,7 +359,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                         timestamp=timestamp,
                         kind="pivot",
                         icon="🔄",
-                        label="Revised draft — mind changed",
+                        label="Reframed hypothesis after testing assumptions",
+                        stage="Assumption testing",
+                        eyebrow="ASSUMPTION TESTING",
                         content=text[:500] if len(text) > 500 else text,
                         diff={
                             "before": prev_save["text"][:300],
@@ -348,7 +377,9 @@ def build_reasoning_trace(events: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 timestamp=timestamp,
                 kind="submitted",
                 icon="🏁",
-                label="Submitted for review",
+                label="Assignment authored and submitted for review",
+                stage="Submission",
+                eyebrow="FINAL SUBMISSION",
                 content=f"Document revision {rev}" if rev else "Final submission",
             ))
             continue
