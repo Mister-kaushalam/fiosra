@@ -9,6 +9,7 @@ from fiosra.mvp.assignment_designer.generator import assignment_generator
 from fiosra.mvp.database import AsyncSessionLocal
 from fiosra.mvp.event_store import event_store
 from fiosra.mvp.evidence_dossier.synthesizer import evidence_dossier_synthesizer
+from fiosra.mvp.analytics.thinking_trace import build_activity_log, build_reasoning_trace
 from fiosra.mvp.socratic_probe_service import socratic_probe_service
 
 router = APIRouter(prefix="/evidence", tags=["Evidence & AutoSCORE Dossier"])
@@ -51,23 +52,48 @@ class FinaliseGradeResponse(BaseModel):
 @router.get("/review-queue")
 async def get_review_queue(
     course_id: Annotated[UUID | None, Query()] = None,
+    assignment_id: Annotated[UUID | None, Query()] = None,
+    status: Annotated[str | None, Query()] = None,
 ) -> list[dict[str, Any]]:
-    """Return submitted student sessions ready for sovereign educator review."""
+    """Return student sessions ready for sovereign educator review or live progress inspection."""
+    # When filtering by assignment, return all active and submitted student sessions
+    # unless a specific status filter is supplied.
+    # When querying globally without assignment_id, default to 'submitted' for grading queue.
+    effective_status = status if status is not None else (None if assignment_id else "submitted")
+
     sql = text("""
         SELECT s.session_id, s.student_id, s.assignment_id, s.status, s.last_activity_at, a.title
         FROM student_sessions s
         LEFT JOIN assignments a ON s.assignment_id = a.assignment_id
         LEFT JOIN modules m ON a.module_id = m.module_id
-        WHERE s.status = 'submitted'
+        WHERE (CAST(:status AS VARCHAR) IS NULL OR s.status = CAST(:status AS VARCHAR))
           AND (CAST(:course_id AS UUID) IS NULL OR m.course_id = CAST(:course_id AS UUID))
-        ORDER BY s.last_activity_at DESC;
+          AND (CAST(:assignment_id AS UUID) IS NULL OR s.assignment_id = CAST(:assignment_id AS UUID))
+        ORDER BY 
+            CASE WHEN s.status = 'submitted' THEN 0 ELSE 1 END,
+            s.last_activity_at DESC;
     """)
     async with AsyncSessionLocal() as session:
-        result = await session.execute(sql, {"course_id": str(course_id) if course_id else None})
+        result = await session.execute(
+            sql,
+            {
+                "status": effective_status,
+                "course_id": str(course_id) if course_id else None,
+                "assignment_id": str(assignment_id) if assignment_id else None,
+            },
+        )
         rows = result.mappings().all()
 
+    seen_students: set[str] = set()
     queue: list[dict[str, Any]] = []
     for row in rows:
+        student_id = row["student_id"]
+        # If querying for a specific assignment, pick the latest session for each student
+        if assignment_id:
+            if student_id in seen_students:
+                continue
+            seen_students.add(student_id)
+
         session_info = await event_store.get_session_details(row["session_id"])
         events = await event_store.get_session_events(row["session_id"])
         dossier = evidence_dossier_synthesizer.synthesize_dossier(
@@ -83,6 +109,7 @@ async def get_review_queue(
                 "assignment_id": str(row["assignment_id"]) if row["assignment_id"] else None,
                 "assignment_title": row["title"] or "Reasoning assignment",
                 "submitted_at": row["last_activity_at"].isoformat() if row["last_activity_at"] else None,
+                "status": row["status"] or "active",
                 "suggested_grade": summary.get("suggested_grade", "Pending"),
                 "autonomy_score": summary.get("autonomy_score", 0),
                 "misconceptions_triggered": summary.get("misconceptions_triggered", []),
@@ -106,6 +133,33 @@ async def get_executive_evidence_dossier(session_id: UUID) -> dict[str, Any]:
     dossier["proactive_socratic_evidence"] = [
         record.model_dump(mode="json") for record in await socratic_probe_service.trace_records(session_id)
     ]
+
+    # Extract latest canvas drafts authored in this session
+    latest_sections: dict[str, dict[str, Any]] = {}
+    for ev in events:
+        if ev.get("event_type") == "canvas_section_saved":
+            p = ev.get("payload", {})
+            sec_id = p.get("section_id")
+            if sec_id:
+                latest_sections[sec_id] = {
+                    "section_id": sec_id,
+                    "title": sec_id.replace("_", " ").title(),
+                    "text": p.get("plaintext") or p.get("text") or "",
+                    "revision": p.get("revision", 1),
+                    "updated_at": ev.get("created_at"),
+                }
+
+    # Match with assignment canvas section prompts if available
+    assignment_id = session_info.get("assignment_id")
+    if assignment_id:
+        assignment = await assignment_generator.get_public_assignment(assignment_id)
+        if assignment and assignment.canvas_sections:
+            for s_def in assignment.canvas_sections:
+                if s_def.section_id in latest_sections:
+                    latest_sections[s_def.section_id]["title"] = s_def.title
+                    latest_sections[s_def.section_id]["prompt"] = s_def.prompt
+
+    dossier["canvas_sections"] = list(latest_sections.values())
     return dossier
 
 
@@ -185,3 +239,25 @@ async def get_student_reasoning_trace(session_id: UUID) -> dict[str, Any]:
             }
         )
     return {"session_id": str(session_id), "total_nodes": len(trace_nodes), "trace_nodes": trace_nodes}
+
+
+@router.get("/trace/{session_id}/reasoning")
+async def get_reasoning_timeline(session_id: UUID) -> dict[str, Any]:
+    """Return the curated reasoning trace: only intellectual milestones."""
+    session_info = await event_store.get_session_details(session_id)
+    if not session_info:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    events = await event_store.get_session_events(session_id)
+    nodes = build_reasoning_trace(events)
+    return {"session_id": str(session_id), "total_nodes": len(nodes), "nodes": nodes}
+
+
+@router.get("/trace/{session_id}/activity")
+async def get_activity_timeline(session_id: UUID) -> dict[str, Any]:
+    """Return the full mechanical activity log: every event as a timeline node."""
+    session_info = await event_store.get_session_details(session_id)
+    if not session_info:
+        raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
+    events = await event_store.get_session_events(session_id)
+    nodes = build_activity_log(events)
+    return {"session_id": str(session_id), "total_nodes": len(nodes), "nodes": nodes}

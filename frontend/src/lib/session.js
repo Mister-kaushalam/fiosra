@@ -1,7 +1,13 @@
 export function routeParams() {
-  const hash = typeof window === 'undefined' ? '' : window.location.hash;
+  if (typeof window === 'undefined') return new URLSearchParams('');
+  const hash = window.location.hash || '';
   const queryIndex = hash.indexOf('?');
-  return new URLSearchParams(queryIndex >= 0 ? hash.slice(queryIndex + 1) : '');
+  const hashParams = new URLSearchParams(queryIndex >= 0 ? hash.slice(queryIndex + 1) : '');
+  const searchParams = new URLSearchParams(window.location.search || '');
+  const merged = new URLSearchParams();
+  for (const [k, v] of searchParams.entries()) merged.set(k, v);
+  for (const [k, v] of hashParams.entries()) merged.set(k, v);
+  return merged;
 }
 
 export function getStudentId() {

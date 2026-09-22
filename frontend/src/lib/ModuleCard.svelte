@@ -9,6 +9,8 @@
     onDeleteResource,
     onDeleteDocument,
     onDeleteAssignment,
+    onEvaluateAssignment,
+    onViewAssignmentTraces,
   } = $props();
 
   let activeTab = $state('materials');
@@ -224,11 +226,26 @@
             </div>
             <div class="assignment-actions">
               <a
+                href={`#/student/trace?assignment_id=${encodeURIComponent(a.assignment_id)}&course_id=${encodeURIComponent(courseId)}`}
+                class="btn btn-secondary btn-xs"
+                title="View student reasoning traces for this assignment"
+              >
+                🎓 View Traces ↗
+              </a>
+              <button
+                type="button"
+                class="btn btn-secondary btn-xs"
+                title="Evaluate submitted sessions for this assignment"
+                onclick={() => onEvaluateAssignment?.(a.assignment_id, a.title)}
+              >
+                ⚖️ Evaluation &amp; Submissions
+              </button>
+              <a
                 href={`#/designer?course_id=${encodeURIComponent(courseId)}&module_id=${encodeURIComponent(module.module_id)}&assignment_id=${encodeURIComponent(a.assignment_id)}`}
                 class="btn btn-primary btn-xs"
                 title="Open and edit assignment in Studio"
               >
-                Open in Studio ➔
+                Studio ➔
               </a>
               <button
                 type="button"

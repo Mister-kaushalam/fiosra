@@ -1,5 +1,6 @@
 <script>
   import { onMount } from 'svelte';
+  import ThinkingTimeline from '../lib/ThinkingTimeline.svelte';
   import {
     formatDate,
     getStudentId,
@@ -14,6 +15,11 @@
   let sessionId = $state('');
   let sessionAccessToken = $state('');
   let trace = $state([]);
+  let reasoningNodes = $state([]);
+  let activityNodes = $state([]);
+  let activeTimelineTab = $state('reasoning'); // 'reasoning' | 'activity'
+  let expandedReasoningNode = $state(-1);
+  let expandedActivityNode = $state(-1);
   let dossier = $state(null);
   let activeNode = $state(null);
   let isLoading = $state(true);
@@ -60,26 +66,40 @@
     }
 
     if (!sessionId) return;
-    const persistedSessionId = localStorage.getItem(sessionStorageKey(assignmentId, getStudentId()));
-    if (persistedSessionId && persistedSessionId !== sessionId) {
-      throw new Error('Open the protected canvas from this browser to view this reasoning trace.');
-    }
-    sessionAccessToken = localStorage.getItem(sessionAccessTokenStorageKey(sessionId)) || '';
-    if (!sessionAccessToken) {
-      throw new Error('This browser no longer holds access to the protected reasoning session.');
-    }
-    const sessionHeaders = { 'X-Fiosra-Session-Token': sessionAccessToken };
 
-    const [traceResponse, dossierResponse, sessionResponse] = await Promise.all([
+    sessionAccessToken = localStorage.getItem(sessionAccessTokenStorageKey(sessionId)) || '';
+    const sessionHeaders = sessionAccessToken ? { 'X-Fiosra-Session-Token': sessionAccessToken } : {};
+
+    const [traceResponse, reasoningRes, activityRes, dossierResponse] = await Promise.all([
       fetch(`/evidence/trace/${sessionId}`),
+      fetch(`/evidence/trace/${sessionId}/reasoning`),
+      fetch(`/evidence/trace/${sessionId}/activity`),
       fetch(`/evidence/dossier/${sessionId}`),
-      fetch(`/events/session/${sessionId}`, { headers: sessionHeaders }),
     ]);
+
     if (!traceResponse.ok) throw new Error(await responseError(traceResponse, 'The reasoning trace could not be loaded.'));
-    if (!dossierResponse.ok) throw new Error(await responseError(dossierResponse, 'The evidence dossier could not be loaded.'));
     trace = (await traceResponse.json()).trace_nodes || [];
-    dossier = await dossierResponse.json();
-    if (sessionResponse.ok) status = (await sessionResponse.json()).session.status;
+
+    if (reasoningRes.ok) {
+      const rData = await reasoningRes.json();
+      reasoningNodes = rData.nodes || [];
+    }
+    if (activityRes.ok) {
+      const aData = await activityRes.json();
+      activityNodes = aData.nodes || [];
+    }
+    if (dossierResponse.ok) {
+      dossier = await dossierResponse.json();
+    }
+
+    try {
+      const sessionResponse = await fetch(`/events/session/${sessionId}`, { headers: sessionHeaders });
+      if (sessionResponse.ok) {
+        status = (await sessionResponse.json()).session?.status || '';
+      }
+    } catch {
+      // Session status is optional
+    }
     activeNode = trace[trace.length - 1]?.event_id || null;
   }
 
@@ -160,18 +180,63 @@
     </section>
 
     <section class="trace-card">
-      <div class="card-heading"><div><h2>Chronological reasoning trace</h2><p>Each entry is drawn from the append-only flight recorder.</p></div><span>{trace.length} nodes</span></div>
-      {#if trace.length === 0}
-        <div class="empty-trace">No reasoning events have been recorded yet. Return to the canvas and articulate an initial claim.</div>
-      {:else}
-        <div class="timeline">
-          {#each trace as event, index (event.event_id)}
-            <button class:active={activeNode === event.event_id} class={`timeline-row ${eventClass(event)}`} onclick={() => activeNode = event.event_id}>
-              <span class="node">{index + 1}</span>
-              <span class="event-copy"><strong>{eventTitle(event)}</strong><small>{formatDate(event.timestamp)}</small><span>{event.summary}</span></span>
-            </button>
-          {/each}
+      <div class="card-heading">
+        <div>
+          <h2>Chronological reasoning trace</h2>
+          <p>Dual timeline: intellectual development vs append-only audit log.</p>
         </div>
+        <div class="trace-subtab-bar">
+          <button
+            type="button"
+            class="subtab-btn"
+            class:active={activeTimelineTab === 'reasoning'}
+            onclick={() => activeTimelineTab = 'reasoning'}
+          >
+            💡 Reasoning Trace ({reasoningNodes.length})
+          </button>
+          <button
+            type="button"
+            class="subtab-btn"
+            class:active={activeTimelineTab === 'activity'}
+            onclick={() => activeTimelineTab = 'activity'}
+          >
+            ⏱️ Activity Log ({activityNodes.length})
+          </button>
+        </div>
+      </div>
+
+      {#if activeTimelineTab === 'reasoning'}
+        {#if reasoningNodes.length === 0}
+          <div class="empty-trace">No reasoning milestones have been recorded yet. Return to the canvas and articulate an initial claim.</div>
+        {:else}
+          <div class="timeline-container">
+            <ThinkingTimeline
+              nodes={reasoningNodes}
+              showContent={true}
+              showDiff={true}
+              expandedNodeIndex={expandedReasoningNode}
+              onNodeClick={(idx) => {
+                expandedReasoningNode = expandedReasoningNode === idx ? -1 : idx;
+              }}
+            />
+          </div>
+        {/if}
+      {:else}
+        {#if activityNodes.length === 0}
+          <div class="empty-trace">No activity events recorded yet.</div>
+        {:else}
+          <div class="timeline-container">
+            <ThinkingTimeline
+              nodes={activityNodes}
+              showContent={true}
+              showDiff={false}
+              expandedNodeIndex={expandedActivityNode}
+              onNodeClick={(idx) => {
+                expandedActivityNode = expandedActivityNode === idx ? -1 : idx;
+              }}
+            />
+          </div>
+        {/if}
       {/if}
     </section>
 
@@ -216,10 +281,15 @@
   .metric-grid strong.active{color:#6ee7b7}
   .metric-grid strong.submitted{color:#fcd34d}
   .trace-card,.detail-card,.submission-card{background:var(--color-graphite);border:1px solid var(--color-graphite-border);border-radius:var(--radius-lg);margin-top:20px;padding:22px}
-  .card-heading{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;gap:15px;padding-bottom:14px}
+  .card-heading{align-items:flex-start;border-bottom:1px solid var(--color-graphite-border);display:flex;justify-content:space-between;gap:15px;padding-bottom:14px;flex-wrap:wrap}
   .card-heading h2,.detail-card h2,.submission-card h2{color:var(--color-heading);font-size:16px;margin:0 0 4px}
   .card-heading p,.submission-card p{color:var(--color-slate-muted);font-size:12px;margin:0}
   .card-heading>span{color:var(--color-horizon-bright);font-size:11px;font-weight:700}
+  .trace-subtab-bar{display:flex;gap:8px;align-items:center}
+  .subtab-btn{background:transparent;border:1px solid var(--color-graphite-border);border-radius:var(--radius-sm,6px);color:var(--color-slate-muted);cursor:pointer;font-size:12px;font-weight:600;padding:6px 12px;transition:all .15s ease}
+  .subtab-btn:hover{color:var(--color-slate-bright);border-color:var(--color-horizon-bright)}
+  .subtab-btn.active{background:rgba(59,130,246,.15);border-color:var(--color-horizon-bright);color:#38bdf8}
+  .timeline-container{margin-top:12px}
   .timeline{display:flex;flex-direction:column;margin-top:8px}
   .timeline-row{align-items:flex-start;background:transparent;border:0;border-left:2px solid var(--color-graphite-border);color:inherit;cursor:pointer;display:flex;gap:13px;padding:13px 0 13px 16px;text-align:left;width:100%}
   .timeline-row:hover,.timeline-row.active{background:rgba(59,130,246,.07);border-left-color:var(--color-horizon-bright)}

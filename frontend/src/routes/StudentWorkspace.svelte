@@ -1390,6 +1390,7 @@
               onToggleCollapse={handleToggleGutterCollapse}
               onSelectTab={handleSelectGutterTab}
               traceProps={{
+                sessionId,
                 graphMetrics,
                 graphSections,
                 probes,
