@@ -881,7 +881,7 @@
 
   /* Whole-Paragraph Scholastic Highlighting inside Text Layer (Smooth Continuous Wash) */
   :global(.pdf-passage-highlight) {
-    background-color: rgba(245, 158, 11, 0.24) !important;
+    background-color: rgba(216, 154, 58, 0.24) !important;
     color: transparent !important;
     border-radius: 0 !important;
     box-shadow: none !important;
@@ -890,14 +890,14 @@
   }
 
   :global([data-theme="dark"]) :global(.pdf-passage-highlight) {
-    background-color: rgba(245, 158, 11, 0.32) !important;
+    background-color: rgba(216, 154, 58, 0.32) !important;
     color: transparent !important;
     box-shadow: none !important;
   }
 
   /* Search Term Highlights inside Text Layer (Subtle Academic Wash) */
   :global(.pdf-search-mark) {
-    background: rgba(245, 158, 11, 0.16) !important;
+    background: rgba(216, 154, 58, 0.16) !important;
     color: inherit !important;
     padding: 0 1px;
     border-radius: 2px;
@@ -907,9 +907,9 @@
   }
 
   :global(.pdf-search-mark.current-search-match) {
-    background: rgba(217, 119, 6, 0.28) !important;
+    background: rgba(79, 107, 255, 0.28) !important;
     color: inherit !important;
-    border-bottom: 2px solid #d97706 !important;
+    border-bottom: 2px solid #4f6bff !important;
     border-radius: 2px 2px 0 0;
     box-shadow: none !important;
     font-weight: 500 !important;
@@ -946,7 +946,7 @@
   }
 
   .btn-insert-selection:hover {
-    background: #0284c7;
+    background: #7b61ff;
     transform: scale(1.03);
   }
 
@@ -958,7 +958,7 @@
     align-items: center;
     justify-content: center;
     padding: 60px 20px;
-    color: #e2e8f0;
+    color: #32373c;
     text-align: center;
     gap: 12px;
   }
@@ -977,7 +977,7 @@
   }
 
   .btn-fallback-open {
-    background: #0284c7;
+    background: #7b61ff;
     color: #ffffff;
     padding: 8px 16px;
     border-radius: 6px;

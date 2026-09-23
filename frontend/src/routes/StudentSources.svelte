@@ -205,7 +205,7 @@
                   href={activeDoc.downloadUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: var(--radius-xs); background: rgba(56, 189, 248, 0.15); color: var(--color-horizon-bright); border: 1px solid rgba(56, 189, 248, 0.4); text-decoration: none;"
+                  style="display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: var(--fio-radius-xs); background: rgba(56, 189, 248, 0.15); color: var(--color-horizon-bright); border: 1px solid rgba(56, 189, 248, 0.4); text-decoration: none;"
                   title="Open authentic source document in new browser tab"
                 >
                   <span>📕</span> Open Authentic Source Document (PDF ↗)
@@ -294,13 +294,13 @@
   .sources-header {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--fio-radius-lg);
     padding: 24px 28px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 20px;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--fio-shadow-sm);
   }
 
   .header-breadcrumbs {
@@ -351,7 +351,7 @@
     border: 1px solid rgba(16, 185, 129, 0.4);
     color: var(--color-signal-green-text);
     padding: 12px 20px;
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     display: flex;
     justify-content: space-between;
     align-items: center;
@@ -378,7 +378,7 @@
   .corpus-sidebar {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     padding: 20px;
     display: flex;
     flex-direction: column;
@@ -403,7 +403,7 @@
   .doc-selector-btn {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 12px 14px;
     text-align: left;
     cursor: pointer;
@@ -452,7 +452,7 @@
   .sidebar-guide {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 12px 14px;
     display: flex;
     gap: 10px;
@@ -474,12 +474,12 @@
   .document-viewer {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     padding: 28px 32px;
     display: flex;
     flex-direction: column;
     gap: 24px;
-    box-shadow: var(--shadow-sm);
+    box-shadow: var(--fio-shadow-sm);
   }
 
   .doc-header-card {
@@ -526,7 +526,7 @@
   }
 
   .hash-tag {
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
     font-size: 11px;
     color: var(--color-slate-subtle);
   }
@@ -542,7 +542,7 @@
   .provenance-box {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 18px 20px;
     display: flex;
     flex-direction: column;
@@ -577,7 +577,7 @@
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
     border-left: 4px solid var(--color-horizon-blue);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 22px 24px;
     display: flex;
     flex-direction: column;
@@ -604,8 +604,8 @@
   /* Socratic prompt */
   .socratic-prompt-box {
     background: var(--color-aurora-glow);
-    border: 1px solid rgba(2, 132, 199, 0.25);
-    border-radius: var(--radius-sm);
+    border: 1px solid rgba(123, 97, 255, 0.25);
+    border-radius: var(--fio-radius-sm);
     padding: 16px 20px;
     display: flex;
     align-items: flex-start;

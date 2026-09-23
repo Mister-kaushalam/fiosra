@@ -697,10 +697,10 @@
   }
   .stat-tag.probe {
     background: rgba(229, 155, 44, 0.12);
-    color: #d97706;
+    color: #4f6bff;
   }
   .dark-mode .stat-tag.probe {
-    background: rgba(245, 158, 11, 0.18);
+    background: rgba(216, 154, 58, 0.18);
     color: #fde047;
   }
 
@@ -800,8 +800,8 @@
   .dark-mode .drawer-category-tag.kc { background: rgba(161, 161, 170, 0.16); color: #d4d4d8; }
   .drawer-category-tag.trap { background: rgba(224, 82, 82, 0.14); color: #dc2626; }
   .dark-mode .drawer-category-tag.trap { background: rgba(239, 83, 80, 0.2); color: #fca5a5; }
-  .drawer-category-tag.probe { background: rgba(229, 155, 44, 0.14); color: #d97706; }
-  .dark-mode .drawer-category-tag.probe { background: rgba(245, 158, 11, 0.2); color: #fde047; }
+  .drawer-category-tag.probe { background: rgba(229, 155, 44, 0.14); color: #4f6bff; }
+  .dark-mode .drawer-category-tag.probe { background: rgba(216, 154, 58, 0.2); color: #fde047; }
   .drawer-category-tag.module { background: rgba(36, 36, 36, 0.14); color: #1e293b; }
   .dark-mode .drawer-category-tag.module { background: rgba(244, 244, 245, 0.16); color: #f4f4f5; }
 
@@ -810,8 +810,8 @@
     font-weight: 600;
     padding: 2px 6px;
     border-radius: 3px;
-    background: rgba(245, 158, 11, 0.15);
-    color: #d97706;
+    background: rgba(216, 154, 58, 0.15);
+    color: #4f6bff;
   }
 
   .drawer-close-btn {
@@ -865,8 +865,8 @@
   .dark-mode .kc-pill { background: rgba(59, 130, 246, 0.2); color: #93c5fd; }
   .trap-pill { background: rgba(224, 82, 82, 0.12); color: #dc2626; }
   .dark-mode .trap-pill { background: rgba(239, 83, 80, 0.2); color: #fca5a5; }
-  .probe-pill { background: rgba(229, 155, 44, 0.12); color: #d97706; }
-  .dark-mode .probe-pill { background: rgba(245, 158, 11, 0.2); color: #fde047; }
+  .probe-pill { background: rgba(229, 155, 44, 0.12); color: #4f6bff; }
+  .dark-mode .probe-pill { background: rgba(216, 154, 58, 0.2); color: #fde047; }
   .module-pill { background: rgba(36, 36, 36, 0.12); color: #1e293b; }
   .dark-mode .module-pill { background: rgba(244, 244, 245, 0.2); color: #f4f4f5; }
 
@@ -950,8 +950,8 @@
     border: 1px solid #fde68a;
   }
   .dark-mode .probe-box {
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px solid rgba(245, 158, 11, 0.3);
+    background: rgba(216, 154, 58, 0.08);
+    border: 1px solid rgba(216, 154, 58, 0.3);
   }
   .probe-box h3 {
     font-size: 9.5px;
@@ -959,16 +959,16 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
     margin: 0 0 4px;
-    color: #d97706;
+    color: #4f6bff;
   }
   .dark-mode .probe-box h3 {
-    color: #fbbf24;
+    color: #d89a3a;
   }
   .probe-box p {
     font-size: 11.5px;
     line-height: 1.45;
     margin: 0;
-    color: #92400e;
+    color: #3d55e0;
   }
   .dark-mode .probe-box p {
     color: #fef3c7;
@@ -1147,7 +1147,7 @@
   .dark-mode .probe-card {
     background: #18181b;
     border: 1px solid #27272a;
-    border-left: 3px solid #f59e0b;
+    border-left: 3px solid #d89a3a;
   }
 
   .probe-header {
@@ -1163,10 +1163,10 @@
     font-weight: 700;
     padding: 2px 5px;
     background: rgba(229, 155, 44, 0.15);
-    color: #d97706;
+    color: #4f6bff;
   }
   .dark-mode .rung-badge {
-    background: rgba(245, 158, 11, 0.2);
+    background: rgba(216, 154, 58, 0.2);
     color: #fde047;
   }
 
@@ -1526,7 +1526,7 @@
   }
   .progress-badge {
     background: rgba(37, 99, 235, 0.15);
-    color: #93c5fd;
+    color: #3d55e0;
     border: 1px solid rgba(59, 130, 246, 0.3);
     padding: 2px 8px;
     border-radius: 4px;

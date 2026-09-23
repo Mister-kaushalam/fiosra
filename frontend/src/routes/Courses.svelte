@@ -123,7 +123,7 @@
   onMount(loadCourses);
 </script>
 
-<main class="space-y-8 max-w-4xl mx-auto w-full">
+<main class="w-full max-w-5xl mx-auto space-y-8">
   <!-- Page Header (Manus Aesthetic) -->
   <header class="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4 border-b border-[#DDDCD5] pb-6">
     <div class="space-y-2">

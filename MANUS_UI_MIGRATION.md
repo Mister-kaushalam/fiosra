@@ -89,7 +89,67 @@ Used to show a progress line or AI reasoning steps.
 
 ---
 
+## 4. Local Conventions (read before touching styles)
+
+The local Svelte build carries a second, older design system alongside the Manus
+one. Three conventions keep them from fighting each other.
+
+### A. Two token namespaces, on purpose
+*   `--m-color-*` in `frontend/src/app.css` holds the Manus palette verbatim.
+    Ported markup uses these, so it renders identically regardless of theme.
+*   `--color-*` in `frontend/src/css/design-system.css` is the legacy namespace.
+    The names are unchanged (and confusingly inverted: legacy `--color-obsidian`
+    is the page *ground*, `--color-slate-bright` is the *ink*), but the values
+    are now the Manus palette, so legacy pages inherit the Manus look without a
+    markup rewrite.
+
+Never merge the two namespaces. The legacy names carry opposite meanings.
+
+### B. Do not shadow Tailwind's theme variables
+Tailwind v4 utilities resolve through its own custom properties, so any unlayered
+`:root` declaration of the same name silently overrides them. The legacy file
+used to redefine `--radius-xs/sm/md/lg`, `--shadow-sm/md/lg` and `--font-mono`,
+which quietly made every `rounded-lg`, `shadow-sm` and `font-mono` in the ported
+Manus markup wrong. These now live under a `--fio-` prefix
+(`--fio-radius-lg`, `--fio-shadow-sm`, `--fio-font-mono`).
+
+Before adding a token to `design-system.css`, check it against Tailwind's theme
+namespaces (`--color-*`, `--font-*`, `--text-*`, `--radius-*`, `--shadow-*`,
+`--spacing`, `--container-*`, `--tracking-*`, `--leading-*`, `--blur-*`). If it
+collides, prefix it with `--fio-`.
+
+Tailwind is compiled by `@tailwindcss/vite` from `frontend/src/app.css`. Do not
+paste generated Tailwind output into that file: it goes stale the moment anyone
+writes a new utility class.
+
+### C. Shell versus landing page
+`App.svelte` mirrors Manus's split between `Home.tsx` (standalone) and
+`FiosraAppShell.tsx` (everything else):
+*   Route `/` renders full-bleed with no app header, no viewport padding and no
+    design assistant. `Home.svelte` supplies its own sticky header and
+    `InstitutionalFooter variant="public"`.
+*   Every other route gets `AppHeader`, the padded
+    `max-w-6xl mx-auto px-4 sm:px-6 py-8` viewport, `InstitutionalFooter
+    variant="application"`, and `FloatingFiosraEntry` on `/student/*`.
+
+The viewport is a column flex container, so a page root that uses `mx-auto` must
+also set `w-full` or the auto margins will stop it stretching.
+
+### D. Light is the default
+The Manus build is light only (`ThemeProvider switchable={false}`). The local
+bootstrap in `frontend/index.html` no longer consults
+`prefers-color-scheme`; dark is reachable only by setting `fiosra_theme` to
+`dark` in localStorage, and no UI exposes that today. Ported Manus markup pins
+the `--m-color-*` values and stays light either way.
+
+---
+
 ## Next Steps for Migration
-1.  **Update Svelte Tailwind Config:** Copy the CSS variables from `ManusBuild/fiosra-mvp (1)/client/src/index.css` into your Svelte project's `app.css` or Tailwind configuration.
-2.  **Svelte-ify Components:** Recreate `FiosraAppShell` and `DashboardLayout` in your Svelte `src/lib/components` directory using the structural classes listed above.
+1.  **Done:** Manus palette, app shell, landing page, footers and the legacy
+    palette remap. See section 4 for the conventions they rely on.
+2.  **Remaining:** the legacy routes (`CourseStudio`, `AssignmentDesigner`,
+    `StudentWorkspace`, `StudentTimeline/Trace/Sources`, `StudioReview`,
+    `CohortDiagnostics`, `KnowledgeGraph`) inherit the Manus palette but still
+    use their own markup and spacing. Port them page by page against their Manus
+    counterparts where one exists.
 3.  **Port Shadcn UI:** If you were using Shadcn for React, consider using [shadcn-svelte](https://shadcn-svelte.com/) to quickly port over primitives like Dialogs, Popovers, and Buttons while maintaining the extracted design tokens.

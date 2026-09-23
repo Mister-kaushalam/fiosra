@@ -2318,7 +2318,7 @@
     padding: 0;
     background: var(--color-graphite, #ffffff);
     border: 1px solid var(--color-graphite-border, #e2e4dc);
-    border-radius: var(--radius-xs, 4px);
+    border-radius: var(--fio-radius-xs, 4px);
     color: var(--color-slate-subtle, #64748b);
     cursor: pointer;
     transition: all 0.15s ease;
@@ -2327,9 +2327,9 @@
   }
 
   .btn-zen-canvas-toggle:hover {
-    border-color: var(--color-aurora, #0284c7);
-    color: var(--color-aurora, #0284c7);
-    background: rgba(2, 132, 199, 0.08);
+    border-color: var(--color-aurora, #7b61ff);
+    color: var(--color-aurora, #7b61ff);
+    background: rgba(123, 97, 255, 0.08);
   }
 
   .btn-zen-canvas-toggle.active {
@@ -2347,7 +2347,7 @@
   .minimal-toolbar {
     background: var(--color-bone-muted, #f4f5f0);
     border: 1px solid var(--color-graphite-border, #e2e4dc);
-    border-radius: var(--radius-md, 8px);
+    border-radius: var(--fio-radius-md, 8px);
     padding: 6px 12px;
     display: flex;
     align-items: center;
@@ -2373,7 +2373,7 @@
   .tool-btn {
     background: transparent;
     border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
+    border-radius: var(--fio-radius-xs, 4px);
     color: var(--color-slate-light, #474d5a);
     font-family: var(--font-ui, sans-serif);
     font-size: 12px;
@@ -2389,9 +2389,9 @@
   }
 
   .tool-btn.active {
-    background: rgba(2, 132, 199, 0.12);
-    border-color: rgba(2, 132, 199, 0.3);
-    color: var(--color-aurora, #0284c7);
+    background: rgba(123, 97, 255, 0.12);
+    border-color: rgba(123, 97, 255, 0.3);
+    color: var(--color-aurora, #7b61ff);
   }
 
   .add-page-btn {
@@ -2405,8 +2405,8 @@
 
   .add-page-btn:hover:not(:disabled) {
     background: var(--color-graphite-hover, #e8eae3);
-    border-color: var(--color-aurora, #0284c7);
-    color: var(--color-aurora, #0284c7);
+    border-color: var(--color-aurora, #7b61ff);
+    color: var(--color-aurora, #7b61ff);
   }
 
   .page-count-badge {
@@ -2446,7 +2446,7 @@
 
   .truth-highlights-toggle:hover {
     background: var(--color-graphite-hover, #e8eae3);
-    border-color: var(--color-aurora, #0284c7);
+    border-color: var(--color-aurora, #7b61ff);
     color: var(--color-heading, #121418);
   }
 
@@ -2501,7 +2501,7 @@
 
   .strip-pill {
     font-size: 11px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--fio-font-mono, monospace);
     color: var(--color-slate-muted, #646a78);
     display: inline-flex;
     align-items: center;
@@ -2529,7 +2529,7 @@
   }
 
   .save-status-message {
-    color: #b45309;
+    color: #3d55e0;
   }
 
   .save-status-action,
@@ -2556,7 +2556,7 @@
 
   .save-status-correlation {
     color: var(--color-slate-muted, #646a78);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--fio-font-mono, monospace);
   }
 
   .btn-toolbar-submit {
@@ -2564,8 +2564,8 @@
     align-items: center;
     gap: 5px;
     padding: 5px 12px;
-    border-radius: var(--radius-xs, 4px);
-    background: #0284c7;
+    border-radius: var(--fio-radius-xs, 4px);
+    background: #7b61ff;
     color: #ffffff;
     font-size: 11.5px;
     font-weight: 700;
@@ -2577,7 +2577,7 @@
   }
 
   .btn-toolbar-submit:hover:not(:disabled) {
-    background: #0369a1;
+    background: #6349e8;
   }
 
   .btn-toolbar-submit:disabled {
@@ -2608,9 +2608,9 @@
     gap: 4px;
     font-size: 11px;
     font-weight: 600;
-    color: #0284c7;
-    background: rgba(2, 132, 199, 0.08);
-    border: 1px solid rgba(2, 132, 199, 0.25);
+    color: #7b61ff;
+    background: rgba(123, 97, 255, 0.08);
+    border: 1px solid rgba(123, 97, 255, 0.25);
     padding: 2px 7px;
     border-radius: 4px;
     text-decoration: none;
@@ -2618,8 +2618,8 @@
   }
 
   .toolbar-dl-pdf:hover {
-    background: rgba(2, 132, 199, 0.16);
-    color: #0369a1;
+    background: rgba(123, 97, 255, 0.16);
+    color: #6349e8;
   }
 
   .document-recovery-banner {
@@ -2662,7 +2662,7 @@
     position: relative;
     background: var(--color-bone-surface, #ffffff);
     border: 1px solid var(--color-graphite-border, #e2e4dc);
-    border-radius: var(--radius-lg, 12px);
+    border-radius: var(--fio-radius-lg, 12px);
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     width: 100%;
     max-width: 100%;
@@ -2899,12 +2899,12 @@
 
   /* 🟡 Assumptions: Presuppositions taken for granted */
   .document-page.epistemic-active :global(.epistemic-sentence.assumption) {
-    border-bottom: 2px solid rgba(245, 158, 11, 0.65);
-    background: rgba(245, 158, 11, 0.05);
+    border-bottom: 2px solid rgba(216, 154, 58, 0.65);
+    background: rgba(216, 154, 58, 0.05);
   }
   .document-page.epistemic-active :global(.epistemic-sentence.assumption:hover) {
-    background: rgba(245, 158, 11, 0.12);
-    border-bottom-color: #f59e0b;
+    background: rgba(216, 154, 58, 0.12);
+    border-bottom-color: #d89a3a;
   }
 
   /* 🔴 Premature Closures: Unsupported conclusion leaps */
@@ -3265,26 +3265,26 @@
   .oracle-symbol {
     font-size: 14px;
     font-weight: 800;
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
   }
 
   .mode-badge-btn {
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(2, 132, 199, 0.08);
-    border: 1px solid rgba(2, 132, 199, 0.22);
+    background: rgba(123, 97, 255, 0.08);
+    border: 1px solid rgba(123, 97, 255, 0.22);
     border-radius: 99px;
     padding: 2px 7px;
     font-size: 10.5px;
     font-weight: 700;
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
     cursor: pointer;
     text-transform: capitalize;
     transition: all 0.15s ease;
   }
   .mode-badge-btn:hover {
-    background: rgba(2, 132, 199, 0.18);
+    background: rgba(123, 97, 255, 0.18);
     transform: translateY(-0.5px);
   }
   .mode-dot {
@@ -3301,8 +3301,8 @@
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background: #d97706;
-    box-shadow: 0 0 8px rgba(217, 119, 6, 0.6);
+    background: #4f6bff;
+    box-shadow: 0 0 8px rgba(79, 107, 255, 0.6);
     animation: pulseGlow 2s infinite ease-in-out;
   }
 
@@ -3333,9 +3333,9 @@
   }
 
   .status-pill.probing {
-    background: rgba(217, 119, 6, 0.12);
-    color: #d97706;
-    border: 1px solid rgba(217, 119, 6, 0.3);
+    background: rgba(79, 107, 255, 0.12);
+    color: #4f6bff;
+    border: 1px solid rgba(79, 107, 255, 0.3);
   }
 
   .status-pill.satisfied {
@@ -3390,7 +3390,7 @@
   .epistemic-badge.claim { background: rgba(59, 130, 246, 0.12); color: #2563eb; border: 1px solid rgba(59, 130, 246, 0.25); }
   .epistemic-badge.evidence { background: rgba(16, 185, 129, 0.12); color: #059669; border: 1px solid rgba(16, 185, 129, 0.25); }
   .epistemic-badge.reasoning { background: rgba(139, 92, 246, 0.12); color: #7c3aed; border: 1px solid rgba(139, 92, 246, 0.25); }
-  .epistemic-badge.assumption { background: rgba(217, 119, 6, 0.12); color: #d97706; border: 1px solid rgba(217, 119, 6, 0.25); }
+  .epistemic-badge.assumption { background: rgba(79, 107, 255, 0.12); color: #4f6bff; border: 1px solid rgba(79, 107, 255, 0.25); }
   .epistemic-badge.premature_closure { background: rgba(239, 68, 68, 0.12); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.25); }
 
   .vulnerability-tag {
@@ -3422,7 +3422,7 @@
 
   .epistemic-progress-bar {
     height: 100%;
-    background: #f59e0b;
+    background: #d89a3a;
     border-radius: 99px;
     transition: width 0.3s ease;
   }
@@ -3568,7 +3568,7 @@
     display: block;
     margin-top: 6px;
     color: var(--color-slate-muted, #64748b);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--fio-font-mono, monospace);
     font-size: 10px;
   }
 
@@ -3862,8 +3862,8 @@
   }
   .pill-btn:hover {
     background: #f1f5f9;
-    border-color: #0284c7;
-    color: #0284c7;
+    border-color: #7b61ff;
+    color: #7b61ff;
     transform: translateY(-0.5px);
   }
   .pill-icon {
@@ -3940,7 +3940,7 @@
   .slash-menu-item .item-cmd {
     font-size: 12px;
     font-family: monospace;
-    color: #0284c7;
+    color: #7b61ff;
   }
   .slash-menu-item .item-label {
     font-size: 11.5px;
@@ -3977,7 +3977,7 @@
   }
   .starter-symbol {
     font-size: 28px;
-    color: #0284c7;
+    color: #7b61ff;
     line-height: 1;
   }
   .starter-title {
@@ -4026,9 +4026,9 @@
   }
   .starter-card:hover {
     background: #f8fafc;
-    border-color: #0284c7;
+    border-color: #7b61ff;
     transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(2, 132, 199, 0.08);
+    box-shadow: 0 4px 12px rgba(123, 97, 255, 0.08);
   }
   .starter-card-top {
     display: flex;
@@ -4040,7 +4040,7 @@
     font-size: 11.5px;
     font-family: monospace;
     font-weight: 600;
-    color: #0284c7;
+    color: #7b61ff;
   }
   .starter-card-tag {
     font-size: 9.5px;
@@ -4049,8 +4049,8 @@
     letter-spacing: 0.04em;
     padding: 2px 6px;
     border-radius: 4px;
-    background: rgba(2, 132, 199, 0.08);
-    color: #0369a1;
+    background: rgba(123, 97, 255, 0.08);
+    color: #6349e8;
   }
   .starter-card-desc {
     font-size: 11px;
@@ -4096,8 +4096,8 @@
     line-height: 1.45;
   }
   .epistemic-badge.general {
-    background: rgba(2, 132, 199, 0.12);
-    color: #0284c7;
+    background: rgba(123, 97, 255, 0.12);
+    color: #7b61ff;
   }
   .vulnerability-tag.info {
     background: rgba(16, 185, 129, 0.1);
@@ -4107,7 +4107,7 @@
 
   /* Active Sentence in Editor */
   :global(.epistemic-sentence.is-active-sentence) {
-    background: rgba(217, 119, 6, 0.16) !important;
+    background: rgba(79, 107, 255, 0.16) !important;
     outline: 2px solid var(--color-horizon-blue, #2563eb) !important;
     outline-offset: 2px;
     border-radius: 3px;

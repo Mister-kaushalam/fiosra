@@ -92,7 +92,7 @@
   .course-banner {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--fio-radius-lg);
     padding: 22px 28px;
     display: flex;
     justify-content: space-between;
@@ -162,7 +162,7 @@
     color: var(--color-slate-light);
     background: var(--pill-bg);
     padding: 4px 10px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     border: 1px solid var(--pill-border);
   }
 
@@ -203,7 +203,7 @@
   }
 
   .chip-link-btn:hover {
-    color: #93c5fd;
+    color: #3d55e0;
   }
 
   .syllabus-backdrop {
@@ -221,7 +221,7 @@
   .syllabus-modal {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--fio-radius-lg);
     max-width: 680px;
     width: 100%;
     box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);

@@ -167,7 +167,7 @@
   }
 </script>
 
-<main class="space-y-8 max-w-4xl mx-auto w-full">
+<main class="space-y-8 max-w-4xl">
     
     <div class="space-y-2">
       <div class="flex items-center gap-2">

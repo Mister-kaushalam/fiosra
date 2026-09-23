@@ -802,7 +802,7 @@
     padding: 8px 10px;
     font-size: 12.5px;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     background: var(--color-obsidian);
     color: var(--color-slate-bright);
     font-family: var(--font-ui);
@@ -843,9 +843,9 @@
   }
 
   .filter-pill.active {
-    background: var(--pill-active-bg, rgba(217, 119, 6, 0.14));
-    border-color: var(--pill-active-border, rgba(217, 119, 6, 0.35));
-    color: var(--pill-active-color, #92400e);
+    background: var(--pill-active-bg, rgba(79, 107, 255, 0.14));
+    border-color: var(--pill-active-border, rgba(79, 107, 255, 0.35));
+    color: var(--pill-active-color, #3d55e0);
   }
 
   .roster-list {
@@ -873,7 +873,7 @@
     background: var(--color-bone-surface, #fff);
     border: 1px solid var(--color-graphite-border);
     border-left: 3px solid transparent;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     cursor: pointer;
     text-align: left;
     width: 100%;
@@ -889,8 +889,8 @@
 
   .roster-card.active {
     border-left-color: var(--color-horizon-blue);
-    background: var(--color-horizon-glow, rgba(217, 119, 6, 0.12));
-    box-shadow: inset 0 0 0 1px rgba(217, 119, 6, 0.15);
+    background: var(--color-horizon-glow, rgba(79, 107, 255, 0.12));
+    box-shadow: inset 0 0 0 1px rgba(79, 107, 255, 0.15);
   }
 
   .roster-avatar {
@@ -951,9 +951,9 @@
   }
 
   .roster-badge.in-progress {
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    color: var(--color-aurora-bright, #0369a1);
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    background: var(--color-aurora-glow, rgba(123, 97, 255, 0.12));
+    color: var(--color-aurora-bright, #6349e8);
+    border: 1px solid rgba(123, 97, 255, 0.2);
   }
 
   .roster-refresh {
@@ -1007,7 +1007,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     font-size: 12px;
     font-weight: 600;
     color: #1d4ed8;
@@ -1034,7 +1034,7 @@
     align-items: center;
     gap: 6px;
     padding: 6px 12px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     font-size: 12px;
     font-weight: 600;
     color: #334155;
@@ -1068,7 +1068,7 @@
     flex-direction: column;
     background: #f8fafc;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md, 8px);
+    border-radius: var(--fio-radius-md, 8px);
     overflow: hidden;
     margin-bottom: 12px;
   }
@@ -1107,7 +1107,7 @@
     color: var(--color-horizon-blue, #2563eb);
     text-decoration: none;
     padding: 4px 8px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     border: 1px solid transparent;
     transition: all 0.15s;
   }
@@ -1140,7 +1140,7 @@
 
   .status-badge {
     padding: 6px 12px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     font-size: 12px;
     font-weight: 700;
     flex-shrink: 0;
@@ -1155,9 +1155,9 @@
   }
 
   .status-badge.in-progress {
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    color: var(--color-aurora-bright, #0369a1);
-    border: 1px solid rgba(2, 132, 199, 0.25);
+    background: var(--color-aurora-glow, rgba(123, 97, 255, 0.12));
+    color: var(--color-aurora-bright, #6349e8);
+    border: 1px solid rgba(123, 97, 255, 0.25);
   }
 
   /* ── Accordion Sections ──────────────────────────────────────── */
@@ -1182,7 +1182,7 @@
 
   .accordion-trigger:hover {
     background: var(--color-bone-muted, #f4f5f0);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
   }
 
   .accordion-chevron {
@@ -1229,7 +1229,7 @@
   .acc-tab-btn {
     background: transparent;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--fio-radius-sm, 6px);
     color: var(--color-slate-muted);
     cursor: pointer;
     font-size: 11px;
@@ -1245,15 +1245,15 @@
   }
 
   .acc-tab-btn.active {
-    background: var(--pill-active-bg, rgba(217, 119, 6, 0.14));
-    border-color: var(--pill-active-border, rgba(217, 119, 6, 0.35));
-    color: var(--pill-active-color, #92400e);
+    background: var(--pill-active-bg, rgba(79, 107, 255, 0.14));
+    border-color: var(--pill-active-border, rgba(79, 107, 255, 0.35));
+    color: var(--pill-active-color, #3d55e0);
   }
 
   .acc-flight-link {
     background: var(--color-signal-green-bg, #ecfdf5);
     border: 1px solid rgba(5, 150, 105, 0.25);
-    border-radius: var(--radius-sm, 6px);
+    border-radius: var(--fio-radius-sm, 6px);
     color: var(--color-signal-green-text, #065f46);
     font-size: 11px;
     font-weight: 600;
@@ -1287,7 +1287,7 @@
   .work-card {
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
@@ -1312,7 +1312,7 @@
     color: var(--color-slate-muted);
     background: var(--pill-bg, rgba(0, 0, 0, 0.04));
     padding: 2px 6px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
   }
 
   .work-prompt {
@@ -1328,7 +1328,7 @@
     line-height: 1.55;
     background: var(--color-bone-muted, #f4f5f0);
     padding: 10px 12px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     border-left: 2px solid var(--color-horizon-blue);
     white-space: pre-wrap;
   }
@@ -1356,11 +1356,11 @@
 
   .source-tag {
     font-size: 10.5px;
-    color: var(--color-aurora-bright, #0369a1);
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    color: var(--color-aurora-bright, #6349e8);
+    background: var(--color-aurora-glow, rgba(123, 97, 255, 0.12));
+    border: 1px solid rgba(123, 97, 255, 0.2);
     padding: 2px 7px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
   }
 
   /* ── Rubric Criteria ─────────────────────────────────────────── */
@@ -1368,7 +1368,7 @@
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
     border-left: 3px solid var(--color-amber);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     margin-top: 8px;
     padding: 12px;
   }
@@ -1385,7 +1385,7 @@
   }
 
   .criterion strong {
-    color: var(--color-amber-text, #92400e);
+    color: var(--color-amber-text, #3d55e0);
     font-size: 12px;
     text-transform: uppercase;
   }
@@ -1411,9 +1411,9 @@
     font-size: 11.5px;
     background: var(--color-bone-muted, #f4f5f0);
     padding: 8px 10px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     margin: 6px 0 4px;
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
   }
 
   .criterion-explanation {
@@ -1465,7 +1465,7 @@
     padding: 8px 10px;
     font-size: 12.5px;
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     background: var(--input-bg, #fff);
     color: var(--color-slate-bright);
     font-family: var(--font-ui);
@@ -1485,9 +1485,9 @@
   .sticky-progress-bar {
     position: sticky;
     bottom: 0;
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.08));
-    border: 1px solid rgba(2, 132, 199, 0.2);
-    border-radius: var(--radius-sm);
+    background: var(--color-aurora-glow, rgba(123, 97, 255, 0.08));
+    border: 1px solid rgba(123, 97, 255, 0.2);
+    border-radius: var(--fio-radius-sm);
     padding: 10px 16px;
     display: flex;
     align-items: center;
@@ -1504,7 +1504,7 @@
   .progress-badge {
     font-size: 12px;
     font-weight: 700;
-    color: var(--color-aurora-bright, #0369a1);
+    color: var(--color-aurora-bright, #6349e8);
     white-space: nowrap;
   }
 
@@ -1564,9 +1564,9 @@
 
   .queue-count {
     align-self: flex-end;
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.12));
-    border: 1px solid rgba(2, 132, 199, 0.28);
-    border-radius: var(--radius-md);
+    background: var(--color-aurora-glow, rgba(123, 97, 255, 0.12));
+    border: 1px solid rgba(123, 97, 255, 0.28);
+    border-radius: var(--fio-radius-md);
     display: flex;
     flex-direction: column;
     padding: 10px 14px;
@@ -1581,7 +1581,7 @@
   }
 
   .queue-count strong {
-    color: var(--color-aurora-bright, #0369a1);
+    color: var(--color-aurora-bright, #6349e8);
     font-family: var(--font-brand);
     font-size: 24px;
   }
@@ -1589,7 +1589,7 @@
   .queue-card, .dossier-card {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--fio-radius-lg);
     padding: 20px;
   }
 
@@ -1629,7 +1629,7 @@
     align-items: center;
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     color: inherit;
     cursor: pointer;
     display: flex;
@@ -1642,7 +1642,7 @@
 
   .queue-item:hover, .queue-item.active {
     border-color: var(--color-horizon-bright);
-    background: var(--color-horizon-glow, rgba(217, 119, 6, 0.08));
+    background: var(--color-horizon-glow, rgba(79, 107, 255, 0.08));
   }
 
   .item-copy {
@@ -1758,7 +1758,7 @@
   .grade-form input, .grade-form textarea {
     background: var(--input-bg, #fff);
     border: 1px solid var(--input-border, #d5d8ce);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     color: var(--color-slate-bright);
     font: inherit;
     font-size: 12.5px;
@@ -1775,7 +1775,7 @@
     align-items: center;
     background: var(--color-rose-bg, #fef2f2);
     border: 1px solid rgba(220, 38, 38, 0.2);
-    border-radius: var(--radius-lg);
+    border-radius: var(--fio-radius-lg);
     display: flex;
     flex-direction: column;
     gap: 10px;
@@ -1788,7 +1788,7 @@
   .load-error p { color: var(--color-slate-light); font-size: 12px; margin: 0; max-width: 540px; }
 
   .notice {
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     font-size: 12px;
     padding: 11px 14px;
   }
@@ -1818,7 +1818,7 @@
 
   .spinner {
     animation: spin 0.8s linear infinite;
-    border: 3px solid rgba(217, 119, 6, 0.2);
+    border: 3px solid rgba(79, 107, 255, 0.2);
     border-radius: 50%;
     border-top-color: var(--color-horizon-bright);
     height: 26px;

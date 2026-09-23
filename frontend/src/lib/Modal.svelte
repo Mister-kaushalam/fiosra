@@ -50,13 +50,13 @@
   .modal-box {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-lg);
+    border-radius: var(--fio-radius-lg);
     max-width: 92vw;
     padding: 28px;
     display: flex;
     flex-direction: column;
     gap: 18px;
-    box-shadow: var(--shadow-lg);
+    box-shadow: var(--fio-shadow-lg);
   }
 
   .modal-header {

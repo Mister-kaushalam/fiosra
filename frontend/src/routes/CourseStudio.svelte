@@ -791,7 +791,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .btn-ghost {
     background: transparent;
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     color: var(--muted-foreground);
     padding: 6px 14px;
     font-size: 12.5px;
@@ -807,7 +807,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     background: linear-gradient(135deg, #2563eb, #7c3aed);
     color: #ffffff;
     border: none;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 7px 16px;
     font-size: 12.5px;
     font-weight: 600;
@@ -829,7 +829,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     justify-content: space-between;
     align-items: center;
     padding: 9px 14px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     font-size: 12.5px;
     margin-bottom: 20px;
   }
@@ -877,7 +877,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .intake-intro-card, .intake-methodology-card, .intake-presets-card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     padding: 20px 22px;
   }
 
@@ -958,7 +958,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     width: 100%;
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 12px 14px;
     display: flex;
     justify-content: space-between;
@@ -1001,7 +1001,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .intake-workbench-card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     padding: 24px 28px;
   }
 
@@ -1074,7 +1074,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .clean-input, .clean-select {
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 9px 12px;
     font-size: 13px;
     color: var(--foreground);
@@ -1087,7 +1087,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     box-sizing: border-box;
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 12px 14px;
     font-size: 13px;
     line-height: 1.55;
@@ -1122,7 +1122,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     background: linear-gradient(135deg, #2563eb, #7c3aed);
     color: #ffffff;
     border: none;
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     font-size: 13.5px;
     font-weight: 600;
     cursor: pointer;
@@ -1155,7 +1155,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .copilot-sidebar {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     padding: 18px;
     display: flex;
     flex-direction: column;
@@ -1220,7 +1220,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .copilot-collapse {
     background: transparent;
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     color: var(--muted-foreground);
     cursor: pointer;
     font-size: 12px;
@@ -1233,7 +1233,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     align-items: flex-start;
     background: rgba(59, 130, 246, 0.08);
     border: 1px solid rgba(59, 130, 246, 0.24);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     display: flex;
     gap: 10px;
     justify-content: space-between;
@@ -1249,7 +1249,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .ai-diff-banner {
     background: rgba(59, 130, 246, 0.07);
     border: 1px solid rgba(59, 130, 246, 0.2);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 8px 10px;
     font-size: 11.5px;
     line-height: 1.4;
@@ -1305,7 +1305,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     text-align: left;
     background: var(--accent);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 7px 9px;
     font-size: 10.5px;
     color: var(--foreground);
@@ -1343,7 +1343,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
 
   .chat-msg {
     padding: 7px 10px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     font-size: 11.5px;
     line-height: 1.4;
   }
@@ -1386,7 +1386,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .chat-input {
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 10px;
     font-size: 12px;
     color: var(--foreground);
@@ -1401,7 +1401,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     background: var(--foreground);
     color: var(--background);
     border: none;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 8px 12px;
     font-size: 11.5px;
     font-weight: 600;
@@ -1425,7 +1425,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .course-summary-card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     padding: 20px 24px;
     display: flex;
     justify-content: space-between;
@@ -1573,7 +1573,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     background: var(--accent);
     border: 1px solid var(--border);
     color: var(--foreground);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 3px 8px;
     font-size: 11.5px;
     font-weight: 600;
@@ -1593,7 +1593,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .unit-card {
     background: var(--card);
     border: 1px solid var(--border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     overflow: hidden;
     transition: box-shadow 0.15s ease, border-color 0.15s ease;
   }
@@ -1632,7 +1632,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .unit-pill {
     background: var(--accent);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     font-size: 10.5px;
     font-weight: 700;
     text-transform: uppercase;
@@ -1788,7 +1788,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .clean-textarea-sm {
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 10px 12px;
     font-size: 12.5px;
     color: var(--foreground);
@@ -1848,7 +1848,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .assessment-milestone-box {
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 14px 16px;
     display: flex;
     flex-direction: column;
@@ -1895,7 +1895,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     font-size: 11px;
     background: var(--accent);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 3px 8px;
     color: var(--foreground);
   }
@@ -1903,7 +1903,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
   .kc-box {
     background: var(--background);
     border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 12px 14px;
     display: flex;
     flex-direction: column;
@@ -1928,7 +1928,7 @@ Unit 4: The Williamite Settlement & The Penal Era (1689-1750)
     font-size: 10.5px;
     background: var(--accent);
     border: 1px solid var(--border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     padding: 3px 8px;
     color: #7B61FF;
     font-family: monospace;

@@ -225,7 +225,7 @@
     border-radius: 999px;
     background: var(--color-aurora-glow);
     color: var(--color-aurora);
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    border: 1px solid rgba(123, 97, 255, 0.2);
   }
 
   .btn-close-drawer {
@@ -247,8 +247,8 @@
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(2, 132, 199, 0.06);
-    border-bottom: 1px solid rgba(2, 132, 199, 0.15);
+    background: rgba(123, 97, 255, 0.06);
+    border-bottom: 1px solid rgba(123, 97, 255, 0.15);
     padding: 8px 18px;
     font-size: 0.78rem;
     color: var(--color-slate-light);
@@ -307,8 +307,8 @@
   }
 
   .tutor-msg.deflected {
-    border-color: rgba(217, 119, 6, 0.4);
-    background: rgba(217, 119, 6, 0.08);
+    border-color: rgba(79, 107, 255, 0.4);
+    background: rgba(79, 107, 255, 0.08);
   }
 
   .tutor-msg .msg-author {
@@ -323,7 +323,7 @@
 
   .hint-tag {
     font-size: 0.68rem;
-    background: rgba(2, 132, 199, 0.1);
+    background: rgba(123, 97, 255, 0.1);
     padding: 1px 6px;
     border-radius: 4px;
   }
@@ -346,7 +346,7 @@
     background: rgba(0, 0, 0, 0.05);
     border-radius: 4px;
     overflow-x: auto;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--fio-font-mono, monospace);
   }
 
   .tutor-typing-indicator {

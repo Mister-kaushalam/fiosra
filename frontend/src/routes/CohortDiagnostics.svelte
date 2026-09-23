@@ -18,7 +18,7 @@
   function heatColor(score) {
     if (score >= 85) return 'rgba(16,185,129,0.7)';
     if (score >= 70) return 'rgba(59,130,246,0.6)';
-    if (score >= 55) return 'rgba(245,158,11,0.6)';
+    if (score >= 55) return 'rgba(216, 154, 58,0.6)';
     return 'rgba(239,68,68,0.7)';
   }
 </script>
@@ -51,7 +51,7 @@
       <div class="legend">
         <span class="legend-item" style="background: rgba(16,185,129,0.7);">≥85%</span>
         <span class="legend-item" style="background: rgba(59,130,246,0.6);">70–84%</span>
-        <span class="legend-item" style="background: rgba(245,158,11,0.6);">55–69%</span>
+        <span class="legend-item" style="background: rgba(216, 154, 58,0.6);">55–69%</span>
         <span class="legend-item" style="background: rgba(239,68,68,0.7);">&lt;55%</span>
       </div>
     </div>
@@ -116,35 +116,35 @@
   .diag-sub { font-size: 13px; color: var(--color-slate-muted); margin: 0; }
   .header-actions { display: flex; gap: 12px; }
   .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
-  .kpi-card { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-md); padding: 20px 22px; }
+  .kpi-card { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--fio-radius-md); padding: 20px 22px; }
   .kpi-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--color-slate-muted); margin-bottom: 6px; }
   .kpi-value { font-family: var(--font-brand); font-size: 26px; font-weight: 700; line-height: 1.1; }
-  .kpi-small { font-size: 13px; font-family: var(--font-mono); }
+  .kpi-small { font-size: 13px; font-family: var(--fio-font-mono); }
   .kpi-sub { font-size: 11px; color: var(--color-slate-muted); margin-top: 4px; }
-  .heatmap-panel, .flagged-panel { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--radius-lg); overflow: hidden; }
+  .heatmap-panel, .flagged-panel { background: var(--color-graphite); border: 1px solid var(--color-graphite-border); border-radius: var(--fio-radius-lg); overflow: hidden; }
   .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 24px; border-bottom: 1px solid var(--color-graphite-border); }
   .panel-title { font-size: 14px; font-weight: 700; color: var(--color-heading); }
   .legend { display: flex; gap: 8px; }
-  .legend-item { font-size: 10.5px; font-weight: 600; color: #fff; padding: 2px 8px; border-radius: var(--radius-xs); }
+  .legend-item { font-size: 10.5px; font-weight: 600; color: #fff; padding: 2px 8px; border-radius: var(--fio-radius-xs); }
   .heatmap-grid { overflow-x: auto; padding: 16px 24px; display: flex; flex-direction: column; gap: 4px; }
   .heatmap-row { display: flex; align-items: center; gap: 4px; }
   .header-row { margin-bottom: 4px; }
   .kc-col-header { width: 240px; flex-shrink: 0; font-size: 10.5px; font-weight: 700; text-transform: uppercase; color: var(--color-slate-muted); }
   .student-col-header { width: 70px; flex-shrink: 0; font-size: 10.5px; color: var(--color-slate-muted); text-align: center; }
   .kc-label { width: 240px; flex-shrink: 0; padding-right: 12px; }
-  .kc-code-sm { font-family: var(--font-mono); font-size: 10px; color: var(--color-aurora-bright); }
+  .kc-code-sm { font-family: var(--fio-font-mono); font-size: 10px; color: var(--color-aurora-bright); }
   .kc-name-sm { font-size: 11px; color: var(--color-slate-light); margin-top: 2px; }
-  .heat-cell { width: 70px; flex-shrink: 0; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; border-radius: var(--radius-xs); }
+  .heat-cell { width: 70px; flex-shrink: 0; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; border-radius: var(--fio-radius-xs); }
   .flagged-list { display: flex; flex-direction: column; }
   .flagged-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 16px 24px; border-top: 1px solid var(--color-graphite-border); }
   .flagged-row:first-child { border-top: none; }
   .student-info { display: flex; align-items: center; gap: 12px; min-width: 220px; }
-  .student-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #ef4444, #f59e0b); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .student-avatar { width: 32px; height: 32px; border-radius: 50%; background: linear-gradient(135deg, #ef4444, #d89a3a); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; flex-shrink: 0; }
   .student-name { font-size: 13px; font-weight: 600; color: var(--color-heading); }
   .student-misc { font-size: 11px; color: var(--color-slate-muted); margin-top: 2px; }
   .student-misc code { color: var(--color-amber); }
   .avg-score { font-family: var(--font-brand); font-size: 18px; font-weight: 700; }
   .flag-count { font-size: 12px; color: var(--color-slate-light); }
-  .badge-sent { font-size: 11.5px; font-weight: 600; color: #34d399; background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3); padding: 4px 10px; border-radius: var(--radius-xs); }
+  .badge-sent { font-size: 11.5px; font-weight: 600; color: #34d399; background: rgba(16,185,129,.12); border: 1px solid rgba(16,185,129,.3); padding: 4px 10px; border-radius: var(--fio-radius-xs); }
   .btn-sm { font-size: 11px; padding: 5px 12px; }
 </style>

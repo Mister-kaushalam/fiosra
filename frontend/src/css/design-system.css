@@ -1,163 +1,165 @@
 /* ==========================================================================
    FIOSRA DESIGN SYSTEM TOKENS & UTILITIES
-   Dual-Theme Engine: Academic Parchment (Light) & Slate Ochre (Dark)
+   Palette tracks the Manus build: Bone ground, Obsidian ink, Horizon Blue.
+   Legacy token names are kept so existing components need no rewrite.
    ========================================================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root,
 [data-theme="light"] {
-  /* Foundations: Academic Parchment & Clean White */
-  --color-obsidian: #f8f8f5;
+  /* Foundations: Bone ground, white surfaces (legacy names, Manus values) */
+  --color-obsidian: #f6f5f1;
   --color-graphite: #ffffff;
   --color-graphite-card: #ffffff;
-  --color-graphite-border: #e2e4dc;
-  --color-graphite-hover: #f1f2ed;
+  --color-graphite-border: #dddcd5;
+  --color-graphite-hover: #f0efea;
   
-  --color-bone: #191c21;
+  --color-bone: #111315;
   --color-bone-surface: #ffffff;
-  --color-bone-muted: #f4f5f0;
-  --color-bone-border: #e2e4dc;
+  --color-bone-muted: #f0efea;
+  --color-bone-border: #dddcd5;
   
-  --color-slate-subtle: #8a909d;
-  --color-slate-muted: #646a78;
-  --color-slate-light: #474d5a;
-  --color-slate-bright: #191c21;
-  --color-heading: #121418;
+  --color-slate-subtle: #8a9096;
+  --color-slate-muted: #6d7378;
+  --color-slate-light: #32373c;
+  --color-slate-bright: #111315;
+  --color-heading: #111315;
 
-  /* Accents: Rich Amber Ochre */
-  --color-horizon-blue: #d97706;
-  --color-horizon-bright: #b45309;
-  --color-horizon-glow: rgba(217, 119, 6, 0.12);
+  /* Accents: Horizon Blue */
+  --color-horizon-blue: #4f6bff;
+  --color-horizon-bright: #3d55e0;
+  --color-horizon-glow: rgba(79, 107, 255, 0.12);
   
-  /* Socratic Focus: Sky Cobalt */
-  --color-aurora: #0284c7;
-  --color-aurora-bright: #0369a1;
-  --color-aurora-glow: rgba(2, 132, 199, 0.12);
+  /* Socratic Focus: Aurora */
+  --color-aurora: #7b61ff;
+  --color-aurora-bright: #6349e8;
+  --color-aurora-glow: rgba(123, 97, 255, 0.12);
 
-  /* Grounded / Verified: Forest Sage */
-  --color-signal-green: #059669;
-  --color-signal-green-dark: #047857;
-  --color-signal-green-bg: #ecfdf5;
-  --color-signal-green-text: #065f46;
+  /* Grounded / Verified: Signal Green */
+  --color-signal-green: #5faf7a;
+  --color-signal-green-dark: #4a9464;
+  --color-signal-green-bg: #ebf7f0;
+  --color-signal-green-text: #3e7f58;
 
   /* Amber & Warnings */
-  --color-amber: #d97706;
-  --color-amber-dark: #b45309;
-  --color-amber-bg: #fef3c7;
-  --color-amber-text: #92400e;
+  --color-amber: #d89a3a;
+  --color-amber-dark: #b87d24;
+  --color-amber-bg: #fdf6ec;
+  --color-amber-text: #8a6018;
 
-  /* Misconceptions & Alerts: Terracotta Crimson */
-  --color-rose: #dc2626;
-  --color-rose-dark: #b91c1c;
-  --color-rose-bg: #fef2f2;
-  --color-rose-text: #991b1b;
+  /* Misconceptions & Alerts: Deep Red */
+  --color-rose: #b74c4c;
+  --color-rose-dark: #9a3b3b;
+  --color-rose-bg: #fcefef;
+  --color-rose-text: #8a3535;
 
   /* Theme-specific UI Tokens */
-  --header-bg: rgba(248, 248, 245, 0.92);
-  --header-border: #e2e4dc;
-  --pill-bg: rgba(0, 0, 0, 0.04);
-  --pill-border: rgba(0, 0, 0, 0.08);
-  --pill-hover: rgba(0, 0, 0, 0.07);
-  --pill-active-bg: rgba(217, 119, 6, 0.14);
-  --pill-active-border: rgba(217, 119, 6, 0.35);
-  --pill-active-color: #92400e;
+  --header-bg: rgba(246, 245, 241, 0.8);
+  --header-border: #dddcd5;
+  --pill-bg: #eae8e1;
+  --pill-border: #dddcd5;
+  --pill-hover: #e4e2da;
+  --pill-active-bg: #ebf0ff;
+  --pill-active-border: #cad6ff;
+  --pill-active-color: #4f6bff;
   --user-chip-bg: #ffffff;
-  --user-chip-border: #e2e4dc;
+  --user-chip-border: #dddcd5;
   --role-btn-bg: #ffffff;
-  --role-btn-border: #d5d8ce;
-  --role-btn-hover: #f1f2ed;
-  --modal-overlay-bg: rgba(25, 28, 33, 0.6);
+  --role-btn-border: #dddcd5;
+  --role-btn-hover: #faf9f5;
+  --modal-overlay-bg: rgba(17, 19, 21, 0.6);
   --input-bg: #ffffff;
-  --input-border: #d5d8ce;
-  --input-focus-border: #d97706;
+  --input-border: #dddcd5;
+  --input-focus-border: #4f6bff;
 
   /* Typography */
-  --font-brand: 'Outfit', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-brand: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --fio-font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    'Courier New', monospace;
 
   /* Spatial Scales & Radius */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-full: 9999px;
+  --fio-radius-xs: 4px;
+  --fio-radius-sm: 6px;
+  --fio-radius-md: 8px;
+  --fio-radius-lg: 12px;
+  --fio-radius-full: 9999px;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
-  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
-  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
+  --fio-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --fio-shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.04);
+  --fio-shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.04);
 }
 
 [data-theme="dark"] {
-  /* Foundations: Deep Warm Charcoal & Academic Slate */
-  --color-obsidian: #121418;
-  --color-graphite: #181b20;
-  --color-graphite-card: #1e2229;
-  --color-graphite-border: #2a2f38;
-  --color-graphite-hover: #262b34;
+  /* Foundations: Obsidian ground, Graphite surfaces */
+  --color-obsidian: #111315;
+  --color-graphite: #1a1d21;
+  --color-graphite-card: #23272b;
+  --color-graphite-border: #353b41;
+  --color-graphite-hover: #32373c;
   
-  --color-bone: #fafaf7;
+  --color-bone: #f6f5f1;
   --color-bone-surface: #ffffff;
-  --color-bone-muted: #f4f4ee;
-  --color-bone-border: #e6e6dc;
+  --color-bone-muted: #f0efea;
+  --color-bone-border: #e9e8e3;
   
-  --color-slate-subtle: #525866;
-  --color-slate-muted: #717784;
-  --color-slate-light: #9ea3ae;
-  --color-slate-bright: #e1e3e8;
+  --color-slate-subtle: #6d7378;
+  --color-slate-muted: #8a9096;
+  --color-slate-light: #b4b9bd;
+  --color-slate-bright: #f6f5f1;
   --color-heading: #ffffff;
 
-  /* Accents: Warm Academic Ochre / Amber Gold */
-  --color-horizon-blue: #e5a93c;
-  --color-horizon-bright: #f3ba54;
-  --color-horizon-glow: rgba(229, 169, 60, 0.15);
+  /* Accents: Horizon Blue, lifted for dark surfaces */
+  --color-horizon-blue: #7d93ff;
+  --color-horizon-bright: #9cadff;
+  --color-horizon-glow: rgba(125, 147, 255, 0.16);
   
-  /* Socratic Focus & Insight (Cyan Sky) */
-  --color-aurora: #38bdf8;
-  --color-aurora-bright: #7dd3fc;
-  --color-aurora-glow: rgba(56, 189, 248, 0.15);
+  /* Socratic Focus & Insight: Aurora */
+  --color-aurora: #a794ff;
+  --color-aurora-bright: #c0b3ff;
+  --color-aurora-glow: rgba(167, 148, 255, 0.16);
 
-  /* Grounded / Verified (Sage Emerald) */
-  --color-signal-green: #4eaa7a;
-  --color-signal-green-dark: #3b8760;
-  --color-signal-green-bg: #10261b;
-  --color-signal-green-text: #6ee7b7;
+  /* Grounded / Verified: Signal Green */
+  --color-signal-green: #7cc494;
+  --color-signal-green-dark: #5faf7a;
+  --color-signal-green-bg: #16251c;
+  --color-signal-green-text: #9cd6ae;
 
   /* Amber & Warnings */
-  --color-amber: #e5a93c;
-  --color-amber-dark: #c68a25;
-  --color-amber-bg: #281e0f;
-  --color-amber-text: #fcd34d;
+  --color-amber: #e2b264;
+  --color-amber-dark: #d89a3a;
+  --color-amber-bg: #2a2114;
+  --color-amber-text: #eecb92;
 
-  /* Misconceptions & Alerts (Warm Terracotta) */
-  --color-rose: #d95d5d;
-  --color-rose-dark: #b84343;
-  --color-rose-bg: #2a1414;
-  --color-rose-text: #fca5a5;
+  /* Misconceptions & Alerts: Deep Red */
+  --color-rose: #d07a7a;
+  --color-rose-dark: #b74c4c;
+  --color-rose-bg: #2a1818;
+  --color-rose-text: #e6a8a8;
 
   /* Theme-specific UI Tokens */
-  --header-bg: rgba(18, 20, 24, 0.88);
-  --header-border: rgba(255, 255, 255, 0.07);
-  --pill-bg: rgba(255, 255, 255, 0.03);
-  --pill-border: rgba(255, 255, 255, 0.06);
-  --pill-hover: rgba(255, 255, 255, 0.06);
-  --pill-active-bg: rgba(229, 169, 60, 0.18);
-  --pill-active-border: rgba(229, 169, 60, 0.4);
+  --header-bg: rgba(17, 19, 21, 0.88);
+  --header-border: #2a2f34;
+  --pill-bg: rgba(255, 255, 255, 0.04);
+  --pill-border: rgba(255, 255, 255, 0.08);
+  --pill-hover: rgba(255, 255, 255, 0.08);
+  --pill-active-bg: rgba(125, 147, 255, 0.18);
+  --pill-active-border: rgba(125, 147, 255, 0.4);
   --pill-active-color: #ffffff;
-  --user-chip-bg: rgba(255, 255, 255, 0.03);
-  --user-chip-border: rgba(255, 255, 255, 0.08);
-  --role-btn-bg: rgba(255, 255, 255, 0.04);
-  --role-btn-border: rgba(255, 255, 255, 0.1);
-  --role-btn-hover: rgba(255, 255, 255, 0.08);
-  --modal-overlay-bg: rgba(10, 12, 16, 0.85);
-  --input-bg: #181b20;
-  --input-border: #2a2f38;
-  --input-focus-border: #e5a93c;
+  --user-chip-bg: rgba(255, 255, 255, 0.04);
+  --user-chip-border: rgba(255, 255, 255, 0.1);
+  --role-btn-bg: rgba(255, 255, 255, 0.05);
+  --role-btn-border: rgba(255, 255, 255, 0.12);
+  --role-btn-hover: rgba(255, 255, 255, 0.09);
+  --modal-overlay-bg: rgba(10, 11, 13, 0.85);
+  --input-bg: #1a1d21;
+  --input-border: #353b41;
+  --input-focus-border: #7d93ff;
 
-  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
-  --shadow-md: 0 4px 12px -1px rgba(0, 0, 0, 0.35);
-  --shadow-lg: 0 12px 24px -3px rgba(0, 0, 0, 0.5);
+  --fio-shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.2);
+  --fio-shadow-md: 0 4px 12px -1px rgba(0, 0, 0, 0.35);
+  --fio-shadow-lg: 0 12px 24px -3px rgba(0, 0, 0, 0.5);
 }
 
 * { box-sizing: border-box; }
@@ -210,7 +212,7 @@ body {
   font-weight: 600;
   letter-spacing: 0.5px;
   padding: 4px 10px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--fio-radius-xs);
   text-transform: uppercase;
 }
 
@@ -284,7 +286,7 @@ body {
   font-size: 11.5px;
   font-weight: 500;
   padding: 4px 12px;
-  border-radius: var(--radius-full);
+  border-radius: var(--fio-radius-full);
 }
 
 .status-dot {
@@ -302,7 +304,7 @@ body {
   background-color: var(--color-graphite);
   border: 1px solid var(--color-graphite-border);
   padding: 4px 12px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--fio-radius-sm);
   font-size: 12.5px;
   font-weight: 500;
   color: var(--color-slate-bright);
@@ -358,7 +360,7 @@ body {
   border: 1px solid var(--color-graphite-border);
   color: var(--color-slate-light);
   padding: 4px 10px;
-  border-radius: var(--radius-full);
+  border-radius: var(--fio-radius-full);
   font-size: 11px;
   font-weight: 500;
   cursor: pointer;
@@ -390,7 +392,7 @@ body {
   justify-content: center;
   gap: 8px;
   padding: 9px 16px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--fio-radius-sm);
   font-size: 12.5px;
   font-weight: 600;
   cursor: pointer;
@@ -452,7 +454,7 @@ body {
   display: inline-flex;
   align-items: center;
   padding: 3px 8px;
-  border-radius: var(--radius-xs);
+  border-radius: var(--fio-radius-xs);
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
@@ -506,14 +508,14 @@ body {
 .modal-box {
   background: var(--color-graphite);
   border: 1px solid var(--color-graphite-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--fio-radius-lg);
   width: 620px;
   max-width: 92vw;
   padding: 28px;
   display: flex;
   flex-direction: column;
   gap: 20px;
-  box-shadow: var(--shadow-lg);
+  box-shadow: var(--fio-shadow-lg);
   position: relative;
 }
 

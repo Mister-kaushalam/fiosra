@@ -275,7 +275,7 @@
   .module-card {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     overflow: hidden;
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
   }
@@ -307,7 +307,7 @@
     padding: 4px 8px;
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     color: var(--color-horizon-bright);
     flex-shrink: 0;
   }
@@ -340,7 +340,7 @@
     padding: 3px 9px;
     border-radius: 9999px;
     background: rgba(59, 130, 246, 0.12);
-    color: #93c5fd;
+    color: #3d55e0;
     border: 1px solid rgba(59, 130, 246, 0.35);
     text-decoration: none;
     transition: all 0.15s ease;
@@ -479,7 +479,7 @@
     padding: 10px 14px;
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     gap: 12px;
     transition: border-color 0.15s ease;
   }
@@ -529,7 +529,7 @@
     text-transform: uppercase;
     letter-spacing: 0.3px;
     padding: 2px 7px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
   }
 
   .resource-type-pill.pdf {
@@ -588,7 +588,7 @@
     background: rgba(56, 189, 248, 0.12);
     border: 1px solid rgba(56, 189, 248, 0.35);
     padding: 2px 8px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     text-decoration: none;
     transition: all 0.15s ease;
   }
@@ -606,7 +606,7 @@
   }
 
   .doc-submeta code {
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
     color: var(--color-slate-light);
     font-size: 11px;
     background: rgba(255, 255, 255, 0.05);
@@ -630,7 +630,7 @@
     font-size: 12px;
     cursor: pointer;
     padding: 4px 6px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     transition: all 0.15s ease;
   }
 
@@ -687,7 +687,7 @@
     padding: 10px 14px;
     background: var(--color-obsidian);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
   }
 
   .assignment-left {

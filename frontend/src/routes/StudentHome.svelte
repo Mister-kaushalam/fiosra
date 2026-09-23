@@ -441,7 +441,7 @@
   .back-link {
     font-size: 13px;
     font-weight: 600;
-    color: #d97706;
+    color: #4f6bff;
     text-decoration: none;
     transition: opacity 0.15s ease;
   }
@@ -492,7 +492,7 @@
     font-weight: 800;
     letter-spacing: 0.8px;
     text-transform: uppercase;
-    color: #d97706;
+    color: #4f6bff;
   }
 
   .status-live-pill {
@@ -522,7 +522,7 @@
 
   .dot-sep {
     margin: 0 5px;
-    color: #cbd5e1;
+    color: #32373c;
   }
 
   .hero-right-card {
@@ -560,7 +560,7 @@
 
   .hero-progress-fill {
     height: 100%;
-    background: #d97706;
+    background: #4f6bff;
     border-radius: 999px;
   }
 
@@ -573,7 +573,7 @@
   .active-focus-card {
     background: #ffffff;
     border: 1px solid #e2e8f0;
-    border-left: 4px solid #d97706;
+    border-left: 4px solid #4f6bff;
     border-radius: 10px;
     padding: 20px 24px;
     display: flex;
@@ -593,7 +593,7 @@
     font-weight: 800;
     letter-spacing: 0.6px;
     color: #ffffff;
-    background: #d97706;
+    background: #4f6bff;
     padding: 2px 8px;
     border-radius: 4px;
   }
@@ -671,15 +671,15 @@
     font-weight: 600;
     text-align: center;
     border-radius: 6px;
-    background: #d97706;
+    background: #4f6bff;
     color: #ffffff;
-    border: 1px solid #b45309;
+    border: 1px solid #3d55e0;
     text-decoration: none;
     transition: background 0.15s ease;
   }
 
   .btn-cta-resume:hover {
-    background: #b45309;
+    background: #3d55e0;
   }
 
   .btn-cta-sources {
@@ -717,7 +717,7 @@
   .eyebrow-text {
     font-size: 11px;
     font-weight: 800;
-    color: #d97706;
+    color: #4f6bff;
     letter-spacing: 0.6px;
     text-transform: uppercase;
   }
@@ -766,7 +766,7 @@
   }
 
   .module-panel.is-active-module {
-    border-left: 4px solid #d97706;
+    border-left: 4px solid #4f6bff;
   }
 
   .module-panel-header {
@@ -807,7 +807,7 @@
   }
 
   .mod-step-pill.step-active {
-    background: #d97706;
+    background: #4f6bff;
     color: #ffffff;
   }
 
@@ -897,7 +897,7 @@
     font-size: 10.5px;
     font-weight: 700;
     text-transform: uppercase;
-    color: #d97706;
+    color: #4f6bff;
   }
 
   .obj-tags-list {
@@ -958,7 +958,7 @@
   }
 
   .assignment-row-card.is-active-task {
-    border-left: 3px solid #d97706;
+    border-left: 3px solid #4f6bff;
   }
 
   .assign-card-main {
@@ -978,7 +978,7 @@
   .assign-num-badge {
     font-size: 10px;
     font-weight: 800;
-    color: #d97706;
+    color: #4f6bff;
     background: #fffbeb;
     border: 1px solid #fde68a;
     padding: 1px 5px;

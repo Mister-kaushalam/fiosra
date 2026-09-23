@@ -112,7 +112,7 @@
       subtopic: '#71717a',
       leaf: '#52525b',
       misconception: '#ef5350',
-      socratic_probe: '#f59e0b',
+      socratic_probe: '#d89a3a',
       default: '#a1a1aa'
     }
   };
@@ -455,7 +455,7 @@
       if (matchesSearch) {
         ctx.beginPath();
         ctx.arc(node.x, node.y, node.radius + 5, 0, Math.PI * 2);
-        ctx.strokeStyle = '#f59e0b';
+        ctx.strokeStyle = '#d89a3a';
         ctx.lineWidth = 2;
         ctx.stroke();
       }
@@ -1184,7 +1184,7 @@
   .module-dot { background: #242424; }
   .dark-mode .kc-dot { background: #a1a1aa; }
   .dark-mode .misc-dot { background: #ef5350; }
-  .dark-mode .probe-dot { background: #f59e0b; }
+  .dark-mode .probe-dot { background: #d89a3a; }
   .dark-mode .module-dot { background: #f4f4f5; }
 
   .slider-row {

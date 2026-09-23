@@ -29,8 +29,8 @@
   }
 
   const focusTypeLabels = {
-    direct_observation: { label: 'Direct Observation', icon: '🔍', color: 'var(--color-aurora, #0284c7)' },
-    warrant: { label: 'Warrant Required', icon: '⚖️', color: 'var(--color-amber, #d97706)' },
+    direct_observation: { label: 'Direct Observation', icon: '🔍', color: 'var(--color-aurora, #7b61ff)' },
+    warrant: { label: 'Warrant Required', icon: '⚖️', color: 'var(--color-amber, #4f6bff)' },
     causal_bridge: { label: 'Causal Bridge', icon: '🌉', color: 'var(--color-signal-green, #10b981)' },
     alternative_explanation: { label: 'Alternative Hypothesis', icon: '🔄', color: 'var(--color-horizon-blue, #3b82f6)' },
     qualification: { label: 'Nuance & Scope', icon: '🎯', color: 'var(--color-slate-light, #64748b)' },
@@ -380,9 +380,9 @@
     font-size: 0.72rem;
     padding: 2px 8px;
     border-radius: 999px;
-    background: var(--color-aurora-glow, rgba(2, 132, 199, 0.15));
-    color: var(--color-aurora, #0284c7);
-    border: 1px solid rgba(2, 132, 199, 0.28);
+    background: var(--color-aurora-glow, rgba(123, 97, 255, 0.15));
+    color: var(--color-aurora, #7b61ff);
+    border: 1px solid rgba(123, 97, 255, 0.28);
     font-weight: 600;
   }
 
@@ -396,8 +396,8 @@
     font-size: 0.8rem;
     padding: 8px 10px;
     border-radius: 6px;
-    background: rgba(2, 132, 199, 0.08);
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    background: rgba(123, 97, 255, 0.08);
+    border: 1px solid rgba(123, 97, 255, 0.2);
     color: var(--color-slate-light);
     margin-bottom: 12px;
     display: flex;
@@ -426,9 +426,9 @@
   }
 
   .focus-context-banner.has-probe {
-    background: rgba(2, 132, 199, 0.08);
-    border-color: rgba(2, 132, 199, 0.28);
-    color: var(--color-aurora, #0284c7);
+    background: rgba(123, 97, 255, 0.08);
+    border-color: rgba(123, 97, 255, 0.28);
+    color: var(--color-aurora, #7b61ff);
     font-weight: 500;
   }
 
@@ -458,12 +458,12 @@
   }
 
   .probe-card:hover {
-    border-color: rgba(2, 132, 199, 0.35);
+    border-color: rgba(123, 97, 255, 0.35);
   }
 
   .probe-card.is-active-target {
-    border-color: var(--color-aurora, #0284c7);
-    box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.35), 0 6px 18px rgba(2, 132, 199, 0.12);
+    border-color: var(--color-aurora, #7b61ff);
+    box-shadow: 0 0 0 2px rgba(123, 97, 255, 0.35), 0 6px 18px rgba(123, 97, 255, 0.12);
   }
 
   .probe-card.status-responded {
@@ -493,10 +493,10 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
     color: var(--focus-color, var(--color-aurora));
-    background: rgba(2, 132, 199, 0.08);
+    background: rgba(123, 97, 255, 0.08);
     padding: 2px 7px;
     border-radius: 4px;
-    border: 1px solid rgba(2, 132, 199, 0.18);
+    border: 1px solid rgba(123, 97, 255, 0.18);
   }
 
   .kc-badge {
@@ -506,7 +506,7 @@
     border: 1px solid var(--color-graphite-border);
     border-radius: 4px;
     color: var(--color-slate-light);
-    font-family: var(--font-mono, monospace);
+    font-family: var(--fio-font-mono, monospace);
   }
 
   :global([data-theme="dark"]) .kc-badge {
@@ -520,9 +520,9 @@
     font-size: 0.68rem;
     font-weight: 600;
     text-transform: uppercase;
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
     margin-left: auto;
-    background: rgba(2, 132, 199, 0.1);
+    background: rgba(123, 97, 255, 0.1);
     padding: 2px 6px;
     border-radius: 4px;
   }
@@ -531,7 +531,7 @@
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: var(--color-aurora, #0284c7);
+    background: var(--color-aurora, #7b61ff);
     animation: pulseGlow 1.8s infinite;
   }
 
@@ -561,8 +561,8 @@
   }
 
   .claim-anchor:hover {
-    background: rgba(2, 132, 199, 0.08);
-    border-color: rgba(2, 132, 199, 0.35);
+    background: rgba(123, 97, 255, 0.08);
+    border-color: rgba(123, 97, 255, 0.35);
   }
 
   .anchor-pin {
@@ -584,7 +584,7 @@
   .anchor-jump {
     font-size: 0.68rem;
     font-weight: 600;
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
     flex-shrink: 0;
     letter-spacing: 0.02em;
   }
@@ -643,7 +643,7 @@
   }
 
   .btn-respond {
-    background: var(--color-aurora, #0284c7);
+    background: var(--color-aurora, #7b61ff);
     color: #ffffff;
     border: none;
     padding: 6px 12px;
@@ -655,7 +655,7 @@
   }
 
   .btn-respond:hover:not(:disabled) {
-    background: var(--color-aurora-bright, #0369a1);
+    background: var(--color-aurora-bright, #6349e8);
   }
 
   .btn-respond:disabled {
@@ -715,8 +715,8 @@
   }
 
   .probe-deferred-box {
-    background: rgba(245, 158, 11, 0.08);
-    border: 1px dashed rgba(245, 158, 11, 0.3);
+    background: rgba(216, 154, 58, 0.08);
+    border: 1px dashed rgba(216, 154, 58, 0.3);
     border-radius: 6px;
     padding: 9px 11px;
     display: flex;
@@ -727,7 +727,7 @@
 
   .deferred-badge {
     font-size: 0.76rem;
-    color: var(--color-amber, #d97706);
+    color: var(--color-amber, #4f6bff);
     display: flex;
     align-items: center;
     gap: 5px;
@@ -735,8 +735,8 @@
 
   .btn-resume {
     background: none;
-    border: 1px solid rgba(245, 158, 11, 0.4);
-    color: var(--color-amber, #d97706);
+    border: 1px solid rgba(216, 154, 58, 0.4);
+    color: var(--color-amber, #4f6bff);
     border-radius: 4px;
     font-size: 0.72rem;
     font-weight: 600;
@@ -745,7 +745,7 @@
   }
 
   .btn-resume:hover {
-    background: rgba(245, 158, 11, 0.15);
+    background: rgba(216, 154, 58, 0.15);
   }
 
   .empty-gutter-state {
@@ -768,7 +768,7 @@
   /* Subtle Scholastic Additions */
   .scholastic-stance-tag {
     font-size: 10px;
-    font-family: var(--font-mono, monospace);
+    font-family: var(--fio-font-mono, monospace);
     color: var(--color-slate-muted);
     background: rgba(0, 0, 0, 0.04);
     border: 1px solid var(--color-graphite-border);
@@ -783,10 +783,10 @@
 
   .scholastic-rung-tag {
     font-size: 10px;
-    font-family: var(--font-mono, monospace);
-    color: var(--color-horizon-blue, #d97706);
-    background: rgba(217, 119, 6, 0.08);
-    border: 1px solid rgba(217, 119, 6, 0.2);
+    font-family: var(--fio-font-mono, monospace);
+    color: var(--color-horizon-blue, #4f6bff);
+    background: rgba(79, 107, 255, 0.08);
+    border: 1px solid rgba(79, 107, 255, 0.2);
     padding: 1px 6px;
     border-radius: 4px;
   }
@@ -794,8 +794,8 @@
   .scholarly-assumption-note {
     margin: 8px 0;
     padding: 6px 10px;
-    background: rgba(217, 119, 6, 0.04);
-    border-left: 2px solid var(--color-horizon-blue, #d97706);
+    background: rgba(79, 107, 255, 0.04);
+    border-left: 2px solid var(--color-horizon-blue, #4f6bff);
     border-radius: 0 4px 4px 0;
     font-size: 0.78rem;
     line-height: 1.4;
@@ -831,7 +831,7 @@
   .assumption-affordance {
     font-style: normal;
     font-size: 0.7rem;
-    color: var(--color-horizon-blue, #d97706);
+    color: var(--color-horizon-blue, #4f6bff);
     margin-left: 4px;
   }
 
@@ -858,7 +858,7 @@
   .btn-assumption-opt:hover {
     background: var(--color-graphite-hover);
     color: var(--color-heading);
-    border-color: var(--color-horizon-blue, #d97706);
+    border-color: var(--color-horizon-blue, #4f6bff);
   }
 
   .card-scholastic-footer {
@@ -885,7 +885,7 @@
   }
 
   .escalation-footnote-btn:hover {
-    color: var(--color-horizon-blue, #d97706);
+    color: var(--color-horizon-blue, #4f6bff);
     text-decoration: underline;
   }
 </style>

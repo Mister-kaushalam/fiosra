@@ -4,6 +4,8 @@
   import './css/design-system.css';
   import AIDesignAssistant from './lib/AIDesignAssistant.svelte';
   import AppHeader from './lib/AppHeader.svelte';
+  import FloatingFiosraEntry from './lib/FloatingFiosraEntry.svelte';
+  import InstitutionalFooter from './lib/InstitutionalFooter.svelte';
 
   import Modules from './routes/Modules.svelte';
   import Courses from './routes/Courses.svelte';
@@ -20,7 +22,14 @@
   import { onMount } from 'svelte';
 
   let assistantOpen = $state(false);
-  let currentHash = $state('/');
+  let currentHash = $state(
+    typeof window !== 'undefined' ? window.location.hash.replace('#', '') || '/' : '/',
+  );
+
+  // The public landing page carries its own header, footer and full-bleed
+  // sections, so the application shell steps out of its way entirely.
+  let isLanding = $derived(currentHash.split('?')[0] === '/');
+  let isStudent = $derived(currentHash.startsWith('/student'));
 
   onMount(() => {
     currentHash = window.location.hash.replace('#', '') || '/';
@@ -74,17 +83,23 @@
 </script>
 
 <div class="min-h-screen bg-[var(--m-color-bone)] text-[var(--m-color-obsidian)] flex flex-col selection:bg-[var(--m-color-horizon-blue-soft)] selection:text-[var(--m-color-horizon-blue)]" class:zen-mode={isZenMode}>
-  {#if currentHash !== '/' && !isZenMode}
+  {#if !isLanding && !isZenMode}
     <AppHeader />
   {/if}
-  <div class:assistant-open={assistantOpen && !isZenMode} class="app-body">
-    <div class="route-viewport flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
+  <div class:assistant-open={assistantOpen && !isZenMode && !isLanding} class="app-body">
+    <div class="route-viewport flex-1 w-full {isLanding ? '' : 'max-w-6xl mx-auto px-4 sm:px-6 py-8'}">
       <Router {routes} />
     </div>
-    {#if !isZenMode}
+    {#if !isZenMode && !isLanding}
       <AIDesignAssistant bind:open={assistantOpen} />
     {/if}
   </div>
+  {#if !isLanding && !isZenMode}
+    {#if isStudent}
+      <FloatingFiosraEntry />
+    {/if}
+    <InstitutionalFooter variant="application" />
+  {/if}
 </div>
 
 <style>

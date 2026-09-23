@@ -515,7 +515,7 @@
   }
 
   .term-widget {
-    border-left: 4px solid #d97706;
+    border-left: 4px solid #4f6bff;
   }
 
   .widget-header {
@@ -625,7 +625,7 @@
   }
 
   .highlight-text {
-    color: #d97706;
+    color: #4f6bff;
     max-width: 170px;
     white-space: nowrap;
     overflow: hidden;
@@ -650,7 +650,7 @@
   .section-eyebrow {
     font-size: 11.5px;
     font-weight: 800;
-    color: #d97706;
+    color: #4f6bff;
     text-transform: uppercase;
     letter-spacing: 0.6px;
   }
@@ -682,7 +682,7 @@
   }
 
   .enrolled-card {
-    border-left: 4px solid #d97706;
+    border-left: 4px solid #4f6bff;
   }
 
   .available-card {
@@ -690,7 +690,7 @@
   }
 
   .available-card:hover {
-    border-color: #d97706;
+    border-color: #4f6bff;
   }
 
   .card-top-row {
@@ -717,7 +717,7 @@
   .course-meta-code {
     font-size: 10.5px;
     font-weight: 800;
-    color: #d97706;
+    color: #4f6bff;
     text-transform: uppercase;
     letter-spacing: 0.6px;
   }
@@ -737,7 +737,7 @@
 
   .meta-dot {
     margin: 0 4px;
-    color: #cbd5e1;
+    color: #32373c;
   }
 
   .badge-success {
@@ -814,13 +814,13 @@
   .link-subtle {
     font-size: 12.5px;
     font-weight: 600;
-    color: #d97706;
+    color: #4f6bff;
     text-decoration: none;
     transition: opacity 0.15s ease;
   }
 
   .link-subtle:hover {
-    color: #b45309;
+    color: #3d55e0;
     text-decoration: underline;
   }
 
@@ -840,9 +840,9 @@
   }
 
   .btn-primary {
-    background: #d97706;
+    background: #4f6bff;
     color: #ffffff;
-    border: 1px solid #b45309;
+    border: 1px solid #3d55e0;
     padding: 8px 18px;
     border-radius: 6px;
     font-size: 12.5px;
@@ -853,7 +853,7 @@
   }
 
   .btn-primary:hover {
-    background: #b45309;
+    background: #3d55e0;
   }
 
   /* Catalog Section */
@@ -879,7 +879,7 @@
   }
 
   .search-wrap:focus-within {
-    border-color: #d97706;
+    border-color: #4f6bff;
   }
 
   .search-icon {
@@ -936,9 +936,9 @@
   }
 
   .cat-tab-btn.active {
-    background: #d97706;
+    background: #4f6bff;
     color: #ffffff;
-    border-color: #d97706;
+    border-color: #4f6bff;
   }
 
   .catalog-grid {
@@ -955,7 +955,7 @@
   }
 
   .btn-enroll {
-    background: #d97706;
+    background: #4f6bff;
     color: #ffffff;
     border: none;
     padding: 7px 15px;
@@ -968,7 +968,7 @@
   }
 
   .btn-enroll:hover {
-    background: #b45309;
+    background: #3d55e0;
   }
 
   .term-tag {

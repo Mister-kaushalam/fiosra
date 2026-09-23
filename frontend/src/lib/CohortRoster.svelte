@@ -198,7 +198,7 @@
   .roster-wrapper {
     background: var(--color-graphite);
     border: 1px solid var(--color-graphite-border);
-    border-radius: var(--radius-md);
+    border-radius: var(--fio-radius-md);
     overflow: hidden;
   }
 
@@ -340,7 +340,7 @@
   }
 
   .assignment-link-btn:hover {
-    color: #93c5fd;
+    color: #3d55e0;
     text-decoration: underline;
   }
 
@@ -358,7 +358,7 @@
   .badge-submitted {
     background: rgba(16, 185, 129, 0.12);
     border: 1px solid rgba(16, 185, 129, 0.28);
-    color: #6ee7b7;
+    color: #3e7f58;
   }
 
   .status-badge.clickable {
@@ -373,24 +373,24 @@
   }
 
   .badge-scaffold {
-    background: rgba(245, 158, 11, 0.12);
-    border: 1px solid rgba(245, 158, 11, 0.28);
-    color: #fcd34d;
+    background: rgba(216, 154, 58, 0.12);
+    border: 1px solid rgba(216, 154, 58, 0.28);
+    color: #8a6018;
   }
 
   .badge-progressing {
     background: rgba(59, 130, 246, 0.12);
     border: 1px solid rgba(59, 130, 246, 0.28);
-    color: #93c5fd;
+    color: #3d55e0;
   }
 
   .hint-rate-chip {
     font-size: 11.5px;
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
     color: var(--color-slate-bright);
     background: rgba(255, 255, 255, 0.05);
     padding: 2px 7px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
   }
 
   .struggle-warning {

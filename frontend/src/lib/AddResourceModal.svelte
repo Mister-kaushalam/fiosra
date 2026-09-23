@@ -276,7 +276,7 @@
     background: rgba(59, 130, 246, 0.1);
     border: 1px solid rgba(59, 130, 246, 0.25);
     padding: 6px 12px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
   }
 
   .resource-tabs {
@@ -284,7 +284,7 @@
     gap: 8px;
     background: var(--color-obsidian);
     padding: 4px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     border: 1px solid var(--color-graphite-border);
   }
 
@@ -294,7 +294,7 @@
     background: transparent;
     border: none;
     color: var(--color-slate-light);
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
     font-size: 12px;
     font-weight: 600;
     cursor: pointer;
@@ -335,7 +335,7 @@
     border: 1px solid var(--color-graphite-border);
     color: var(--color-slate-bright);
     padding: 10px 14px;
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     font-size: 13px;
     outline: none;
     transition: border-color 0.15s ease;
@@ -349,7 +349,7 @@
 
   .upload-dropzone {
     border: 2px dashed var(--color-graphite-border);
-    border-radius: var(--radius-sm);
+    border-radius: var(--fio-radius-sm);
     padding: 20px;
     text-align: center;
     background: var(--color-obsidian);
@@ -364,7 +364,7 @@
   .feedback-banner {
     font-size: 12px;
     padding: 8px 12px;
-    border-radius: var(--radius-xs);
+    border-radius: var(--fio-radius-xs);
   }
 
   .feedback-banner.error {

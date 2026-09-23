@@ -232,7 +232,7 @@
 
   .subtab-btn.active {
     background: var(--color-surface, #ffffff);
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
     border-color: var(--color-graphite-border, #cbd5e1);
     box-shadow: 0 1px 3px rgba(0,0,0,0.06);
   }
@@ -282,15 +282,15 @@
     line-height: 1.1;
   }
 
-  .metric-tile.claims .metric-val { color: #0284c7; }
+  .metric-tile.claims .metric-val { color: #7b61ff; }
   .metric-tile.evidence .metric-val { color: #059669; }
   .metric-tile.warrants .metric-val { color: #7c3aed; }
-  .metric-tile.assumptions .metric-val { color: #d97706; }
+  .metric-tile.assumptions .metric-val { color: #4f6bff; }
 
   :global([data-theme="dark"]) .metric-tile.claims .metric-val { color: #38bdf8; }
   :global([data-theme="dark"]) .metric-tile.evidence .metric-val { color: #34d399; }
   :global([data-theme="dark"]) .metric-tile.warrants .metric-val { color: #a78bfa; }
-  :global([data-theme="dark"]) .metric-tile.assumptions .metric-val { color: #fbbf24; }
+  :global([data-theme="dark"]) .metric-tile.assumptions .metric-val { color: #d89a3a; }
 
   .metric-lbl {
     font-size: 0.65rem;
@@ -339,7 +339,7 @@
     font-weight: 800;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
   }
 
   .panel-card-header h4 {
@@ -358,9 +358,9 @@
     font-weight: 600;
     padding: 2px 8px;
     border-radius: 99px;
-    background: rgba(2, 132, 199, 0.08);
-    color: var(--color-aurora, #0284c7);
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    background: rgba(123, 97, 255, 0.08);
+    color: var(--color-aurora, #7b61ff);
+    border: 1px solid rgba(123, 97, 255, 0.2);
     white-space: nowrap;
   }
 
@@ -394,8 +394,8 @@
   .spinner {
     width: 18px;
     height: 18px;
-    border: 2px solid rgba(2, 132, 199, 0.2);
-    border-top-color: var(--color-aurora, #0284c7);
+    border: 2px solid rgba(123, 97, 255, 0.2);
+    border-top-color: var(--color-aurora, #7b61ff);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
@@ -413,8 +413,8 @@
 
   .graph-root-node {
     padding: 8px 12px;
-    background: rgba(2, 132, 199, 0.06);
-    border: 1px solid rgba(2, 132, 199, 0.2);
+    background: rgba(123, 97, 255, 0.06);
+    border: 1px solid rgba(123, 97, 255, 0.2);
     border-radius: 8px;
     margin-bottom: 8px;
   }
@@ -423,7 +423,7 @@
     font-size: 0.62rem;
     font-weight: 700;
     text-transform: uppercase;
-    color: #0284c7;
+    color: #7b61ff;
   }
 
   .graph-root-node h5 {
@@ -490,10 +490,10 @@
     border-color: #30363d;
   }
 
-  .graph-claim-node.claim { border-left: 3px solid #0284c7; }
+  .graph-claim-node.claim { border-left: 3px solid #7b61ff; }
   .graph-claim-node.evidence { border-left: 3px solid #059669; }
   .graph-claim-node.reasoning { border-left: 3px solid #7c3aed; }
-  .graph-claim-node.assumption { border-left: 3px solid #d97706; }
+  .graph-claim-node.assumption { border-left: 3px solid #4f6bff; }
 
   .claim-node-top {
     display: flex;
@@ -513,7 +513,7 @@
   }
 
   .claim-status-tag.grounded { background: rgba(5, 150, 105, 0.12); color: #059669; }
-  .claim-status-tag.probe { background: rgba(217, 119, 6, 0.12); color: #d97706; }
+  .claim-status-tag.probe { background: rgba(79, 107, 255, 0.12); color: #4f6bff; }
   .claim-status-tag.premature { background: rgba(220, 38, 38, 0.12); color: #dc2626; }
   .claim-status-tag.ungrounded { background: rgba(100, 116, 139, 0.12); color: #64748b; }
 
@@ -535,8 +535,8 @@
   }
 
   .btn-ref-pill {
-    background: rgba(2, 132, 199, 0.08);
-    color: #0284c7;
+    background: rgba(123, 97, 255, 0.08);
+    color: #7b61ff;
     border: none;
     border-radius: 4px;
     padding: 2px 6px;
@@ -570,7 +570,7 @@
     color: #8b949e;
   }
 
-  .node-jump-btn:hover { background: rgba(2, 132, 199, 0.08); color: #0284c7; border-color: #0284c7; }
+  .node-jump-btn:hover { background: rgba(123, 97, 255, 0.08); color: #7b61ff; border-color: #7b61ff; }
   .node-probe-btn:hover { background: rgba(124, 58, 237, 0.08); color: #7c3aed; border-color: #7c3aed; }
   .node-source-btn:hover { background: rgba(5, 150, 105, 0.08); color: #059669; border-color: #059669; }
 
@@ -612,8 +612,8 @@
   /* Readiness */
   .readiness-self-review {
     padding: 12px;
-    background: rgba(2, 132, 199, 0.04);
-    border: 1px solid rgba(2, 132, 199, 0.16);
+    background: rgba(123, 97, 255, 0.04);
+    border: 1px solid rgba(123, 97, 255, 0.16);
     border-radius: 8px;
     display: flex;
     flex-direction: column;
@@ -640,8 +640,8 @@
     font-size: 0.68rem;
     font-weight: 700;
     padding: 2px 6px;
-    background: rgba(2, 132, 199, 0.12);
-    color: #0284c7;
+    background: rgba(123, 97, 255, 0.12);
+    color: #7b61ff;
     border-radius: 999px;
   }
 
@@ -709,8 +709,8 @@
     font-weight: 700;
     padding: 2px 6px;
     border-radius: 999px;
-    background: rgba(217, 119, 6, 0.12);
-    color: #d97706;
+    background: rgba(79, 107, 255, 0.12);
+    color: #4f6bff;
   }
 
   .sub-badge.submitted {
@@ -758,7 +758,7 @@
     width: 100%;
     padding: 8px 14px;
     border-radius: 6px;
-    background: var(--color-aurora, #0284c7);
+    background: var(--color-aurora, #7b61ff);
     color: #ffffff;
     font-size: 0.76rem;
     font-weight: 700;
@@ -768,7 +768,7 @@
   }
 
   .btn-submit-milestone:hover:not(:disabled) {
-    background: #0369a1;
+    background: #6349e8;
   }
 
   .btn-submit-milestone:disabled {
@@ -847,7 +847,7 @@
 
   .event-student-note {
     font-size: 0.68rem;
-    background: rgba(2, 132, 199, 0.06);
+    background: rgba(123, 97, 255, 0.06);
     padding: 4px 6px;
     border-radius: 4px;
   }
@@ -886,11 +886,11 @@
   }
 
   .scholastic-nav-link.jump {
-    color: var(--color-horizon-blue, #d97706);
+    color: var(--color-horizon-blue, #4f6bff);
   }
 
   .scholastic-nav-link.probe {
-    color: var(--color-aurora, #0284c7);
+    color: var(--color-aurora, #7b61ff);
   }
 
   .nav-sep {
@@ -936,7 +936,7 @@
     gap: 6px;
     margin-bottom: 8px;
     font-size: 0.7rem;
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
   }
 
   .pivot-badge-dot {
@@ -985,7 +985,7 @@
     letter-spacing: 0.04em;
     font-weight: 600;
     margin-bottom: 4px;
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
   }
 
   .diff-branch.prior .diff-eyebrow { color: var(--color-rose-text, #991b1b); }
@@ -1024,7 +1024,7 @@
     color: var(--color-slate-subtle);
     display: block;
     margin-bottom: 4px;
-    font-family: var(--font-mono);
+    font-family: var(--fio-font-mono);
   }
 
   .empty-pivots-text {
